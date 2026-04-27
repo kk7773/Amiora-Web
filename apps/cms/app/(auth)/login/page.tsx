@@ -1,13 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useRouter } from 'next/navigation'
-import { Eye, EyeOff, Loader2, ShieldCheck } from 'lucide-react'
+import { Eye, EyeOff, Loader2, ShieldCheck, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { createBrowserClient } from '@/lib/supabase/client'
+import { describeSupabasePublicEnvIssue } from '@/lib/supabase/envMatch'
 
 const schema = z.object({
   email:    z.string().email('Valid email required'),
@@ -15,10 +16,29 @@ const schema = z.object({
 })
 type FormData = z.infer<typeof schema>
 
+function supabaseAuthMessage(err: unknown): string {
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase()
+  if (msg.includes('invalid login') || msg.includes('invalid email or password') || msg.includes('email not confirmed')) {
+    return 'Wrong email or password, or this user is not registered in Supabase. Ask a Super Admin to reset the password in Admin Management.'
+  }
+  if (msg.includes('invalid api key') || (msg.includes('api key') && msg.includes('invalid'))) {
+    return 'Invalid Supabase key: open Supabase → Project Settings → API, copy Project URL and anon public key from the same project into apps/cms/.env.local, then restart npm run dev.'
+  }
+  if (msg.includes('failed to fetch') || msg.includes('network')) {
+    return 'Network error. Check your connection and that the dev server is running.'
+  }
+  return err instanceof Error ? err.message : String(err)
+}
+
 export default function AdminLoginPage() {
   const router = useRouter()
-  const [showPw, setShowPw] = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [showPw,    setShowPw]    = useState(false)
+  const [loading,   setLoading]   = useState(false)
+  const [envIssue,  setEnvIssue]  = useState<string | null>(null)
+
+  useEffect(() => {
+    setEnvIssue(describeSupabasePublicEnvIssue())
+  }, [])
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -27,14 +47,21 @@ export default function AdminLoginPage() {
   async function onSubmit(data: FormData) {
     setLoading(true)
     try {
+      const email = data.email.trim().toLowerCase()
+
       // ── Step 1: Try hardcoded admin credentials first ──────────────
       const res = await fetch('/api/admin-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: data.email, password: data.password }),
+        body: JSON.stringify({ email, password: data.password }),
       })
+      const step1 = await res.json().catch(() => ({} as { success?: boolean }))
 
-      if (res.ok) {
+      if (!res.ok) {
+        toast.error('Could not reach login service. Please try again.')
+        return
+      }
+      if (step1.success) {
         toast.success('Welcome back, Admin!')
         router.push('/dashboard')
         router.refresh()
@@ -42,15 +69,24 @@ export default function AdminLoginPage() {
       }
 
       // ── Step 2: Fall back to Supabase Auth ────────────────────────
+      // Clear any leftover hardcoded super-admin cookie before proceeding
+      await fetch('/api/admin-login', { method: 'DELETE' })
+
       const supabase = createBrowserClient()
       const { data: auth, error } = await supabase.auth.signInWithPassword({
-        email: data.email,
+        email,
         password: data.password,
       })
       if (error) throw error
 
-      const meta = auth.user?.user_metadata as { role?: string }
-      if (meta?.role !== 'admin') {
+      const meRes = await fetch('/api/me', { credentials: 'same-origin' })
+      const me    = await meRes.json() as { cms_role?: string; error?: string }
+      if (!meRes.ok || me.error) {
+        await supabase.auth.signOut()
+        toast.error(me.error ?? 'Access denied. Admin privileges required.')
+        return
+      }
+      if (me.cms_role !== 'admin' && me.cms_role !== 'super_admin') {
         await supabase.auth.signOut()
         toast.error('Access denied. Admin privileges required.')
         return
@@ -60,7 +96,7 @@ export default function AdminLoginPage() {
       router.push('/dashboard')
       router.refresh()
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Invalid email or password')
+      toast.error(supabaseAuthMessage(err))
     } finally {
       setLoading(false)
     }
@@ -77,6 +113,13 @@ export default function AdminLoginPage() {
           <h1 className="font-display text-3xl text-cream">AMIORA CMS</h1>
           <p className="text-sidebar-text text-sm mt-1">Admin Portal — Authorised Access Only</p>
         </div>
+
+        {envIssue && (
+          <div className="mb-4 flex gap-2 rounded-xl border border-amber-500/50 bg-amber-950/40 px-3 py-2.5 text-left text-amber-100/95 text-xs leading-relaxed">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
+            <p>{envIssue}</p>
+          </div>
+        )}
 
         <form
           onSubmit={handleSubmit(onSubmit)}

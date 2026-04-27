@@ -6,13 +6,14 @@ import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Trash2, Heart, ShoppingBag, ArrowRight, Minus, Plus } from 'lucide-react'
 import { toast } from 'sonner'
-import { useCartStore } from '@/stores/cartStore'
+import { useCartStore, useCartHydrated } from '@/stores/cartStore'
 import { formatINR }    from '@/lib/pricing/calculator'
 import { ProductCard, type ProductCardProps } from '@/components/product/ProductCard'
 import { Skeleton }     from '@/components/ui/Skeleton'
 import { fadeUp, stagger } from '@/lib/animations'
 
 export function CartPageClient() {
+  const cartHydrated = useCartHydrated()
   const { items, removeItem, updateQuantity, total, clearCart } = useCartStore()
   const [suggestions, setSuggestions] = useState<ProductCardProps['product'][]>([])
   const [sugLoading,  setSugLoading]  = useState(false)
@@ -37,6 +38,15 @@ export function CartPageClient() {
   const subtotal  = total()
   const shipping  = subtotal >= 5000 ? 0 : 199
   const grandTotal = subtotal + shipping
+
+  if (!cartHydrated) {
+    return (
+      <div className="section-x py-10">
+        <h1 className="font-display text-display-xl text-ink mb-8">Shopping Cart</h1>
+        <div className="flex min-h-[200px] items-center justify-center text-ink-muted text-sm">Loading your bag…</div>
+      </div>
+    )
+  }
 
   if (!items.length) {
     return (

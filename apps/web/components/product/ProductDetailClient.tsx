@@ -1,14 +1,16 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Heart, Phone, MapPin, User, RefreshCw, Truck, Award, Gift } from 'lucide-react'
 import { VariantSelector, type SelectedVariantState } from './VariantSelector'
 import { LivePriceDisplay }  from './LivePriceDisplay'
 import { ImageGallery }      from './ImageGallery'
+import { ProductShare }      from './ProductShare'
 import { StarRating }        from '@/components/ui/StarRating'
 import { useCartStore }      from '@/stores/cartStore'
+import { useProductPrice }   from '@/hooks/useProductPrice'
 
 type Variant = Parameters<typeof VariantSelector>[0]['variants'][number]
 type Image   = Parameters<typeof ImageGallery>[0]['images'][number]
@@ -19,6 +21,8 @@ interface ProductDetailClientProps {
     name: string
     short_description: string | null
     making_charge_pct: number
+    making_charge_discount_pct: number
+    gem_price_discount_pct: number
     avgRating: number
     reviewCount: number
     collectionName: string | null
@@ -51,6 +55,29 @@ export function ProductDetailClient({ product, variants, images }: ProductDetail
 
   const activeVariant = selectedVariant.variant
 
+  const priceInput = useMemo(
+    () =>
+      activeVariant?.weight_grams
+        ? {
+            weightGrams:                    activeVariant.weight_grams,
+            purity:                         activeVariant.purity,
+            makingChargePct:                product.making_charge_pct,
+            gemPriceOverride:               activeVariant.gem_price_override,
+            makingChargeDiscountPct:        product.making_charge_discount_pct,
+            gemPriceDiscountPct:            product.gem_price_discount_pct,
+            variantMakingChargeDiscountPct: activeVariant.making_charge_discount_pct,
+            variantGemPriceDiscountPct:     activeVariant.gem_price_discount_pct,
+          }
+        : null,
+    [activeVariant, product.making_charge_pct, product.making_charge_discount_pct, product.gem_price_discount_pct]
+  )
+  const { breakdown, loading: priceLoading } = useProductPrice(priceInput)
+  const discountPercentOff = useMemo(() => {
+    if (!breakdown) return null
+    const p = breakdown.percentOffGross
+    return p >= 1 ? Math.round(p) : null
+  }, [breakdown])
+
   const handleVariantChange = useCallback(
     (state: SelectedVariantState & { variant: Variant | null }) => {
       setSelectedVariant(state)
@@ -60,6 +87,14 @@ export function ProductDetailClient({ product, variants, images }: ProductDetail
 
   const handleAddToCart = () => {
     if (!activeVariant) return
+    if (priceLoading || !breakdown) {
+      toast.error('Price is still loading', { description: 'Wait a moment and try again.' })
+      return
+    }
+    if (breakdown.finalPrice <= 0) {
+      toast.error('Cannot add to cart', { description: 'This variant has no calculated price (check weight & metal).' })
+      return
+    }
     addItem({
       productId:    product.id,
       variantId:    activeVariant.id,
@@ -67,7 +102,7 @@ export function ProductDetailClient({ product, variants, images }: ProductDetail
       productName:  product.name,
       variantLabel: `${activeVariant.metal_variant?.variant_name ?? 'Silver'} ${activeVariant.purity}`,
       imageUrl:     images.find((i) => !i.variant_id)?.url ?? '',
-      unitPrice:    0, // will be updated after price calc
+      unitPrice:    breakdown.finalPrice,
       quantity:     selectedVariant.quantity,
     })
     toast.success('Added to cart! 🛍️', { description: product.name })
@@ -83,6 +118,7 @@ export function ProductDetailClient({ product, variants, images }: ProductDetail
             images={images}
             productName={product.name}
             activeVariantId={selectedVariant.variantId}
+            discountPercentOff={discountPercentOff}
           />
         </div>
 
@@ -122,10 +158,9 @@ export function ProductDetailClient({ product, variants, images }: ProductDetail
 
           {/* Live price */}
           <LivePriceDisplay
-            weightGrams={activeVariant?.weight_grams ?? null}
-            purity={activeVariant?.purity ?? '18k'}
             makingChargePct={product.making_charge_pct}
-            gemPriceOverride={activeVariant?.gem_price_override}
+            breakdown={breakdown}
+            loading={priceLoading}
           />
 
           <div className="w-full h-px bg-divider" />
@@ -164,6 +199,7 @@ export function ProductDetailClient({ product, variants, images }: ProductDetail
 
           {/* Additional actions */}
           <div className="flex flex-wrap gap-3">
+            <ProductShare productName={product.name} />
             <button
               onClick={() => setWishlisted((v) => !v)}
               className="flex items-center gap-1.5 px-4 py-2 text-sm border border-divider rounded-lg text-ink-muted hover:border-teal hover:text-teal transition-colors"

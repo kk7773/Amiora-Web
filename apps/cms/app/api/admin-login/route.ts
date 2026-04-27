@@ -22,7 +22,8 @@ export async function POST(req: NextRequest) {
     return res
   }
 
-  return NextResponse.json({ success: false, error: 'Invalid credentials' }, { status: 401 })
+  // 200 (not 401) so normal Supabase admins do not see a red "failed" request on every login
+  return NextResponse.json({ success: false, error: 'Invalid credentials' })
 }
 
 export async function DELETE() {

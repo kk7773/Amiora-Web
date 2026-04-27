@@ -9,6 +9,10 @@ interface ProductPriceInput {
   purity:            string
   makingChargePct?:  number
   gemPriceOverride?: number | null
+  makingChargeDiscountPct?: number
+  gemPriceDiscountPct?: number
+  variantMakingChargeDiscountPct?: number | null
+  variantGemPriceDiscountPct?: number | null
 }
 
 interface UseProductPriceResult {
@@ -32,11 +36,15 @@ export function useProductPrice(input: ProductPriceInput | null): UseProductPric
     const livePricePerGram  = rate?.pricePerGram ?? (isSilver ? 90 : 7200)
 
     return calculateVariantPrice({
-      weightGrams:         input.weightGrams,
-      purity:              input.purity,
-      livePricePerGram999: livePricePerGram,
-      makingChargePct:     input.makingChargePct,
-      gemPriceOverride:    input.gemPriceOverride,
+      weightGrams:                    input.weightGrams,
+      purity:                         input.purity,
+      livePricePerGram999:            livePricePerGram,
+      makingChargePct:                input.makingChargePct,
+      gemPriceOverride:               input.gemPriceOverride,
+      makingChargeDiscountPct:        input.makingChargeDiscountPct ?? 0,
+      gemPriceDiscountPct:            input.gemPriceDiscountPct ?? 0,
+      variantMakingChargeDiscountPct: input.variantMakingChargeDiscountPct,
+      variantGemPriceDiscountPct:     input.variantGemPriceDiscountPct,
     })
   }, [input, gold, silver, loading])
 

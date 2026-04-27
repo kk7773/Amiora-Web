@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react'
 import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
 
 export interface CartItem {
   productId:    string
@@ -21,7 +23,9 @@ interface CartStore {
   itemCount:      () => number
 }
 
-export const useCartStore = create<CartStore>((set, get) => ({
+export const useCartStore = create<CartStore>()(
+  persist(
+    (set, get) => ({
   items: [],
 
   addItem(item) {
@@ -33,7 +37,8 @@ export const useCartStore = create<CartStore>((set, get) => ({
         const items = [...state.items]
         items[existing] = {
           ...items[existing]!,
-          quantity: Math.min((items[existing]!.quantity) + item.quantity, 5),
+          quantity:  Math.min((items[existing]!.quantity) + item.quantity, 5),
+          unitPrice: item.unitPrice,
         }
         return { items }
       }
@@ -74,4 +79,29 @@ export const useCartStore = create<CartStore>((set, get) => ({
   itemCount() {
     return get().items.reduce((sum, i) => sum + i.quantity, 0)
   },
-}))
+}),
+    {
+      name: 'amiora-cart',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({ items: state.items }),
+    }
+  )
+)
+
+/**
+ * True after the persist layer has rehydrated on the client.
+ * Initial state is always `false` (even if zustand has already rehydrated) so the first
+ * client render matches the server and avoids header/cart count hydration mismatches.
+ */
+export function useCartHydrated() {
+  const [ok, setOk] = useState(false)
+  useEffect(() => {
+    if (useCartStore.persist.hasHydrated()) {
+      setOk(true)
+    }
+    return useCartStore.persist.onFinishHydration(() => {
+      setOk(true)
+    })
+  }, [])
+  return ok
+}

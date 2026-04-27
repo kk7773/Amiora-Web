@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
 import { useRealtimeNotifications } from '@/hooks/useRealtimeNotifications'
+import { isSupabasePublicEnvOk } from '@/lib/supabase/envMatch'
 
 const AUTH_ROUTES = ['/login', '/auth']
 
@@ -11,11 +12,8 @@ export function CMSShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isAuth = AUTH_ROUTES.some(r => pathname.startsWith(r))
 
-  // Only enable Realtime when a real Supabase URL is configured
-  const realtimeEnabled = !!(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-    !process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder')
-  )
+  // Realtime uses the anon key; if URL/key missing or mismatched → "Invalid API key" overlay
+  const realtimeEnabled = isSupabasePublicEnvOk()
   useRealtimeNotifications(realtimeEnabled)
 
   if (isAuth) {

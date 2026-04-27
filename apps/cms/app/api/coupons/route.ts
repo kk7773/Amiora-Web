@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
       description:          body.description         ?? null,
       type:                 body.type,
       value:                Number(body.value),
+      applies_to:           body.applies_to          ?? 'both',
       min_order_amount:     Number(body.min_order_amount ?? 0),
       max_discount_amount:  body.max_discount_amount ? Number(body.max_discount_amount) : null,
       usage_limit:          body.usage_limit         ? Number(body.usage_limit) : null,

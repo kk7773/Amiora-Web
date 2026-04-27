@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@amiora/database'
+import { buildDbProductRow } from '@/lib/productPayload'
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,10 +14,7 @@ export async function POST(req: NextRequest) {
       faqs: Array.isArray(faqs) ? faqs.filter((f: { question: string; answer: string }) => f.question && f.answer) : [],
     }
 
-    // Remove empty strings so DB defaults apply
-    const dbProduct = Object.fromEntries(
-      Object.entries(product).filter(([, v]) => v !== undefined && v !== '')
-    )
+    const dbProduct = buildDbProductRow(product as Record<string, unknown>)
 
     const { data: prod, error } = await supabase
       .from('products')
@@ -43,13 +41,15 @@ export async function POST(req: NextRequest) {
 
     if (variants?.length) {
       const { error: varErr } = await supabase.from('product_variants').insert(
-        variants.map((v: Record<string, unknown>) => ({
-          product_id:         prod.id,
-          purity:             v.purity ?? '18K',
-          weight_grams:       v.weight_grams ?? 0,
-          gem_weight_ct:      v.gem_weight_ct ?? null,
-          gem_price_override: v.gem_price_inr ?? null,
-          stock_status:       v.stock_status ?? 'in_stock',
+        (variants as Record<string, unknown>[]).map((v) => ({
+          product_id:                 prod.id,
+          purity:                     (v.purity as string) ?? '18K',
+          weight_grams:               (v.weight_grams as number) ?? 0,
+          gem_weight_ct:            v.gem_weight_ct ?? null,
+          gem_price_override:         v.gem_price_inr ?? null,
+          stock_status:               (v.stock_status as string) ?? 'in_stock',
+          making_charge_discount_pct: v.making_charge_discount_pct ?? null,
+          gem_price_discount_pct:     v.gem_price_discount_pct ?? null,
         }))
       )
       if (varErr) console.error('[POST /api/products] variant insert error:', varErr)

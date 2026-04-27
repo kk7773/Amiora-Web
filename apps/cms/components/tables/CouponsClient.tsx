@@ -8,12 +8,15 @@ import {
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+type AppliesTo = 'making_charge' | 'gem_price' | 'both'
+
 interface Coupon {
   id:                  string
   code:                string
   description:         string | null
   type:                'percentage' | 'fixed'
   value:               number
+  applies_to:          AppliesTo
   min_order_amount:    number
   max_discount_amount: number | null
   usage_limit:         number | null
@@ -28,6 +31,7 @@ interface FormState {
   description:         string
   type:                'percentage' | 'fixed'
   value:               string
+  applies_to:          AppliesTo
   min_order_amount:    string
   max_discount_amount: string
   usage_limit:         string
@@ -35,11 +39,18 @@ interface FormState {
   is_active:           boolean
 }
 
+const APPLIES_TO_LABELS: Record<AppliesTo, string> = {
+  making_charge: 'Making Charges only',
+  gem_price:     'Stone / Gem Price only',
+  both:          'Making Charges + Stone Price',
+}
+
 const EMPTY_FORM: FormState = {
   code:                '',
   description:         '',
   type:                'percentage',
   value:               '',
+  applies_to:          'both',
   min_order_amount:    '',
   max_discount_amount: '',
   usage_limit:         '',
@@ -85,6 +96,7 @@ export function CouponsClient({ initial }: { initial: Coupon[] }) {
       description:         c.description ?? '',
       type:                c.type,
       value:               String(c.value),
+      applies_to:          c.applies_to ?? 'both',
       min_order_amount:    String(c.min_order_amount),
       max_discount_amount: c.max_discount_amount != null ? String(c.max_discount_amount) : '',
       usage_limit:         c.usage_limit != null ? String(c.usage_limit) : '',
@@ -112,6 +124,7 @@ export function CouponsClient({ initial }: { initial: Coupon[] }) {
       description:         form.description || null,
       type:                form.type,
       value:               form.value,
+      applies_to:          form.applies_to,
       min_order_amount:    form.min_order_amount || 0,
       max_discount_amount: form.max_discount_amount || null,
       usage_limit:         form.usage_limit || null,
@@ -235,11 +248,11 @@ export function CouponsClient({ initial }: { initial: Coupon[] }) {
               <tr>
                 <th className="text-left px-4 py-3 text-xs uppercase tracking-wide text-gray-500 font-medium">Code</th>
                 <th className="text-left px-4 py-3 text-xs uppercase tracking-wide text-gray-500 font-medium">Type / Value</th>
-                <th className="text-left px-4 py-3 text-xs uppercase tracking-wide text-gray-500 font-medium">Min Order</th>
+                <th className="text-left px-4 py-3 text-xs uppercase tracking-wide text-gray-500 font-medium">Applies To</th>
                 <th className="text-left px-4 py-3 text-xs uppercase tracking-wide text-gray-500 font-medium">Usage</th>
                 <th className="text-left px-4 py-3 text-xs uppercase tracking-wide text-gray-500 font-medium">Expires</th>
                 <th className="text-left px-4 py-3 text-xs uppercase tracking-wide text-gray-500 font-medium">Status</th>
-                <th className="px-4 py-3" />
+                <th className="px-4 py3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -283,9 +296,20 @@ export function CouponsClient({ initial }: { initial: Coupon[] }) {
                       )}
                     </td>
 
-                    {/* Min Order */}
-                    <td className="px-4 py-3 text-gray-600">
-                      {c.min_order_amount > 0 ? `₹${c.min_order_amount}` : <span className="text-gray-300">—</span>}
+                    {/* Applies To */}
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                        c.applies_to === 'making_charge'
+                          ? 'bg-amber-50 text-amber-700'
+                          : c.applies_to === 'gem_price'
+                          ? 'bg-purple-50 text-purple-700'
+                          : 'bg-teal/10 text-teal'
+                      }`}>
+                        {APPLIES_TO_LABELS[c.applies_to ?? 'both']}
+                      </span>
+                      {c.min_order_amount > 0 && (
+                        <p className="text-xs text-gray-400 mt-0.5">Min ₹{c.min_order_amount}</p>
+                      )}
                     </td>
 
                     {/* Usage */}
@@ -428,6 +452,23 @@ export function CouponsClient({ initial }: { initial: Coupon[] }) {
                     className={inp}
                   />
                 </div>
+              </div>
+
+              {/* Applies To */}
+              <div>
+                <label className={lbl}>Discount Applies To <span className="text-red-500">*</span></label>
+                <select
+                  value={form.applies_to}
+                  onChange={e => setForm(f => ({ ...f, applies_to: e.target.value as AppliesTo }))}
+                  className={inp}
+                >
+                  <option value="both">Making Charges + Stone / Gem Price</option>
+                  <option value="making_charge">Making Charges only</option>
+                  <option value="gem_price">Stone / Gem Price only</option>
+                </select>
+                <p className="text-xs text-gray-400 mt-1">
+                  Discount is applied on these components only — never on metal price.
+                </p>
               </div>
 
               {/* Max discount (percentage only) */}

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { createServerClient } from '@amiora/database'
-import { calculateVariantPrice } from '@/lib/pricing/calculator'
+import { attachCardPrice } from '@/lib/pricing/attachCardPrice'
 import { getLatestPrices }       from '@/lib/pricing/engine'
 import { ProductCard }           from '@/components/product/ProductCard'
 import { SearchInput }           from './SearchInput'
@@ -45,29 +45,19 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   const { data: rows } = await supabase
     .from('products')
-    .select('id,name,slug,making_charge_pct,product_images(*),product_variants(*)')
+    .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,product_images(*),product_variants(*)')
     .eq('is_active', true)
     .ilike('name', `%${query}%`)
     .order('created_at', { ascending: false })
     .limit(48)
 
-  type RawVariant = { purity: string; weight_grams: number | null; gem_price_override: number | null }
-
-  const products = (rows ?? []).map((p) => {
-    const firstVariant = (p.product_variants as RawVariant[])?.[0]
-    const basePrice = firstVariant?.weight_grams
-      ? calculateVariantPrice({
-          weightGrams:         firstVariant.weight_grams,
-          purity:              firstVariant.purity,
-          livePricePerGram999: firstVariant.purity === '92.5'
-            ? (prices.silver?.pricePerGram ?? 90)
-            : (prices.gold?.pricePerGram   ?? 7200),
-          makingChargePct:  p.making_charge_pct,
-          gemPriceOverride: firstVariant.gem_price_override,
-        }).finalPrice
-      : 0
-    return { ...p, basePrice }
-  })
+  const products = (rows ?? []).map((p) =>
+    attachCardPrice(
+      { ...p, product_variants: p.product_variants ?? [] },
+      prices.gold?.pricePerGram ?? 7200,
+      prices.silver?.pricePerGram ?? 90
+    )
+  )
 
   return (
     <div className="section-x py-14">

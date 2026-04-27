@@ -19,6 +19,7 @@ export default async function EditProductPage({ params }: Props) {
         product_variants(
           id, purity, weight_grams, gem_weight_ct,
           gem_price_override, stock_status,
+          metal_variant_id, gem_variant_id,
           metal_variant:metal_variants(variant_name),
           gem_variant:gem_variants(cut_name)
         )
@@ -57,11 +58,14 @@ export default async function EditProductPage({ params }: Props) {
 
   // ── Variants: map DB columns → form fields ────────────────────────────────
   type DBVariant = {
+    id: string
     purity:             string
     weight_grams:       number | null
     gem_weight_ct:      number | null
     gem_price_override: number | null
     stock_status:       string
+    making_charge_discount_pct: number | null
+    gem_price_discount_pct:     number | null
     metal_variant:      { variant_name: string } | null
     gem_variant:        { cut_name: string }     | null
   }
@@ -80,6 +84,7 @@ export default async function EditProductPage({ params }: Props) {
                        : ''
 
     return {
+      id: v.id,
       metal_type,
       purity:       v.purity        ?? '',
       gold_variant,
@@ -88,6 +93,14 @@ export default async function EditProductPage({ params }: Props) {
       gem_weight_ct:v.gem_weight_ct      ?? undefined,
       gem_price_inr:v.gem_price_override ?? undefined,
       stock_status: v.stock_status       ?? 'in_stock',
+      making_charge_discount_pct:
+        v.making_charge_discount_pct != null && v.making_charge_discount_pct !== undefined
+          ? Number(v.making_charge_discount_pct)
+          : null,
+      gem_price_discount_pct:
+        v.gem_price_discount_pct != null && v.gem_price_discount_pct !== undefined
+          ? Number(v.gem_price_discount_pct)
+          : null,
     }
   })
 
@@ -116,6 +129,10 @@ export default async function EditProductPage({ params }: Props) {
           is_featured:       product.is_featured       ?? false,
           is_active:         product.is_active         ?? true,
           making_charge_pct: product.making_charge_pct ?? 8,
+          making_charge_discount_pct:
+            (product as { making_charge_discount_pct?: number | null }).making_charge_discount_pct ?? 0,
+          gem_price_discount_pct:
+            (product as { gem_price_discount_pct?: number | null }).gem_price_discount_pct ?? 0,
           meta_title:        product.meta_title        ?? '',
           meta_description:  product.meta_description  ?? '',
           product_images:    sortedImages,

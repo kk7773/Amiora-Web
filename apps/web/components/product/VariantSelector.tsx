@@ -12,6 +12,9 @@ interface Variant {
   gem_price_override: number | null
   gem_weight_ct:      number | null
   stock_status:       string
+  /** null = use product default */
+  making_charge_discount_pct?: number | null
+  gem_price_discount_pct?:     number | null
   metal_variant?: { variant_name: string } | null
   gem_variant?:   { cut_name: string }     | null
   sizes?: { size_label: string; in_stock: boolean }[]

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { createServerClient } from '@amiora/database'
-import { calculateVariantPrice } from '@/lib/pricing/calculator'
+import { attachCardPrice } from '@/lib/pricing/attachCardPrice'
 import { getLatestPrices }       from '@/lib/pricing/engine'
 import { ProductCard }           from '@/components/product/ProductCard'
 import { FilterSidebar }         from '@/components/shop/FilterSidebar'
@@ -98,7 +98,7 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
   // ─────────────────────────────────────────────────────────────────
   let query = supabase
     .from('products')
-    .select('id,name,slug,making_charge_pct,product_images(*),product_variants(*)', { count: 'exact' })
+    .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,product_images(*),product_variants(*)', { count: 'exact' })
     .eq('is_active', true)
 
   // Apply resolved product-ID constraint from variant filters
@@ -139,23 +139,16 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
   // ─────────────────────────────────────────────────────────────────
   // Step 3 — Attach live prices to each product
   // ─────────────────────────────────────────────────────────────────
-  type RawVariant = { purity: string; weight_grams: number | null; gem_price_override: number | null }
-
-  const products = (rows ?? []).map((p) => {
-    const firstVariant = (p.product_variants as RawVariant[])?.[0]
-    const basePrice = firstVariant?.weight_grams
-      ? calculateVariantPrice({
-          weightGrams:         firstVariant.weight_grams,
-          purity:              firstVariant.purity,
-          livePricePerGram999: firstVariant.purity === '92.5'
-            ? (prices.silver?.pricePerGram ?? 90)
-            : (prices.gold?.pricePerGram   ?? 7200),
-          makingChargePct:  p.making_charge_pct,
-          gemPriceOverride: firstVariant.gem_price_override,
-        }).finalPrice
-      : 0
-    return { ...p, basePrice }
-  })
+  const products = (rows ?? []).map((p) =>
+    attachCardPrice(
+      {
+        ...p,
+        product_variants: p.product_variants ?? [],
+      },
+      prices.gold?.pricePerGram ?? 7200,
+      prices.silver?.pricePerGram ?? 90
+    )
+  )
 
   // ─────────────────────────────────────────────────────────────────
   // Render

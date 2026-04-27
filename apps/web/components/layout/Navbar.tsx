@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { ShoppingBag, Search, Heart, Menu, X } from 'lucide-react'
 import { Button } from '@amiora/ui'
-import { useCartStore } from '@/stores/cartStore'
+import { useCartStore, useCartHydrated } from '@/stores/cartStore'
 import { MobileMenu } from './MobileMenu'
 import { cn } from '@amiora/ui'
 
@@ -20,6 +20,8 @@ export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false)
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const totalItems = useCartStore((s) => s.itemCount())
+  const cartHydrated = useCartHydrated()
+  const cartBadge = cartHydrated ? totalItems : 0
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20)
@@ -68,9 +70,9 @@ export function Navbar() {
             <Button variant="ghost" size="icon" className="relative" asChild>
               <Link href="/cart">
                 <ShoppingBag className="h-5 w-5" />
-                {totalItems > 0 && (
+                {cartBadge > 0 && (
                   <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-gold-500 text-[10px] font-bold text-obsidian-900">
-                    {totalItems}
+                    {cartBadge > 9 ? '9+' : cartBadge}
                   </span>
                 )}
               </Link>

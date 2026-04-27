@@ -11,6 +11,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.description         !== undefined) patch.description         = body.description
   if (body.type                !== undefined) patch.type                = body.type
   if (body.value               !== undefined) patch.value               = Number(body.value)
+  if (body.applies_to          !== undefined) patch.applies_to          = body.applies_to
   if (body.min_order_amount    !== undefined) patch.min_order_amount    = Number(body.min_order_amount)
   if (body.max_discount_amount !== undefined) patch.max_discount_amount = body.max_discount_amount ? Number(body.max_discount_amount) : null
   if (body.usage_limit         !== undefined) patch.usage_limit         = body.usage_limit ? Number(body.usage_limit) : null

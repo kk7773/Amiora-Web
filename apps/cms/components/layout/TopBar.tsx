@@ -1,8 +1,8 @@
 'use client'
 
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { Bell, Search, User } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNotificationStore } from '@/stores/notificationStore'
 
 const TITLES: Record<string, string> = {
@@ -19,13 +19,27 @@ const TITLES: Record<string, string> = {
   '/settings':     'Settings',
 }
 
+function initials(name: string) {
+  return name.split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('')
+}
+
 export function TopBar() {
   const pathname  = usePathname()
+  const router    = useRouter()
   const [notifOpen, setNotifOpen] = useState(false)
   const { notifications, markAllRead, counts } = useNotificationStore()
   const totalCount = Object.values(counts).reduce((a, b) => a + b, 0)
+  const [adminName, setAdminName] = useState<string | null>(null)
 
-  const title = Object.entries(TITLES).find(([k]) => pathname === k || pathname.startsWith(k + '/'))?.[1] ?? 'CMS'
+  useEffect(() => {
+    fetch('/api/me/profile')
+      .then(r => r.json())
+      .then(d => { if (d?.name) setAdminName(d.name) })
+      .catch(() => {})
+  }, [])
+
+  const title = Object.entries(TITLES).find(([k]) => pathname === k || pathname.startsWith(k + '/'))?.[1]
+    ?? (pathname === '/profile' ? 'My Profile' : 'CMS')
 
   return (
     <header className="fixed top-0 left-60 right-0 z-20 h-14 bg-white border-b border-divider flex items-center px-6 gap-4">
@@ -71,10 +85,14 @@ export function TopBar() {
           )}
         </div>
 
-        {/* User avatar */}
-        <div className="w-8 h-8 rounded-full bg-teal flex items-center justify-center text-white">
-          <User className="w-4 h-4" />
-        </div>
+        {/* User avatar → profile page */}
+        <button
+          onClick={() => router.push('/profile')}
+          title="My Profile"
+          className="w-8 h-8 rounded-full bg-deep-teal flex items-center justify-center text-white text-xs font-bold hover:opacity-90 transition-opacity ring-2 ring-offset-1 ring-transparent hover:ring-gold focus:outline-none focus:ring-gold"
+        >
+          {adminName ? initials(adminName) : <User className="w-4 h-4" />}
+        </button>
       </div>
     </header>
   )

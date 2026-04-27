@@ -102,7 +102,7 @@ function ComboSelect({
       >
         <option value="">{placeholder}</option>
         {allOptions.map(o => <option key={o} value={o}>{o}</option>)}
-        <option value={CUSTOM_SENTINEL}>✏️ Custom…</option>
+        <option value={CUSTOM_SENTINEL}>Custom</option>
       </select>
       {showInput && (
         <div className="flex gap-1">
@@ -132,7 +132,35 @@ function ComboSelect({
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
+const pctOrInherit = z.preprocess(
+  (val) => {
+    if (val === '' || val === null || val === undefined) return null
+    if (typeof val === 'number' && Number.isNaN(val)) return null
+    const n = typeof val === 'number' ? val : parseFloat(String(val))
+    if (Number.isNaN(n)) return null
+    return n
+  },
+  z.union([z.number().min(0).max(100), z.null()])
+)
+
+/** `valueAsNumber` on empty inputs produces NaN — normalize before z.number() */
+function num0to100WithDefault(def: number) {
+  return z.preprocess(
+    (v) => {
+      if (v === '' || v === null || v === undefined) return def
+      const n = typeof v === 'number' ? v : Number(v)
+      if (Number.isNaN(n)) return def
+      return n
+    },
+    z.number().min(0).max(100)
+  )
+}
+
 const variantSchema = z.object({
+  id: z.preprocess(
+    (v) => (v === '' || v == null || v === undefined ? undefined : v),
+    z.string().uuid().optional()
+  ),
   metal_type:   z.string().min(1),
   purity:       z.string().optional(),
   gold_variant: z.string().optional(),
@@ -141,23 +169,27 @@ const variantSchema = z.object({
   gem_weight_ct:z.number().optional(),
   gem_price_inr:z.number().optional(),
   stock_status: z.string().default('in_stock'),
+  making_charge_discount_pct: pctOrInherit.optional().default(null),
+  gem_price_discount_pct:     pctOrInherit.optional().default(null),
 })
 
 const schema = z.object({
-  name:              z.string().min(1, 'Name required'),
-  slug:              z.string().min(1),
-  sku:               z.string().optional(),
-  short_description: z.string().optional(),
-  full_description:  z.string().optional(),
-  collection_id:     z.string().optional(),
-  category_id:       z.string().optional(),
-  tag_ids:           z.array(z.string()).default([]),
-  is_featured:       z.boolean().default(false),
-  is_active:         z.boolean().default(true),
-  making_charge_pct: z.number().min(0).max(100).default(8),
-  meta_title:        z.string().optional(),
-  meta_description:  z.string().optional(),
-  variants:          z.array(variantSchema).default([]),
+  name:                       z.string().min(1, 'Name required'),
+  slug:                       z.string().min(1),
+  sku:                        z.string().optional(),
+  short_description:          z.string().optional(),
+  full_description:           z.string().optional(),
+  collection_id:              z.string().optional(),
+  category_id:                z.string().optional(),
+  tag_ids:                    z.array(z.string()).default([]),
+  is_featured:                z.boolean().default(false),
+  is_active:                  z.boolean().default(true),
+  making_charge_pct:          num0to100WithDefault(8),
+  making_charge_discount_pct: num0to100WithDefault(0),
+  gem_price_discount_pct:     num0to100WithDefault(0),
+  meta_title:                 z.string().optional(),
+  meta_description:           z.string().optional(),
+  variants:                   z.array(variantSchema).default([]),
 })
 type FormData = z.infer<typeof schema>
 
@@ -187,7 +219,11 @@ interface Props {
 }
 
 const METAL_TYPES    = ['gold', 'silver', 'platinum']
-const PURITIES       = ['18K', '22K', '24K', '92.5%', '99.9%']
+const PURITIES_BY_METAL: Record<string, string[]> = {
+  gold:     ['9kt', '18kt', '22kt', '24kt'],
+  silver:   ['99.9%', '92.5%'],
+  platinum: ['95%', '90%'],
+}
 const GOLD_VARIANTS  = ['yellow', 'white', 'rose']
 const GEM_CUTS       = ['round', 'princess', 'oval', 'marquise', 'pear', 'emerald', 'cushion', 'radiant']
 const STOCK_STATUSES = ['in_stock', 'low_stock', 'out_of_stock', 'made_to_order']
@@ -218,10 +254,12 @@ export function ProductForm({ collections, categories, tags, defaultValues }: Pr
   const { register, handleSubmit, control, watch, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      making_charge_pct: 8,
-      is_active:         true,
-      variants:          [],
-      tag_ids:           [],
+      making_charge_pct:          8,
+      making_charge_discount_pct: 0,
+      gem_price_discount_pct:     0,
+      is_active:                  true,
+      variants:                   [],
+      tag_ids:                    [],
       ...defaultValues,
       full_description: defaultValues?.full_description ?? defaultValues?.description ?? '',
     },
@@ -270,7 +308,13 @@ export function ProductForm({ collections, categories, tags, defaultValues }: Pr
   }
 
   function addVariant() {
-    append({ metal_type: 'gold', weight_grams: 0, stock_status: 'in_stock' })
+    append({
+      metal_type: 'gold',
+      weight_grams: 0,
+      stock_status: 'in_stock',
+      making_charge_discount_pct: null,
+      gem_price_discount_pct:     null,
+    })
   }
 
   const onSubmit = useCallback(async (data: FormData) => {
@@ -322,6 +366,26 @@ export function ProductForm({ collections, categories, tags, defaultValues }: Pr
               type="number"
               step="0.1"
               {...register('making_charge_pct', { valueAsNumber: true })}
+            />
+          </Field>
+          <Field label="Making Charge Discount %">
+            <Input
+              type="number"
+              step="0.1"
+              min="0"
+              max="100"
+              placeholder="0"
+              {...register('making_charge_discount_pct', { valueAsNumber: true })}
+            />
+          </Field>
+          <Field label="Stone / Gem Price Discount %">
+            <Input
+              type="number"
+              step="0.1"
+              min="0"
+              max="100"
+              placeholder="0"
+              {...register('gem_price_discount_pct', { valueAsNumber: true })}
             />
           </Field>
           <Field label="Collection">
@@ -539,7 +603,7 @@ export function ProductForm({ collections, categories, tags, defaultValues }: Pr
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-surface">
-                {['Metal','Purity','Colour','Gem Cut','Weight (g)','Gem (ct)','Gem Price','Stock',''].map(h => (
+                {['Metal','Purity','Colour','Gem Cut','Weight (g)','Gem (ct)','Gem Price','Mk Δ%','Stone Δ%','Stock',''].map(h => (
                   <th key={h} className="text-left px-3 py-2 text-xs text-ink-faint font-medium">{h}</th>
                 ))}
               </tr>
@@ -548,7 +612,15 @@ export function ProductForm({ collections, categories, tags, defaultValues }: Pr
               {variants.map((v, i) => (
                 <tr key={v.id} className="bg-white align-top">
                   <td className="px-2 py-2">
-                    <select {...register(`variants.${i}.metal_type`)} className="border border-divider rounded px-2 py-1 text-xs outline-none focus:border-teal bg-white w-full">
+                    <input type="hidden" {...register(`variants.${i}.id`)} />
+                    <select
+                      {...register(`variants.${i}.metal_type`)}
+                      onChange={e => {
+                        setValue(`variants.${i}.metal_type`, e.target.value, { shouldDirty: true })
+                        setValue(`variants.${i}.purity`, '', { shouldDirty: true })
+                      }}
+                      className="border border-divider rounded px-2 py-1 text-xs outline-none focus:border-teal bg-white w-full"
+                    >
                       {METAL_TYPES.map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
                   </td>
@@ -556,7 +628,7 @@ export function ProductForm({ collections, categories, tags, defaultValues }: Pr
                     <ComboSelect
                       value={watch(`variants.${i}.purity`) ?? ''}
                       onChange={val => setValue(`variants.${i}.purity`, val, { shouldDirty: true })}
-                      options={PURITIES}
+                      options={PURITIES_BY_METAL[watch(`variants.${i}.metal_type`)] ?? []}
                       customOptions={customPurities}
                       onAddCustom={v => setCustomPurities(p => p.includes(v) ? p : [...p, v])}
                       placeholder="Purity"
@@ -590,6 +662,42 @@ export function ProductForm({ collections, categories, tags, defaultValues }: Pr
                   </td>
                   <td className="px-2 py-2">
                     <input type="number" {...register(`variants.${i}.gem_price_inr`, { valueAsNumber: true })} className="border border-divider rounded px-2 py-1 text-xs outline-none focus:border-teal bg-white w-24" />
+                  </td>
+                  <td className="px-2 py-2">
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.1}
+                      title="Making charge % off; empty = use product default"
+                      placeholder="—"
+                      {...register(`variants.${i}.making_charge_discount_pct`, {
+                        setValueAs: (v) => {
+                          if (v === '' || v == null) return null
+                          const n = typeof v === 'number' ? v : parseFloat(String(v))
+                          return Number.isNaN(n) ? null : n
+                        },
+                      })}
+                      className="border border-divider rounded px-2 py-1 text-xs outline-none focus:border-teal bg-white w-16"
+                    />
+                  </td>
+                  <td className="px-2 py-2">
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.1}
+                      title="Stone/gem % off; empty = use product default"
+                      placeholder="—"
+                      {...register(`variants.${i}.gem_price_discount_pct`, {
+                        setValueAs: (v) => {
+                          if (v === '' || v == null) return null
+                          const n = typeof v === 'number' ? v : parseFloat(String(v))
+                          return Number.isNaN(n) ? null : n
+                        },
+                      })}
+                      className="border border-divider rounded px-2 py-1 text-xs outline-none focus:border-teal bg-white w-16"
+                    />
                   </td>
                   <td className="px-2 py-2">
                     <select {...register(`variants.${i}.stock_status`)} className="border border-divider rounded px-2 py-1 text-xs outline-none focus:border-teal bg-white w-full">

@@ -77,14 +77,55 @@ export interface PriceInput {
   makingChargePct?: number
   /** Fixed gem/diamond price from product_variants.gem_price_override */
   gemPriceOverride?: number | null
+  /**
+   * Permanent product-level discount on making charges (0–100 %).
+   * Set from products.making_charge_discount_pct.
+   */
+  makingChargeDiscountPct?: number
+  /**
+   * Permanent product-level discount on gem/stone price (0–100 %).
+   * Set from products.gem_price_discount_pct.
+   */
+  gemPriceDiscountPct?: number
+  /**
+   * When set (0–100), overrides product making-charge discount for this variant only.
+   * NULL/undefined = use product-level `makingChargeDiscountPct`.
+   */
+  variantMakingChargeDiscountPct?: number | null
+  /**
+   * When set (0–100), overrides product gem discount for this variant only.
+   * NULL/undefined = use product-level `gemPriceDiscountPct`.
+   */
+  variantGemPriceDiscountPct?: number | null
 }
 
 export interface PriceBreakdown {
   purePrice: number
   baseMetalPrice: number
+  /** Making charge before any discount */
   makingCharge: number
+  /** Discount applied to making charge (product-level) */
+  makingChargeDiscount: number
+  /** Net making charge after product-level discount */
+  makingChargeNet: number
+  /** Gem/stone price before any discount */
   gemPrice: number
+  /** Discount applied to gem/stone price (product-level) */
+  gemPriceDiscount: number
+  /** Net gem/stone price after product-level discount */
+  gemPriceNet: number
+  /** Total product-level discount (making + gem) */
+  productDiscount: number
   finalPrice: number
+  /**
+   * Metal + gross making + gross gem (before any component discount).
+   * Used to express “% off” relative to the headline total.
+   */
+  listTotalBeforeDiscount: number
+  /**
+   * Effective % saved vs `listTotalBeforeDiscount` (0–100). 0 when no discount.
+   */
+  percentOffGross: number
   currency: 'INR'
   /** Purity multiplier used (for display/audit) */
   purityMultiplier: number
@@ -92,34 +133,104 @@ export interface PriceBreakdown {
 
 /**
  * Calculate the final price for a single product variant.
- * Returns a full breakdown for display in the UI price tooltip.
+ *
+ * Discount strategy: discounts apply ONLY to making charges and/or gem price —
+ * never to the metal price itself. Product-level discounts are permanent
+ * (always shown). Coupon discounts are applied separately at checkout.
  */
 export function calculateVariantPrice(input: PriceInput): PriceBreakdown {
   const {
     weightGrams,
     purity,
     livePricePerGram999,
-    makingChargePct = 8,
-    gemPriceOverride = null,
+    makingChargePct          = 8,
+    gemPriceOverride         = null,
+    makingChargeDiscountPct  = 0,
+    gemPriceDiscountPct      = 0,
+    variantMakingChargeDiscountPct,
+    variantGemPriceDiscountPct,
   } = input
+
+  const effMakingDiscPct =
+    variantMakingChargeDiscountPct != null && !Number.isNaN(variantMakingChargeDiscountPct)
+      ? variantMakingChargeDiscountPct
+      : makingChargeDiscountPct
+  const effGemDiscPct =
+    variantGemPriceDiscountPct != null && !Number.isNaN(variantGemPriceDiscountPct)
+      ? variantGemPriceDiscountPct
+      : gemPriceDiscountPct
 
   const purityMultiplier = parsePurityMultiplier(purity)
 
-  const purePrice       = weightGrams * livePricePerGram999
-  const baseMetalPrice  = purePrice * purityMultiplier
-  const makingCharge    = baseMetalPrice * (makingChargePct / 100)
-  const gemPrice        = gemPriceOverride ?? 0
-  const finalPrice      = baseMetalPrice + makingCharge + gemPrice
+  const purePrice      = weightGrams * livePricePerGram999
+  const baseMetalPrice = purePrice * purityMultiplier
+  const makingCharge   = baseMetalPrice * (makingChargePct / 100)
+  const gemPrice       = gemPriceOverride ?? 0
+
+  const makingChargeDiscount = round2(makingCharge * (effMakingDiscPct / 100))
+  const gemPriceDiscount     = round2(gemPrice     * (effGemDiscPct     / 100))
+  const makingChargeNet      = round2(makingCharge - makingChargeDiscount)
+  const gemPriceNet          = round2(gemPrice     - gemPriceDiscount)
+  const productDiscount      = round2(makingChargeDiscount + gemPriceDiscount)
+  const finalPrice           = round2(baseMetalPrice + makingChargeNet + gemPriceNet)
+  const listTotalBeforeDiscount = round2(baseMetalPrice + makingCharge + gemPrice)
+  const savedVsList          = round2(listTotalBeforeDiscount - finalPrice)
+  const percentOffGross =
+    listTotalBeforeDiscount > 0 && savedVsList > 0
+      ? round2(Math.min(100, (100 * savedVsList) / listTotalBeforeDiscount))
+      : 0
 
   return {
-    purePrice:       round2(purePrice),
-    baseMetalPrice:  round2(baseMetalPrice),
-    makingCharge:    round2(makingCharge),
-    gemPrice:        round2(gemPrice),
-    finalPrice:      round2(finalPrice),
+    purePrice:            round2(purePrice),
+    baseMetalPrice:       round2(baseMetalPrice),
+    makingCharge:         round2(makingCharge),
+    makingChargeDiscount,
+    makingChargeNet,
+    gemPrice:             round2(gemPrice),
+    gemPriceDiscount,
+    gemPriceNet,
+    productDiscount,
+    finalPrice,
+    listTotalBeforeDiscount,
+    percentOffGross,
     purityMultiplier,
     currency: 'INR',
   }
+}
+
+/**
+ * Apply a coupon discount to the discountable price components.
+ * Returns the coupon discount amount in INR.
+ *
+ * @param appliesTo  - 'making_charge' | 'gem_price' | 'both'
+ * @param type       - 'percentage' | 'fixed'
+ * @param value      - percentage (0–100) or fixed INR amount
+ * @param breakdown  - result of calculateVariantPrice (net values after product discounts)
+ * @param maxDiscount - optional cap in INR for percentage coupons
+ */
+export function applyCouponDiscount(params: {
+  appliesTo:   'making_charge' | 'gem_price' | 'both'
+  type:        'percentage' | 'fixed'
+  value:       number
+  breakdown:   PriceBreakdown
+  maxDiscount?: number | null
+}): number {
+  const { appliesTo, type, value, breakdown, maxDiscount } = params
+
+  let base = 0
+  if (appliesTo === 'making_charge') base = breakdown.makingChargeNet
+  else if (appliesTo === 'gem_price') base = breakdown.gemPriceNet
+  else base = breakdown.makingChargeNet + breakdown.gemPriceNet
+
+  let discount = 0
+  if (type === 'percentage') {
+    discount = base * (value / 100)
+    if (maxDiscount) discount = Math.min(discount, maxDiscount)
+  } else {
+    discount = Math.min(value, base)
+  }
+
+  return Math.round(discount)
 }
 
 /** Format INR price for display */

@@ -24,6 +24,8 @@ interface ProductCardVariant {
   weight_grams: number | null
   gem_price_override: number | null
   stock_status: string
+  making_charge_discount_pct?: number | null
+  gem_price_discount_pct?: number | null
 }
 
 export interface ProductCardProps {
@@ -32,10 +34,14 @@ export interface ProductCardProps {
     name: string
     slug: string
     making_charge_pct: number
+    making_charge_discount_pct?: number | null
+    gem_price_discount_pct?: number | null
     product_images: ProductCardImage[]
     product_variants: ProductCardVariant[]
     /** computed live price — pass from server or pricing hook */
     basePrice?: number
+    /** Effective % off vs undiscounted total; from `attachCardPrice` */
+    discountPercentOff?: number | null
     avgRating?: number
     reviewCount?: number
     collectionName?: string | null
@@ -120,8 +126,13 @@ export function ProductCard({ product, badgeLabel, className }: ProductCardProps
           )}
         </div>
 
-        {/* Top-right: badge + heart */}
+        {/* Top-right: discount % + tag + heart */}
         <div className="absolute top-3 right-3 flex flex-col gap-2 items-end">
+          {product.discountPercentOff != null && product.discountPercentOff >= 1 && (
+            <span className="bg-deep-teal text-cream text-2xs sm:text-xs font-semibold px-2.5 py-0.5 rounded-full tabular-nums shadow-sm">
+              {product.discountPercentOff}% off
+            </span>
+          )}
           {badgeLabel && (
             <span className="bg-deep-teal text-cream text-2xs px-2 py-0.5 rounded-full tracking-widest uppercase">
               {badgeLabel}

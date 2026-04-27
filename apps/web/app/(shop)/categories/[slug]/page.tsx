@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Suspense } from 'react'
 import { createServerClient } from '@amiora/database'
-import { calculateVariantPrice } from '@/lib/pricing/calculator'
+import { attachCardPrice } from '@/lib/pricing/attachCardPrice'
 import { getLatestPrices }       from '@/lib/pricing/engine'
 import { ProductCard }           from '@/components/product/ProductCard'
 import { FilterSidebar }         from '@/components/shop/FilterSidebar'
@@ -80,7 +80,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
 
   const { data: rows, count } = await supabase
     .from('products')
-    .select('id,name,slug,making_charge_pct,product_images(*),product_variants(*)', { count: 'exact' })
+    .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,product_images(*),product_variants(*)', { count: 'exact' })
     .eq('is_active', true)
     .eq('category_id', category.id)
     .order(ord.col, { ascending: ord.asc })
@@ -92,21 +92,13 @@ export default async function CategoryPage({ params, searchParams }: Props) {
     product_variants: { id: string; purity: string; weight_grams: number | null; gem_price_override: number | null; stock_status: string }[]
   }
 
-  const products = ((rows ?? []) as unknown as RawProduct[]).map((p) => {
-    const v = p.product_variants?.[0]
-    const basePrice = v?.weight_grams
-      ? calculateVariantPrice({
-          weightGrams:         v.weight_grams,
-          purity:              v.purity,
-          livePricePerGram999: v.purity === '92.5'
-            ? (prices.silver?.pricePerGram ?? 90)
-            : (prices.gold?.pricePerGram   ?? 7200),
-          makingChargePct:  p.making_charge_pct,
-          gemPriceOverride: v.gem_price_override,
-        }).finalPrice
-      : 0
-    return { ...p, basePrice }
-  })
+  const products = ((rows ?? []) as unknown as RawProduct[]).map((p) =>
+    attachCardPrice(
+      { ...p, product_variants: p.product_variants ?? [] },
+      prices.gold?.pricePerGram ?? 7200,
+      prices.silver?.pricePerGram ?? 90
+    )
+  )
 
   const meta = CATEGORY_META[slug] ?? {
     gradient: 'from-deep-teal/20 to-light-teal/10',

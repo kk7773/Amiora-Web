@@ -1,14 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useRouter }  from 'next/navigation'
 import { useForm }    from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z }          from 'zod'
 import { toast }      from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Check, Store, Truck, CreditCard, ChevronRight, Loader2 } from 'lucide-react'
-import { useCartStore }  from '@/stores/cartStore'
+import { Check, Store, Truck, CreditCard, ChevronRight, Loader2, Tag, X } from 'lucide-react'
+import { useCartStore, useCartHydrated }  from '@/stores/cartStore'
 import { formatINR }     from '@/lib/pricing/calculator'
 import { fadeUp }        from '@/lib/animations'
 
@@ -29,6 +29,17 @@ const addressSchema = z.object({
 
 type AddressData = z.infer<typeof addressSchema>
 
+type PublicCoupon = {
+  id: string
+  code: string
+  description: string | null
+  type: string
+  value: number
+  min_order_amount: number
+  expires_at: string | null
+  applies_to: string
+}
+
 const STORES = [
   { id: 's1', name: 'AMIORA — Connaught Place', address: '23 Connaught Place, New Delhi 110001', phone: '+91 98765-43210', timings: 'Mon–Sat 10am–8pm' },
   { id: 's2', name: 'AMIORA — Bandra West',      address: '14 Hill Road, Bandra West, Mumbai 400050', phone: '+91 98765-43211', timings: 'Mon–Sun 10am–9pm' },
@@ -39,7 +50,9 @@ const STEPS = ['Delivery', 'Details', 'Payment']
 
 export function CheckoutClient() {
   const router = useRouter()
+  const cartHydrated = useCartHydrated()
   const { items, total, clearCart } = useCartStore()
+  const revalidateCouponCodeRef = useRef<string | null>(null)
 
   const [step,           setStep]           = useState(0)
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('online')
@@ -47,14 +60,137 @@ export function CheckoutClient() {
   const [selectedStore,  setSelectedStore]  = useState<string>(STORES[0]!.id)
   const [pickupDate,     setPickupDate]     = useState('')
   const [loading,        setLoading]        = useState(false)
+  const [publicCoupons,  setPublicCoupons]  = useState<PublicCoupon[]>([])
+  const [loadingCoupons, setLoadingCoupons] = useState(true)
+  const [selectedCouponId, setSelectedCouponId]   = useState<string | null>(null)
+  const [appliedCoupon,    setAppliedCoupon]     = useState<{
+    couponId: string
+    code: string
+    total_discount: number
+  } | null>(null)
+  const [couponBusy,   setCouponBusy]   = useState(false)
+  const [couponError,  setCouponError]  = useState<string | null>(null)
 
   const { register, handleSubmit, formState: { errors } } = useForm<AddressData>({
     resolver: zodResolver(addressSchema),
   })
 
-  const subtotal   = total()
-  const shipping   = deliveryMethod === 'pickup' ? 0 : (subtotal >= 5000 ? 0 : 199)
-  const grandTotal = subtotal + shipping
+  const subtotal = total()
+  const couponOff = appliedCoupon?.total_discount ?? 0
+  const subtotalAfterCoupon = Math.max(0, subtotal - couponOff)
+  const shipping   = deliveryMethod === 'pickup' ? 0 : (subtotalAfterCoupon >= 5000 ? 0 : 199)
+  const grandTotal = subtotalAfterCoupon + shipping
+
+  useEffect(() => {
+    let cancelled = false
+    setLoadingCoupons(true)
+    fetch('/api/coupons')
+      .then((r) => r.json())
+      .then((d: { coupons?: PublicCoupon[] }) => {
+        if (!cancelled) setPublicCoupons(d.coupons ?? [])
+      })
+      .catch(() => { if (!cancelled) setPublicCoupons([]) })
+      .finally(() => { if (!cancelled) setLoadingCoupons(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  const cartLinePayload = useCallback(
+    () =>
+      items.map((i) => ({
+        product_id: i.productId,
+        variant_id: i.variantId,
+        quantity:   i.quantity,
+      })),
+    [items]
+  )
+
+  const tryApplyCoupon = useCallback(
+    async (code: string): Promise<boolean> => {
+      setCouponBusy(true)
+      setCouponError(null)
+      try {
+        const res  = await fetch('/api/coupons/validate', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ code, items: cartLinePayload() }),
+        })
+        const data = (await res.json()) as
+          { valid?: boolean; error?: string; total_discount?: number; coupon_id?: string; code?: string }
+        if (!res.ok || !data.valid) {
+          revalidateCouponCodeRef.current = null
+          setAppliedCoupon(null)
+          setCouponError(data.error ?? 'This coupon could not be applied')
+          return false
+        }
+        revalidateCouponCodeRef.current = data.code ?? code
+        setAppliedCoupon({
+          couponId: data.coupon_id!,
+          code:     data.code!,
+          total_discount: Number(data.total_discount ?? 0),
+        })
+        return true
+      } catch {
+        revalidateCouponCodeRef.current = null
+        setCouponError('Could not apply coupon')
+        setAppliedCoupon(null)
+        return false
+      } finally {
+        setCouponBusy(false)
+      }
+    },
+    [cartLinePayload]
+  )
+
+  const cartSignature = useMemo(
+    () =>
+      JSON.stringify(
+        items.map((i) => [i.productId, i.variantId, i.quantity, i.unitPrice])
+      ),
+    [items]
+  )
+
+  useEffect(() => {
+    const code = revalidateCouponCodeRef.current
+    if (!code) return
+    if (items.length === 0) {
+      revalidateCouponCodeRef.current = null
+      setAppliedCoupon(null)
+      setSelectedCouponId(null)
+      setCouponError(null)
+      return
+    }
+    void tryApplyCoupon(code)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- revalidate when line items change, not on every object identity
+  }, [cartSignature, tryApplyCoupon, items.length])
+
+  const selectCoupon = async (c: PublicCoupon) => {
+    if (selectedCouponId === c.id) {
+      revalidateCouponCodeRef.current = null
+      setSelectedCouponId(null)
+      setAppliedCoupon(null)
+      setCouponError(null)
+      return
+    }
+    setSelectedCouponId(c.id)
+    const ok = await tryApplyCoupon(c.code)
+    if (!ok) setSelectedCouponId(null)
+  }
+
+  const clearCoupon = () => {
+    revalidateCouponCodeRef.current = null
+    setSelectedCouponId(null)
+    setAppliedCoupon(null)
+    setCouponError(null)
+  }
+
+  if (!cartHydrated) {
+    return (
+      <div className="section-x py-24 text-center">
+        <Loader2 className="inline h-8 w-8 animate-spin text-teal" aria-hidden />
+        <p className="mt-4 font-display text-lg text-ink-muted">Loading your bag…</p>
+      </div>
+    )
+  }
 
   if (!items.length) {
     return (
@@ -88,7 +224,15 @@ export function CheckoutClient() {
         await handleRazorpay(payload)
       } else {
         const res  = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, status: 'booked_for_pickup' }) })
-        const data = (await res.json()) as { order_number: string }
+        const data = (await res.json()) as { order_number?: string; error?: string }
+        if (!res.ok) {
+          toast.error(data.error ?? 'Order could not be placed.')
+          return
+        }
+        if (!data.order_number) {
+          toast.error('Order could not be placed.')
+          return
+        }
         clearCart()
         router.push(`/order-confirmation/${data.order_number}`)
       }
@@ -102,6 +246,11 @@ export function CheckoutClient() {
   /* ── Razorpay ── */
   const handleRazorpay = async (payload: object) => {
     const orderRes  = await fetch('/api/payment/create-order', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: grandTotal }) })
+    if (!orderRes.ok) {
+      const err = (await orderRes.json().catch(() => ({}))) as { error?: string }
+      toast.error(err.error ?? 'Could not start payment.')
+      return
+    }
     const orderData = (await orderRes.json()) as { id: string; currency: string }
 
     const options = {
@@ -112,16 +261,33 @@ export function CheckoutClient() {
       order_id: orderData.id,
       handler: async (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => {
         const res  = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, payment_id: response.razorpay_payment_id, razorpay_order_id: response.razorpay_order_id, status: 'confirmed' }) })
-        const data = (await res.json()) as { order_number: string }
+        const data = (await res.json()) as { order_number?: string; error?: string }
+        if (!res.ok) {
+          toast.error(data.error ?? 'Payment succeeded but we could not save your order. Please contact support with your payment ID.')
+          return
+        }
+        if (!data.order_number) {
+          toast.error('Could not confirm your order. Please contact support.')
+          return
+        }
         clearCart()
         router.push(`/order-confirmation/${data.order_number}`)
       },
       prefill: { name: '', email: '', contact: '' },
       theme:   { color: '#285260' },
+      modal:   {
+        ondismiss: () => {
+          setLoading(false)
+        },
+      },
     }
 
     // @ts-expect-error Razorpay loaded via script
     const rzp = new window.Razorpay(options)
+    rzp.on('payment.failed', () => {
+      setLoading(false)
+      toast.error('Payment failed. Your bag is unchanged.')
+    })
     rzp.open()
   }
 
@@ -279,8 +445,65 @@ export function CheckoutClient() {
               </li>
             ))}
           </ul>
+
+          <div className="border-t border-divider pt-4">
+            <p className="text-xs uppercase tracking-widest text-ink-muted mb-2 flex items-center gap-1.5">
+              <Tag className="h-3.5 w-3.5" aria-hidden />
+              Offers (use one)
+            </p>
+            {loadingCoupons ? (
+              <p className="text-sm text-ink-faint">Loading offers…</p>
+            ) : publicCoupons.length === 0 ? (
+              <p className="text-sm text-ink-faint">No public coupons right now.</p>
+            ) : (
+              <ul className="space-y-2 max-h-48 overflow-y-auto pr-0.5">
+                {publicCoupons.map((c) => {
+                  const selected = selectedCouponId === c.id
+                  return (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        onClick={() => void selectCoupon(c)}
+                        disabled={couponBusy}
+                        className={`w-full text-left rounded-xl border p-2.5 text-sm transition-colors ${
+                          selected ? 'border-teal bg-teal/5' : 'border-divider hover:border-teal/40'
+                        } ${couponBusy ? 'opacity-60' : ''}`}
+                      >
+                        <span className="font-mono font-semibold text-ink tracking-wide">{c.code}</span>
+                        {c.description && (
+                          <span className="block text-xs text-ink-muted mt-0.5 line-clamp-2">{c.description}</span>
+                        )}
+                        {c.min_order_amount > 0 && (
+                          <span className="block text-xs text-ink-faint mt-0.5">Min. order {formatINR(c.min_order_amount)}</span>
+                        )}
+                        <span className="block text-[0.7rem] text-ink-faint mt-0.5">
+                          {selected ? 'Tap to remove' : 'Tap to apply'}
+                        </span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+            {couponError && <p className="text-xs text-red-600 mt-2">{couponError}</p>}
+            {appliedCoupon && !couponError && (
+              <div className="mt-2 flex items-center justify-between text-sm text-teal">
+                <span>Coupon {appliedCoupon.code}</span>
+                <button type="button" onClick={clearCoupon} className="inline-flex items-center gap-1 text-ink-muted hover:text-ink" aria-label="Remove coupon">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+
           <div className="border-t border-divider pt-4 space-y-2 text-sm">
             <div className="flex justify-between text-ink-muted"><span>Subtotal</span><span>{formatINR(subtotal)}</span></div>
+            {couponOff > 0 && (
+              <div className="flex justify-between text-teal">
+                <span>Discount</span>
+                <span>−{formatINR(couponOff)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-ink-muted"><span>Shipping</span><span className={shipping === 0 ? 'text-teal font-medium' : ''}>{shipping === 0 ? 'FREE' : formatINR(shipping)}</span></div>
             <div className="flex justify-between text-base font-semibold text-ink pt-2 border-t border-divider"><span>Total</span><span>{formatINR(grandTotal)}</span></div>
           </div>

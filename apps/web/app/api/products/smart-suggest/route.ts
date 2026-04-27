@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@amiora/database'
-import { calculateVariantPrice } from '@/lib/pricing/calculator'
+import { attachCardPrice } from '@/lib/pricing/attachCardPrice'
 import { getLatestPrices }       from '@/lib/pricing/engine'
 
 export async function POST(req: NextRequest) {
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     if (ids.length > 0) {
       const { data } = await supabase
         .from('products')
-        .select('id,name,slug,making_charge_pct,product_images(*),product_variants(*)')
+        .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,product_images(*),product_variants(*)')
         .in('id', ids.slice(0, 4))
         .eq('is_active', true)
       products = data ?? []
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     if (products.length < 4) {
       const { data: featured } = await supabase
         .from('products')
-        .select('id,name,slug,making_charge_pct,product_images(*),product_variants(*)')
+        .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,product_images(*),product_variants(*)')
         .eq('is_active', true)
         .eq('is_featured', true)
         .not('id', 'in', `(${product_ids.join(',')})`)
@@ -45,17 +45,13 @@ export async function POST(req: NextRequest) {
       products = [...products, ...(featured ?? [])]
     }
 
-    const withPrices = products.map((p) => {
-      const v = (p.product_variants as { purity: string; weight_grams: number | null; gem_price_override: number | null }[])?.[0]
-      const basePrice = v?.weight_grams
-        ? calculateVariantPrice({
-            weightGrams: v.weight_grams, purity: v.purity,
-            livePricePerGram999: v.purity === '92.5' ? (prices.silver?.pricePerGram ?? 90) : (prices.gold?.pricePerGram ?? 7200),
-            makingChargePct: p.making_charge_pct, gemPriceOverride: v.gem_price_override,
-          }).finalPrice
-        : 0
-      return { ...p, basePrice }
-    })
+    const withPrices = products.map((p) =>
+      attachCardPrice(
+        { ...p, product_variants: p.product_variants ?? [] },
+        prices.gold?.pricePerGram ?? 7200,
+        prices.silver?.pricePerGram ?? 90
+      )
+    )
 
     return NextResponse.json({ products: withPrices })
   } catch {

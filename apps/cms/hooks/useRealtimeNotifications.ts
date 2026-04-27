@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect } from 'react'
-import { createBrowserClient } from '@amiora/database'
+import { createBrowserClient } from '@/lib/supabase/client'
+import { isSupabasePublicEnvOk } from '@/lib/supabase/envMatch'
 import { useNotificationStore } from '@/stores/notificationStore'
 import { toast } from 'sonner'
 
@@ -9,7 +10,7 @@ export function useRealtimeNotifications(enabled = true) {
   const addNotification = useNotificationStore(s => s.addNotification)
 
   useEffect(() => {
-    if (!enabled) return
+    if (!enabled || !isSupabasePublicEnvOk()) return
 
     let supabase: ReturnType<typeof createBrowserClient>
     try {

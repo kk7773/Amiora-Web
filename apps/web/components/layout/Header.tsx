@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { Search, User, Heart, ShoppingBag, Menu, X, Loader2, LogOut, Package, UserCircle, ChevronDown } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useCartStore } from '@/stores/cartStore'
+import { useCartStore, useCartHydrated } from '@/stores/cartStore'
 import { MegaMenu } from './MegaMenu'
 import { MobileMenu } from './MobileMenu'
 import { createBrowserClient } from '@/lib/supabase/client'
@@ -26,6 +26,8 @@ export function Header() {
   const megaLeaveTimer                  = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchInputRef                  = useRef<HTMLInputElement>(null)
   const itemCount                       = useCartStore((s) => s.itemCount())
+  const cartHydrated                    = useCartHydrated()
+  const cartBadge                       = cartHydrated ? itemCount : 0
   const router                          = useRouter()
   const [pending, startSearch]          = useTransition()
 
@@ -87,78 +89,101 @@ export function Header() {
         Call: +91-98765-43210
       </div>
 
-      <header
-        className={`sticky top-0 z-40 w-full transition-all duration-300 ${
-          scrolled
-            ? 'bg-bg/95 backdrop-blur-md shadow-sm border-b border-divider'
-            : 'bg-bg'
-        }`}
-      >
-        <div className="section-x flex h-16 items-center justify-between gap-4">
-          {/* Logo */}
-          <Link href="/" className="shrink-0" aria-label="Amiora Diamonds home">
-            <AmigoraLogo />
+      <header className="sticky top-0 z-40 w-full">
+
+        {/* ── MOBILE header ── deep-teal bg, hamburger left, logo centered ── */}
+        <div className="md:hidden flex h-14 items-center px-4 bg-deep-teal">
+          {/* Hamburger */}
+          <button
+            onClick={() => setMobileOpen(true)}
+            aria-label="Open menu"
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8, display: 'flex', alignItems: 'center' }}
+          >
+            <Menu size={22} color="#C9A84C" />
+          </button>
+
+          {/* Logo — centered */}
+          <Link
+            href="/"
+            aria-label="Amiora home"
+            style={{ flex: 1, display: 'flex', justifyContent: 'center', textDecoration: 'none' }}
+          >
+            <span style={{
+              fontFamily: 'Cormorant Garamond, Cormorant, Georgia, serif',
+              fontSize: 22,
+              fontWeight: 500,
+              letterSpacing: '0.22em',
+              color: '#C9A84C',
+            }}>
+              AMIORA
+            </span>
           </Link>
 
-          {/* Desktop nav */}
-          <nav className="hidden md:flex items-center gap-8">
-            {NAV_LINKS.map((link) =>
-              link.hasMega ? (
-                <div
-                  key={link.href}
-                  onMouseEnter={handleMegaEnter}
-                  onMouseLeave={handleMegaLeave}
-                  className="relative"
-                >
-                  <button className="text-sm tracking-wide text-ink-muted hover:text-deep-teal transition-colors duration-200 py-2">
+          {/* Right placeholder — keeps logo visually centered */}
+          <div style={{ width: 38 }} />
+        </div>
+
+        {/* ── DESKTOP header ── light bg, logo left, nav center, actions right ── */}
+        <div
+          className={`hidden md:block transition-all duration-300 ${
+            scrolled
+              ? 'bg-bg/95 backdrop-blur-md shadow-sm border-b border-divider'
+              : 'bg-bg'
+          }`}
+        >
+          <div className="section-x flex h-16 items-center justify-between gap-4">
+            {/* Logo */}
+            <Link href="/" className="shrink-0" aria-label="Amiora Diamonds home">
+              <AmigoraLogo />
+            </Link>
+
+            {/* Desktop nav */}
+            <nav className="flex items-center gap-8">
+              {NAV_LINKS.map((link) =>
+                link.hasMega ? (
+                  <div
+                    key={link.href}
+                    onMouseEnter={handleMegaEnter}
+                    onMouseLeave={handleMegaLeave}
+                    className="relative"
+                  >
+                    <button className="text-sm tracking-wide text-ink-muted hover:text-deep-teal transition-colors duration-200 py-2">
+                      {link.label}
+                    </button>
+                  </div>
+                ) : (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className="text-sm tracking-wide text-ink-muted hover:text-deep-teal transition-colors duration-200"
+                  >
                     {link.label}
-                  </button>
-                </div>
-              ) : (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="text-sm tracking-wide text-ink-muted hover:text-deep-teal transition-colors duration-200"
-                >
-                  {link.label}
-                </Link>
-              )
-            )}
-          </nav>
+                  </Link>
+                )
+              )}
+            </nav>
 
-          {/* Right actions */}
-          <div className="flex items-center gap-1">
-            {/* Search toggle button */}
-            <button
-              onClick={() => setSearchOpen((v) => !v)}
-              aria-label={searchOpen ? 'Close search' : 'Search'}
-              className="relative p-2 rounded-md text-ink-muted hover:text-deep-teal hover:bg-surface transition-colors"
-            >
-              {pending
-                ? <Loader2 className="h-[18px] w-[18px] animate-spin" />
-                : searchOpen
-                  ? <X className="h-[18px] w-[18px]" />
-                  : <Search className="h-[18px] w-[18px]" />}
-            </button>
-
-            {/* User menu — conditional */}
-            <UserMenu user={user} />
-
-            <IconBtn href="/account/wishlist" label="Wishlist">
-              <Heart className="h-[18px] w-[18px]" />
-            </IconBtn>
-            <IconBtn href="/cart"           label="Cart" badge={itemCount}>
-              <ShoppingBag className="h-[18px] w-[18px]" />
-            </IconBtn>
-
-            {/* Hamburger — mobile only */}
-            <button
-              className="md:hidden ml-1 p-2 rounded-md text-ink-muted hover:text-deep-teal hover:bg-surface transition-colors"
-              onClick={() => setMobileOpen(true)}
-              aria-label="Open menu"
-            >
-              <Menu className="h-5 w-5" />
-            </button>
+            {/* Desktop right actions */}
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setSearchOpen((v) => !v)}
+                aria-label={searchOpen ? 'Close search' : 'Search'}
+                className="relative p-2 rounded-md text-ink-muted hover:text-deep-teal hover:bg-surface transition-colors"
+              >
+                {pending
+                  ? <Loader2 className="h-[18px] w-[18px] animate-spin" />
+                  : searchOpen
+                    ? <X className="h-[18px] w-[18px]" />
+                    : <Search className="h-[18px] w-[18px]" />}
+              </button>
+              <IconBtn href="/account/wishlist" label="Wishlist">
+                <Heart className="h-[18px] w-[18px]" />
+              </IconBtn>
+              <IconBtn href="/cart" label="Cart" badge={cartBadge}>
+                <ShoppingBag className="h-[18px] w-[18px]" />
+              </IconBtn>
+              <UserMenu user={user} />
+            </div>
           </div>
         </div>
 

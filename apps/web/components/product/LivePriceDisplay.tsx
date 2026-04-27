@@ -2,30 +2,23 @@
 
 import { useState } from 'react'
 import { Info } from 'lucide-react'
-import { useProductPrice } from '@/hooks/useProductPrice'
-import { formatINR }       from '@/lib/pricing/calculator'
+import { formatINR, type PriceBreakdown } from '@/lib/pricing/calculator'
 
 interface LivePriceDisplayProps {
-  weightGrams:       number | null
-  purity:            string
   makingChargePct:   number
-  gemPriceOverride?: number | null
+  /** From `useProductPrice` (single source of truth on PDP) */
+  breakdown:         PriceBreakdown | null
+  loading:           boolean
 }
 
 export function LivePriceDisplay({
-  weightGrams,
-  purity,
   makingChargePct,
-  gemPriceOverride,
+  breakdown,
+  loading,
 }: LivePriceDisplayProps) {
   const [showBreakdown, setShowBreakdown] = useState(false)
-  const { breakdown, loading }            = useProductPrice(
-    weightGrams
-      ? { weightGrams, purity, makingChargePct, gemPriceOverride }
-      : null
-  )
 
-  if (!weightGrams) {
+  if (!breakdown && !loading) {
     return <p className="text-sm text-ink-muted">Price on request</p>
   }
 

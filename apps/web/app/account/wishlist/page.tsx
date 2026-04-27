@@ -3,6 +3,9 @@ import { redirect } from 'next/navigation'
 import Link         from 'next/link'
 import { createServerClient } from '@/lib/supabase/server'
 import { WishlistGrid } from '@/components/account/WishlistGrid'
+import type { ProductCardProps } from '@/components/product/ProductCard'
+import { attachCardPrice } from '@/lib/pricing/attachCardPrice'
+import { getLatestPrices } from '@/lib/pricing/engine'
 
 export const metadata: Metadata = { title: 'My Wishlist' }
 
@@ -11,13 +14,32 @@ export default async function WishlistPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: wishlists } = await supabase
-    .from('wishlists')
-    .select('*, product:products(id,name,slug,making_charge_pct,product_images(*),product_variants(*))')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
+  const [{ data: wishlists }, prices] = await Promise.all([
+    supabase
+      .from('wishlists')
+      .select('*, product:products(id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,product_images(*),product_variants(*))')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false }),
+    getLatestPrices().catch(() => ({ gold: null, silver: null })),
+  ])
 
-  const products = (wishlists ?? []).map((w) => w.product).filter(Boolean) as Parameters<typeof WishlistGrid>[0]['products']
+  const gold   = prices.gold?.pricePerGram ?? 7200
+  const silver = prices.silver?.pricePerGram ?? 90
+
+  type P = ProductCardProps['product'] & {
+    making_charge_discount_pct?: number | null
+    gem_price_discount_pct?: number | null
+  }
+  const products = (wishlists ?? [])
+    .map((w) => w.product)
+    .filter(Boolean)
+    .map((p) =>
+      attachCardPrice(
+        { ...(p as P), product_variants: (p as P).product_variants ?? [] },
+        gold,
+        silver
+      )
+    ) as Parameters<typeof WishlistGrid>[0]['products']
 
   return (
     <div>

@@ -14,12 +14,14 @@ interface GalleryImage {
 }
 
 interface ImageGalleryProps {
-  images:           GalleryImage[]
-  productName:      string
-  activeVariantId?: string | null
+  images:                 GalleryImage[]
+  productName:            string
+  activeVariantId?:       string | null
+  /** Effective % off vs undiscounted total (making + stone discounts); show badge when ≥ 1 */
+  discountPercentOff?:   number | null
 }
 
-export function ImageGallery({ images, productName, activeVariantId }: ImageGalleryProps) {
+export function ImageGallery({ images, productName, activeVariantId, discountPercentOff }: ImageGalleryProps) {
   const [activeIdx, setActiveIdx] = useState(0)
   const [lightbox,  setLightbox]  = useState(false)
 
@@ -68,8 +70,15 @@ export function ImageGallery({ images, productName, activeVariantId }: ImageGall
                 sizes="(max-width: 768px) 100vw, 50vw"
               />
             )}
-            <div className="absolute top-3 right-3 p-2 bg-bg/80 backdrop-blur-sm rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-              <ZoomIn className="h-4 w-4 text-ink" />
+            <div className="absolute top-3 right-3 z-10 flex flex-col items-end gap-2 pointer-events-none">
+              {typeof discountPercentOff === 'number' && discountPercentOff >= 1 && (
+                <span className="inline-block bg-deep-teal text-cream text-2xs sm:text-xs font-semibold px-2.5 py-1 rounded-full tabular-nums shadow-sm">
+                  {discountPercentOff}% off
+                </span>
+              )}
+              <div className="pointer-events-auto p-2 bg-bg/80 backdrop-blur-sm rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                <ZoomIn className="h-4 w-4 text-ink" />
+              </div>
             </div>
           </div>
 

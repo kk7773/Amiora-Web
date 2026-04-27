@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@amiora/database'
+import { buildDbProductRow } from '@/lib/productPayload'
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -16,10 +17,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       ...(Array.isArray(faqs) && { faqs: faqs.filter((f: { question: string; answer: string }) => f.question && f.answer) }),
     }
 
-    // Remove any undefined / form-only keys that don't exist in DB
-    const dbProduct = Object.fromEntries(
-      Object.entries(product).filter(([, v]) => v !== undefined && v !== '')
-    )
+    const dbProduct = buildDbProductRow(product as Record<string, unknown>)
 
     const { data, error } = await supabase
       .from('products')
@@ -57,6 +55,60 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
           tag_ids.map((tag_id: string) => ({ product_id: id, tag_id }))
         )
         if (tagErr) console.error('[PATCH /api/products] tag insert error:', tagErr)
+      }
+    }
+
+    if (Array.isArray(variants)) {
+      const { data: existingRows, error: exErr } = await supabase
+        .from('product_variants')
+        .select('id')
+        .eq('product_id', id)
+      if (exErr) console.error('[PATCH /api/products] variant list error:', exErr)
+      const existingIds = new Set((existingRows ?? []).map((r: { id: string }) => r.id))
+      type V = {
+        id?: string
+        purity?: string
+        weight_grams?: number
+        gem_weight_ct?: number | null
+        gem_price_inr?: number | null
+        stock_status?: string
+        making_charge_discount_pct?: number | null
+        gem_price_discount_pct?: number | null
+      }
+      const list = variants as V[]
+      const keepIds = new Set(list.map((v) => v.id).filter((x): x is string => Boolean(x)))
+      for (const eid of existingIds) {
+        if (!keepIds.has(eid)) {
+          const { error: delErr } = await supabase
+            .from('product_variants')
+            .delete()
+            .eq('id', eid)
+            .eq('product_id', id)
+          if (delErr) console.error('[PATCH /api/products] variant delete error:', delErr)
+        }
+      }
+      for (const v of list) {
+        const row = {
+          product_id: id,
+          purity: (v.purity as string) ?? '18K',
+          weight_grams: (v.weight_grams as number) ?? 0,
+          gem_weight_ct: v.gem_weight_ct ?? null,
+          gem_price_override: v.gem_price_inr ?? null,
+          stock_status: (v.stock_status as string) ?? 'in_stock',
+          making_charge_discount_pct: v.making_charge_discount_pct ?? null,
+          gem_price_discount_pct: v.gem_price_discount_pct ?? null,
+        }
+        if (v.id) {
+          const { error: upErr } = await supabase
+            .from('product_variants')
+            .update(row)
+            .eq('id', v.id)
+            .eq('product_id', id)
+          if (upErr) console.error('[PATCH /api/products] variant update error:', upErr)
+        } else {
+          const { error: insErr } = await supabase.from('product_variants').insert(row)
+          if (insErr) console.error('[PATCH /api/products] variant insert error:', insErr)
+        }
       }
     }
 

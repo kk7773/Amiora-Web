@@ -30,7 +30,7 @@ import { BlogPreview }         from '@/components/sections/BlogPreview'
 import { StoreLocatorTeaser }   from '@/components/sections/StoreLocatorTeaser'
 import { StoreCitiesSection }   from '@/components/sections/StoreCitiesSection'
 import { FaqSection }           from '@/components/sections/FaqSection'
-import { calculateVariantPrice } from '@/lib/pricing/calculator'
+import { attachCardPrice } from '@/lib/pricing/attachCardPrice'
 import { getLatestPrices }     from '@/lib/pricing/engine'
 
 export default async function HomePage() {
@@ -48,8 +48,8 @@ export default async function HomePage() {
     prices,
   ] = await Promise.all([
     supabase.from('collections').select('id,name,slug,banner_url,description').eq('is_active', true).order('sort_order').limit(4),
-    supabase.from('products').select('id,name,slug,making_charge_pct,product_images(*),product_variants(*)').eq('is_active', true).order('created_at', { ascending: false }).limit(10),
-    supabase.from('products').select('id,name,slug,making_charge_pct,product_images(*),product_variants(*)').eq('is_active', true).eq('is_featured', true).order('sort_order').limit(10),
+    supabase.from('products').select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,product_images(*),product_variants(*)').eq('is_active', true).order('created_at', { ascending: false }).limit(10),
+    supabase.from('products').select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,product_images(*),product_variants(*)').eq('is_active', true).eq('is_featured', true).order('sort_order').limit(10),
     supabase.from('testimonials').select('id,name,location,quote,rating').eq('is_featured', true).order('sort_order').limit(8),
     supabase.from('blogs').select('id,title,slug,excerpt,cover_url,tags,published_at').eq('is_published', true).order('published_at', { ascending: false }).limit(3),
     supabase.from('stores').select('id, city, image_url').eq('is_active', true).order('city'),
@@ -57,23 +57,19 @@ export default async function HomePage() {
     getLatestPrices(),
   ])
 
-  // Attach live prices to product cards
   const attachPrice = (rows: typeof newArrivalRows) =>
-    (rows ?? []).map((p) => {
-      const firstVariant = p.product_variants?.[0]
-      const basePrice = firstVariant?.weight_grams
-        ? calculateVariantPrice({
-            weightGrams:         firstVariant.weight_grams,
-            purity:              firstVariant.purity,
-            livePricePerGram999: firstVariant.purity === '92.5'
-              ? (prices.silver?.pricePerGram ?? 90)
-              : (prices.gold?.pricePerGram ?? 7200),
-            makingChargePct:  p.making_charge_pct,
-            gemPriceOverride: firstVariant.gem_price_override,
-          }).finalPrice
-        : 0
-      return { ...p, basePrice }
-    })
+    (rows ?? []).map((p) =>
+      attachCardPrice(
+        {
+          ...p,
+          making_charge_discount_pct: p.making_charge_discount_pct,
+          gem_price_discount_pct: p.gem_price_discount_pct,
+          product_variants: p.product_variants ?? [],
+        },
+        prices.gold?.pricePerGram ?? 7200,
+        prices.silver?.pricePerGram ?? 90
+      )
+    )
 
   const newArrivals = attachPrice(newArrivalRows)
   const bestSellers = attachPrice(bestSellerRows)

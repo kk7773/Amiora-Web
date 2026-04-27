@@ -5,8 +5,8 @@ import { ProductDetailClient } from '@/components/product/ProductDetailClient'
 import { ProductCard }         from '@/components/product/ProductCard'
 import { ReviewsSection }      from '@/components/product/ReviewsSection'
 import { ProductFAQ }          from '@/components/product/ProductFAQ'
-import { calculateVariantPrice } from '@/lib/pricing/calculator'
-import { getLatestPrices }       from '@/lib/pricing/engine'
+import { attachCardPrice } from '@/lib/pricing/attachCardPrice'
+import { getLatestPrices }   from '@/lib/pricing/engine'
 
 interface Props { params: Promise<{ slug: string }> }
 
@@ -50,7 +50,8 @@ export default async function ProductPage({ params }: Props) {
     supabase
       .from('products')
       .select(`
-        id, name, slug, short_description, description, making_charge_pct, faqs,
+        id, name, slug, short_description, description, making_charge_pct,
+        making_charge_discount_pct, gem_price_discount_pct, faqs,
         collection:collections(id, name, slug),
         category:categories(id, name, slug),
         product_images(id, url, alt_text, sort_order, variant_id, is_primary),
@@ -76,7 +77,24 @@ export default async function ProductPage({ params }: Props) {
   // ── Round 2: Reviews + smart-pairs + you-may-also-like (all parallel) ───────
   type SmartPairRow = { paired_product_id: string }
   type ReviewRow    = { id: string; reviewer_name: string | null; rating: number; title: string | null; body: string | null; created_at: string; is_verified_purchase: boolean }
-  type SuggestedProduct = { id: string; name: string; slug: string; making_charge_pct: number; product_images: { url: string; is_primary: boolean; is_hover: boolean; alt_text: string | null }[]; product_variants: { id: string; purity: string; weight_grams: number | null; gem_price_override: number | null; stock_status: string }[] }
+  type SuggestedProduct = {
+    id: string
+    name: string
+    slug: string
+    making_charge_pct: number
+    making_charge_discount_pct: number | null
+    gem_price_discount_pct: number | null
+    product_images: { url: string; is_primary: boolean; is_hover: boolean; alt_text: string | null }[]
+    product_variants: {
+      id: string
+      purity: string
+      weight_grams: number | null
+      gem_price_override: number | null
+      stock_status: string
+      making_charge_discount_pct: number | null
+      gem_price_discount_pct: number | null
+    }[]
+  }
 
   const currentCollectionId = (product.collection as unknown as { id: string } | null)?.id ?? null
 
@@ -104,14 +122,14 @@ export default async function ProductPage({ params }: Props) {
       currentCollectionId
         ? supabase
             .from('products')
-            .select('id, name, slug, making_charge_pct, product_images(url, is_primary, is_hover, alt_text), product_variants(id, purity, weight_grams, gem_price_override, stock_status)')
+            .select('id, name, slug, making_charge_pct, making_charge_discount_pct, gem_price_discount_pct, product_images(url, is_primary, is_hover, alt_text), product_variants(*)')
             .neq('collection_id', currentCollectionId)
             .neq('id', product.id)
             .eq('is_active', true)
             .limit(8)
         : supabase
             .from('products')
-            .select('id, name, slug, making_charge_pct, product_images(url, is_primary, is_hover, alt_text), product_variants(id, purity, weight_grams, gem_price_override, stock_status)')
+            .select('id, name, slug, making_charge_pct, making_charge_discount_pct, gem_price_discount_pct, product_images(url, is_primary, is_hover, alt_text), product_variants(*)')
             .neq('id', product.id)
             .eq('is_active', true)
             .limit(8)
@@ -123,13 +141,29 @@ export default async function ProductPage({ params }: Props) {
   const suggestedProducts   = suggestedRes
 
   // ── Round 3: Paired products (conditional, smart-pair IDs known) ────────────
-  type PairedProduct = { id: string; name: string; slug: string; making_charge_pct: number; product_images: { url: string; is_primary: boolean }[]; product_variants: { purity: string; weight_grams: number | null; gem_price_override: number | null }[] }
+  type PairedProduct = {
+    id: string
+    name: string
+    slug: string
+    making_charge_pct: number
+    making_charge_discount_pct: number | null
+    gem_price_discount_pct: number | null
+    product_images: { url: string; is_primary: boolean }[]
+    product_variants: {
+      purity: string
+      weight_grams: number | null
+      gem_price_override: number | null
+      making_charge_discount_pct: number | null
+      gem_price_discount_pct: number | null
+      stock_status: string
+    }[]
+  }
   let pairedProducts: PairedProduct[] = []
   if (smartPairProductIds.length) {
     pairedProducts = await Promise.resolve(
       supabase
         .from('products')
-        .select('id, name, slug, making_charge_pct, product_images(*), product_variants(purity, weight_grams, gem_price_override)')
+        .select('id, name, slug, making_charge_pct, making_charge_discount_pct, gem_price_discount_pct, product_images(*), product_variants(*)')
         .in('id', smartPairProductIds)
         .eq('is_active', true)
     ).then(r => (r.data ?? []) as PairedProduct[]).catch(() => [])
@@ -139,34 +173,22 @@ export default async function ProductPage({ params }: Props) {
   const silverPrice = (prices as { silver?: { pricePerGram: number } | null }).silver?.pricePerGram ?? 90
 
   // ── Smart pairs with prices ───────────────────────────────────────────────
-  const smartPairs = pairedProducts.map(p => {
-    const v = p.product_variants?.[0]
-    const basePrice = v?.weight_grams
-      ? calculateVariantPrice({
-          weightGrams:         v.weight_grams,
-          purity:              v.purity,
-          livePricePerGram999: v.purity === '92.5' ? silverPrice : goldPrice,
-          makingChargePct:     p.making_charge_pct,
-          gemPriceOverride:    v.gem_price_override,
-        }).finalPrice
-      : 0
-    return { ...p, basePrice }
-  }) as Parameters<typeof ProductCard>[0]['product'][]
+  const smartPairs = pairedProducts.map(p =>
+    attachCardPrice(
+      { ...p, product_variants: p.product_variants ?? [] },
+      goldPrice,
+      silverPrice
+    )
+  ) as Parameters<typeof ProductCard>[0]['product'][]
 
   // ── You May Also Like — products from other collections with prices ──────
-  const youMayAlsoLike = suggestedProducts.map(p => {
-    const v = p.product_variants?.find(v => v.stock_status !== 'out_of_stock') ?? p.product_variants?.[0]
-    const basePrice = v?.weight_grams
-      ? calculateVariantPrice({
-          weightGrams:         v.weight_grams,
-          purity:              v.purity,
-          livePricePerGram999: v.purity === '92.5' ? silverPrice : goldPrice,
-          makingChargePct:     p.making_charge_pct,
-          gemPriceOverride:    v.gem_price_override,
-        }).finalPrice
-      : 0
-    return { ...p, basePrice }
-  }) as Parameters<typeof ProductCard>[0]['product'][]
+  const youMayAlsoLike = suggestedProducts.map(p =>
+    attachCardPrice(
+      { ...p, product_variants: p.product_variants ?? [] },
+      goldPrice,
+      silverPrice
+    )
+  ) as Parameters<typeof ProductCard>[0]['product'][]
 
   // ── Review stats ──────────────────────────────────────────────────────────
   const safeReviews = (reviews ?? []).map(r => ({
@@ -216,6 +238,8 @@ export default async function ProductPage({ params }: Props) {
     gem_price_override: number | null
     gem_weight_ct:      number | null
     stock_status:       string
+    making_charge_discount_pct: number | null
+    gem_price_discount_pct:     number | null
     metal_variant:      { variant_name: string } | null
     gem_variant:        { cut_name: string }     | null
     sizes:              { size_label: string; in_stock: boolean }[]
@@ -236,6 +260,14 @@ export default async function ProductPage({ params }: Props) {
       gem_price_override: v.gem_price_override != null ? Number(v.gem_price_override) : null,
       gem_weight_ct:      v.gem_weight_ct      != null ? Number(v.gem_weight_ct)      : null,
       stock_status:       String(v.stock_status ?? 'in_stock'),
+      making_charge_discount_pct:
+        v.making_charge_discount_pct != null && v.making_charge_discount_pct !== ''
+          ? Number(v.making_charge_discount_pct)
+          : null,
+      gem_price_discount_pct:
+        v.gem_price_discount_pct != null && v.gem_price_discount_pct !== ''
+          ? Number(v.gem_price_discount_pct)
+          : null,
       metal_variant:      rawMetal ? { variant_name: String(rawMetal.variant_name ?? '') } : null,
       gem_variant:        rawGem   ? { cut_name:     String(rawGem.cut_name       ?? '') } : null,
       sizes: Array.isArray(v.sizes)
@@ -254,6 +286,8 @@ export default async function ProductPage({ params }: Props) {
           name:              product.name,
           short_description: product.short_description,
           making_charge_pct: product.making_charge_pct,
+          making_charge_discount_pct: Number((product as { making_charge_discount_pct?: number | null }).making_charge_discount_pct ?? 0),
+          gem_price_discount_pct:     Number((product as { gem_price_discount_pct?: number | null }).gem_price_discount_pct ?? 0),
           avgRating,
           reviewCount:    safeReviews.length,
           collectionName: (product.collection as unknown as { name: string } | null)?.name ?? null,

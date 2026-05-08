@@ -11,8 +11,8 @@ const MATERIALS = [
     title: 'Gold Jewellery',
     sub:   '22K · 18K · 14K · 9K',
     body:  'From timeless yellow gold to romantic rose gold and modern white gold — every variant BIS hallmarked and certified.',
-    href:  '/shop?metal=gold',
-    bg:    'bg-[#FBF6EC]',
+    href:  '/shop/gold',
+    bgImage:'https://images.unsplash.com/photo-1610375461246-83df859d849d?auto=format&fit=crop&w=1200&q=80',
     accent:'text-gold',
   },
   {
@@ -21,8 +21,8 @@ const MATERIALS = [
     title: 'Silver Jewellery',
     sub:   '92.5 Sterling',
     body:  'Pure 925 sterling silver jewellery that complements everyday wear with understated elegance and lasting shine.',
-    href:  '/shop?metal=silver',
-    bg:    'bg-surface-2',
+    href:  '/shop/silver',
+    bgImage:'https://images.unsplash.com/photo-1605100804763-247f67b3557e?auto=format&fit=crop&w=1200&q=80',
     accent:'text-ink-muted',
   },
   {
@@ -31,9 +31,9 @@ const MATERIALS = [
     title: 'Diamond Jewellery',
     sub:   'Certified · Multiple Cuts',
     body:  'Round Brilliant, Princess, Emerald, Oval and more. Every diamond independently certified with full traceability.',
-    href:  '/shop?diamond=true',
-    bg:    'bg-light-teal/20',
-    accent:'text-teal',
+    href:  '/shop/diamond',
+    bgImage:'https://images.unsplash.com/photo-1615655114865-4ccf6df15995?auto=format&fit=crop&w=1200&q=80',
+    accent:'text-ink',
   },
 ]
 
@@ -48,7 +48,7 @@ export function MaterialShowcase() {
     >
       <div className="section-x">
         <motion.div variants={fadeUp} className="text-center mb-12">
-          <p className="text-2xs uppercase tracking-widest2 text-teal mb-3">Our Materials</p>
+          <p className="text-2xs uppercase tracking-widest2 text-ink mb-3">Our Materials</p>
           <h2 className="font-display text-display-2xl text-ink">Crafted from the Finest</h2>
         </motion.div>
 
@@ -57,7 +57,10 @@ export function MaterialShowcase() {
             <motion.div
               key={mat.key}
               variants={fadeUp}
-              className={`${mat.bg} rounded-2xl p-8 flex flex-col gap-4`}
+              className="rounded-2xl p-8 flex flex-col gap-4 bg-cover bg-center bg-no-repeat"
+              style={{
+                backgroundImage: `linear-gradient(rgba(250, 247, 242, 0.58), rgba(250, 247, 242, 0.62)), url('${mat.bgImage}')`,
+              }}
             >
               <div className={`text-3xl ${mat.accent}`}>{mat.emoji}</div>
               <div>
@@ -67,7 +70,7 @@ export function MaterialShowcase() {
               <p className="text-sm text-ink-muted leading-relaxed">{mat.body}</p>
               <Link
                 href={mat.href}
-                className="mt-auto text-sm font-medium text-teal hover:text-deep-teal transition-colors"
+                className="mt-auto text-sm font-medium text-ink hover:text-ink-muted transition-colors"
               >
                 Shop {mat.title.split(' ')[0]} →
               </Link>

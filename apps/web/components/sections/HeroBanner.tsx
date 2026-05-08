@@ -93,8 +93,8 @@ export function HeroBanner() {
           </p>
           <div className="mt-10 flex flex-wrap gap-4">
             <Link
-              href="/collections"
-              className="hero-cta opacity-0 inline-flex items-center gap-2 bg-teal text-white px-8 py-3.5 text-sm font-medium uppercase tracking-widest rounded-md hover:bg-deep-teal transition-colors"
+              href="/shop/collections"
+              className="hero-cta opacity-0 inline-flex items-center gap-2 bg-white text-ink px-8 py-3.5 text-sm font-medium uppercase tracking-widest rounded-md hover:bg-surface transition-colors"
             >
               Explore Collections <ChevronRight className="h-4 w-4" />
             </Link>

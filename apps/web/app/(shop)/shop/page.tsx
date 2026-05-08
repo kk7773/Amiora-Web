@@ -16,9 +16,17 @@ export const metadata: Metadata = {
 
 const PAGE_SIZE = 12
 
-// Gold purities — anything that is NOT sterling silver
-const GOLD_PURITIES = ['22k', '18k', '14k', '9k']
-const SILVER_PURITIES = ['92.5']
+/** Map URL purity tokens to `metal_purities.code` (18, 14, 09). */
+function purityParamsToCodes(params: string[]): string[] {
+  const out: string[] = []
+  for (const raw of params) {
+    const n = raw.replace(/\.?k$/i, '').trim()
+    if (!n) continue
+    const code = n.length === 1 ? `0${n}` : n.padStart(2, '0')
+    out.push(code)
+  }
+  return [...new Set(out)]
+}
 
 interface ShopPageProps {
   searchParams: Promise<Record<string, string | undefined>>
@@ -37,38 +45,47 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
   const prices   = await getLatestPrices()
 
   // ─────────────────────────────────────────────────────────────────
-  // Step 1 — Resolve product IDs from variant-level filters
-  //          (metal, purity, diamond cannot be filtered directly on
-  //           the products table — they live in product_variants)
+  // Step 1 — Resolve product IDs from variant / product-level filters
   // ─────────────────────────────────────────────────────────────────
   const idSets: string[][] = []
 
-  // Metal / Purity constraint
   if (metal || purity.length > 0) {
     type VRow = { product_id: string }
-    let vq = supabase.from('product_variants').select('product_id')
-
+    type PurityRow = { id: string }
+    let codes: string[] = []
     if (purity.length > 0) {
-      // Specific purities override the metal selection
-      vq = vq.in('purity', purity)
-    } else if (metal === 'silver') {
-      vq = vq.in('purity', SILVER_PURITIES)
+      codes = purityParamsToCodes(purity)
     } else if (metal === 'gold') {
-      vq = vq.in('purity', GOLD_PURITIES)
+      codes = ['18', '14', '09']
+    } else if (metal === 'silver') {
+      idSets.push([])
+      codes = []
     }
 
-    const { data } = await vq
-    idSets.push([...new Set((data ?? [] as VRow[]).map((r: VRow) => r.product_id))])
+    if (codes.length === 0 && metal !== 'silver') {
+      /* no-op */
+    } else if (metal === 'silver') {
+      /* already pushed empty */
+    } else {
+      const { data: prow } = await supabase.from('metal_purities').select('id').eq('is_active', true).in('code', codes)
+
+      const pidList = ((prow ?? []) as PurityRow[]).map((r) => r.id)
+      if (pidList.length === 0) {
+        idSets.push([])
+      } else {
+        const { data } = await supabase.from('product_variants').select('product_id').in('purity_id', pidList)
+        idSets.push([...new Set((data ?? [] as VRow[]).map((r: VRow) => r.product_id))])
+      }
+    }
   }
 
-  // Diamond / gemstone constraint
   if (diamond) {
-    type VRow = { product_id: string }
     const { data } = await supabase
-      .from('product_variants')
-      .select('product_id')
-      .gt('gem_price_override', 0)
-    idSets.push([...new Set((data ?? [] as VRow[]).map((r: VRow) => r.product_id))])
+      .from('products')
+      .select('id')
+      .eq('status', 'active')
+      .or('diamond_count.gt.0,total_diamond_wt.gt.0')
+    idSets.push((data ?? []).map((r: { id: string }) => r.id))
   }
 
   // Intersect all ID sets (AND logic across filters)
@@ -98,8 +115,8 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
   // ─────────────────────────────────────────────────────────────────
   let query = supabase
     .from('products')
-    .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,product_images(*),product_variants(*)', { count: 'exact' })
-    .eq('is_active', true)
+    .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(*)', { count: 'exact' })
+    .eq('status', 'active')
 
   // Apply resolved product-ID constraint from variant filters
   if (validIds !== null) {
@@ -124,10 +141,10 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
   // Sort
   const orderMap: Record<string, { col: string; asc: boolean }> = {
     newest:     { col: 'created_at', asc: false },
-    price_asc:  { col: 'sort_order', asc: true  },
-    price_desc: { col: 'sort_order', asc: false },
-    popular:    { col: 'sort_order', asc: true  },
-    rated:      { col: 'sort_order', asc: true  },
+    price_asc:  { col: 'created_at', asc: true  },
+    price_desc: { col: 'created_at', asc: false },
+    popular:    { col: 'created_at', asc: false },
+    rated:      { col: 'created_at', asc: false },
   }
   const o = orderMap[sort] ?? orderMap['newest']!
   query = query
@@ -139,16 +156,41 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
   // ─────────────────────────────────────────────────────────────────
   // Step 3 — Attach live prices to each product
   // ─────────────────────────────────────────────────────────────────
-  const products = (rows ?? []).map((p) =>
-    attachCardPrice(
+  const products = (rows ?? []).map((p: any) => {
+    // If product_images is empty, generate from product_color_groups
+    let images = p.product_images ?? []
+    if (images.length === 0 && p.product_color_groups && p.product_color_groups.length > 0) {
+      // Collect all images from color groups
+      const colorGroupImages: { url: string; alt_text: string | null; is_primary: boolean; is_hover: boolean }[] = []
+      for (let i = 0; i < p.product_color_groups.length; i++) {
+        const cg = p.product_color_groups[i]
+        if (cg && Array.isArray(cg.images)) {
+          for (let j = 0; j < cg.images.length; j++) {
+            const imgUrl = cg.images[j]
+            colorGroupImages.push({
+              url: imgUrl,
+              alt_text: `${p.name} — image ${colorGroupImages.length + 1}`,
+              is_primary: colorGroupImages.length === 0, // First image is primary
+              is_hover: colorGroupImages.length === 1,   // Second image is hover
+            })
+          }
+        }
+      }
+      images = colorGroupImages
+    }
+    
+    return attachCardPrice(
       {
         ...p,
+        collectionSlug: (p.collection as { slug?: string } | null)?.slug ?? null,
+        categorySlug: (p.category as { slug?: string } | null)?.slug ?? null,
+        product_images: images,
         product_variants: p.product_variants ?? [],
       },
       prices.gold?.pricePerGram ?? 7200,
       prices.silver?.pricePerGram ?? 90
     )
-  )
+  })
 
   // ─────────────────────────────────────────────────────────────────
   // Render

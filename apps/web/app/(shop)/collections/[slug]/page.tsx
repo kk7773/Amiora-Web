@@ -58,25 +58,54 @@ export default async function CollectionPage({ params, searchParams }: Props) {
 
   const { data: rows, count } = await supabase
     .from('products')
-    .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,product_images(*),product_variants(*)', { count: 'exact' })
-    .eq('is_active', true)
+    .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(*)', { count: 'exact' })
+    .eq('status', 'active')
     .eq('collection_id', collection.id)
-    .order('sort_order')
+    .order('created_at', { ascending: false })
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
 
   type RawProduct = {
     id: string; name: string; slug: string; making_charge_pct: number
     product_images: { url: string; is_primary: boolean }[]
-    product_variants: { purity: string; weight_grams: number | null; gem_price_override: number | null }[]
+    product_color_groups?: Array<{ id: string; color_id: string; images: string[] | null; display_order: number; is_active: boolean }>
+    product_variants: { id: string; sku: string; price: number; stock_qty: number; is_active: boolean }[]
   }
 
-  const products = (rows as unknown as RawProduct[] ?? []).map((p) =>
-    attachCardPrice(
-      { ...p, product_variants: p.product_variants ?? [] },
+  const products = (((rows ?? []) as unknown as RawProduct[]) ?? []).map((p) => {
+    // If product_images is empty, generate from product_color_groups
+    let images = p.product_images ?? []
+    if (images.length === 0 && p.product_color_groups && p.product_color_groups.length > 0) {
+      // Collect all images from color groups
+      const colorGroupImages: { url: string; alt_text: string | null; is_primary: boolean; is_hover: boolean }[] = []
+      for (let i = 0; i < p.product_color_groups.length; i++) {
+        const cg = p.product_color_groups[i]
+        if (cg && Array.isArray(cg.images)) {
+          for (let j = 0; j < cg.images.length; j++) {
+            const imgUrl = cg.images[j]
+            colorGroupImages.push({
+              url: imgUrl,
+              alt_text: `${p.name} — image ${colorGroupImages.length + 1}`,
+              is_primary: colorGroupImages.length === 0, // First image is primary
+              is_hover: colorGroupImages.length === 1,   // Second image is hover
+            })
+          }
+        }
+      }
+      images = colorGroupImages
+    }
+    
+    return attachCardPrice(
+      {
+        ...p,
+        product_images: images,
+        collectionSlug: (p as RawProduct & { collection?: { slug?: string } | null }).collection?.slug ?? null,
+        categorySlug: (p as RawProduct & { category?: { slug?: string } | null }).category?.slug ?? null,
+        product_variants: p.product_variants ?? [],
+      },
       prices.gold?.pricePerGram ?? 7200,
       prices.silver?.pricePerGram ?? 90
     )
-  )
+  })
 
   return (
     <div>
@@ -92,7 +121,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
             <nav className="flex items-center gap-1 text-xs text-cream/60">
               <Link href="/" className="hover:text-cream transition-colors">Home</Link>
               <span>/</span>
-              <Link href="/collections" className="hover:text-cream transition-colors">Collections</Link>
+              <Link href="/shop/collections" className="hover:text-cream transition-colors">Collections</Link>
               <span>/</span>
               <span className="text-cream">{collection.name}</span>
             </nav>

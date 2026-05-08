@@ -26,31 +26,59 @@ export default async function CollectionsPage() {
         <p className="text-2xs uppercase tracking-widest2 text-teal mb-3">Explore</p>
         <h1 className="font-display text-display-2xl text-ink">Our Collections</h1>
       </div>
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {collections.map((col) => (
-          <Link
-            key={col.slug}
-            href={`/collections/${col.slug}`}
-            className="group relative block aspect-[3/4] rounded-2xl overflow-hidden bg-surface"
-          >
-            {col.banner_url && (
-              <Image
-                src={col.banner_url}
-                alt={col.name}
-                fill
-                className="object-cover transition-transform duration-700 group-hover:scale-110"
-                sizes="(max-width: 640px) 100vw, 33vw"
-              />
-            )}
-            <div className="absolute inset-0 bg-gradient-to-t from-deep-teal/70 via-transparent to-transparent" />
-            <div className="absolute bottom-0 left-0 p-6">
-              <h2 className="font-display text-2xl text-white">{col.name}</h2>
-              {col.description && (
-                <p className="mt-1 text-sm text-cream/70 line-clamp-2">{col.description}</p>
+      <div className="grid gap-6">
+        <div className="grid gap-6 md:grid-cols-[1.75fr_1fr] md:grid-rows-[repeat(2,minmax(260px,1fr))]">
+          {collections[0] && (
+            <Link
+              href={`/shop/collections/${collections[0].slug}`}
+              className="group relative rounded-2xl overflow-hidden bg-surface md:row-span-2 md:min-h-[560px]"
+            >
+              {collections[0].banner_url && (
+                <Image
+                  src={collections[0].banner_url}
+                  alt={collections[0].name}
+                  fill
+                  className="object-cover transition-transform duration-700 group-hover:scale-110"
+                  sizes="(max-width: 768px) 100vw, 55vw"
+                />
               )}
-            </div>
-          </Link>
-        ))}
+              <div className="absolute inset-0 bg-gradient-to-t from-deep-teal/75 via-transparent to-transparent" />
+              <div className="absolute bottom-0 left-0 p-6">
+                <h2 className="font-display text-3xl text-white">{collections[0].name}</h2>
+                {collections[0].description && (
+                  <p className="mt-1 text-sm text-cream/70 line-clamp-2">{collections[0].description}</p>
+                )}
+              </div>
+            </Link>
+          )}
+
+          <div className="grid gap-6 md:grid-cols-2 md:grid-rows-2">
+            {collections.slice(1).map((col) => (
+              <Link
+                key={col.slug}
+                href={`/shop/collections/${col.slug}`}
+                className="group relative rounded-2xl overflow-hidden bg-surface min-h-[240px]"
+              >
+                {col.banner_url && (
+                  <Image
+                    src={col.banner_url}
+                    alt={col.name}
+                    fill
+                    className="object-cover transition-transform duration-700 group-hover:scale-110"
+                    sizes="(max-width: 768px) 100vw, 33vw"
+                  />
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-deep-teal/70 via-transparent to-transparent" />
+                <div className="absolute bottom-0 left-0 p-6">
+                  <h2 className="font-display text-2xl text-white">{col.name}</h2>
+                  {col.description && (
+                    <p className="mt-1 text-sm text-cream/70 line-clamp-2">{col.description}</p>
+                  )}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   )

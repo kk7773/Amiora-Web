@@ -51,7 +51,8 @@ export async function GET(_req: NextRequest) {
       const tabs = nested
         .map(r => r.cms_tabs?.slug)
         .filter((s): s is string => typeof s === 'string')
-      return NextResponse.json({ cms_role: 'admin', tabs })
+      const effectiveTabs = tabs.length === 0 ? null : tabs
+      return NextResponse.json({ cms_role: 'admin', tabs: effectiveTabs })
     }
   }
 

@@ -1,8 +1,8 @@
 'use client'
 
-import { useRouter, usePathname, useSearchParams } from 'next/navigation'
-import { useCallback } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
 import { X, SlidersHorizontal } from 'lucide-react'
+import { buildShopListingHref, parseShopSegments } from '@/lib/shop/paths'
 
 const PURITIES   = ['22k', '18k', '14k', '9k', '92.5']
 const CATEGORIES = ['rings', 'necklaces', 'earrings', 'bangles', 'bracelets', 'pendants', 'chains', 'sets']
@@ -14,45 +14,29 @@ interface FilterSidebarProps {
 }
 
 export function FilterSidebar({ className = '', onClose }: FilterSidebarProps) {
-  const router      = useRouter()
-  const pathname    = usePathname()
-  const searchParams = useSearchParams()
+  const router   = useRouter()
+  const pathname = usePathname()
+  const segments = pathname.replace(/^\/shop\/?/, '').split('/').filter(Boolean)
+  const listing  = parseShopSegments(segments)
+  const scopeSlug = listing?.scopeSlug ?? null
+  const sort      = listing?.sort
 
-  const get  = (key: string) => searchParams.get(key) ?? ''
-  const getArr = (key: string) => get(key) ? get(key).split(',') : []
-
-  const update = useCallback(
-    (updates: Record<string, string | null>) => {
-      const params = new URLSearchParams(searchParams.toString())
-      Object.entries(updates).forEach(([key, val]) => {
-        if (!val) params.delete(key)
-        else params.set(key, val)
-      })
-      params.delete('page') // reset page on filter change
-      router.push(`${pathname}?${params.toString()}`, { scroll: false })
-    },
-    [pathname, router, searchParams]
-  )
-
-  const toggleArr = (key: string, value: string) => {
-    const arr = getArr(key)
-    const next = arr.includes(value)
-      ? arr.filter((v) => v !== value)
-      : [...arr, value]
-    update({ [key]: next.join(',') || null })
-  }
-
-  const clearAll = () => {
-    router.push(pathname, { scroll: false })
+  const navigateToScope = (nextScope: string | null) => {
+    router.push(buildShopListingHref({ scopeSlug: nextScope, sort, page: 1 }), { scroll: false })
     onClose?.()
   }
 
-  const metal   = get('metal')
-  const purity  = getArr('purity')
-  const diamond = get('diamond') === 'true'
-  const cuts    = getArr('cut')
-  const catArr  = getArr('category')
-  const hasFilters = !![metal, purity.length, diamond, cuts.length, catArr.length].some(Boolean)
+  const clearAll = () => {
+    router.push('/shop', { scroll: false })
+    onClose?.()
+  }
+
+  const metal = scopeSlug === 'gold' || scopeSlug === 'silver' ? scopeSlug : ''
+  const purity = PURITIES.filter((entry) => entry === scopeSlug)
+  const diamond = scopeSlug === 'diamond'
+  const cuts: string[] = []
+  const catArr = CATEGORIES.filter((entry) => entry === scopeSlug)
+  const hasFilters = !!scopeSlug
 
   return (
     <aside className={`space-y-6 ${className}`}>
@@ -86,7 +70,7 @@ export function FilterSidebar({ className = '', onClose }: FilterSidebarProps) {
             key={opt.value}
             label={opt.label}
             checked={metal === opt.value}
-            onChange={() => update({ metal: metal === opt.value ? null : opt.value })}
+            onChange={() => navigateToScope(metal === opt.value ? null : opt.value)}
           />
         ))}
       </FilterGroup>
@@ -98,7 +82,7 @@ export function FilterSidebar({ className = '', onClose }: FilterSidebarProps) {
             key={p}
             label={p === '92.5' ? '92.5 (Sterling Silver)' : p.toUpperCase()}
             checked={purity.includes(p)}
-            onChange={() => toggleArr('purity', p)}
+            onChange={() => navigateToScope(scopeSlug === p ? null : p)}
           />
         ))}
       </FilterGroup>
@@ -108,7 +92,7 @@ export function FilterSidebar({ className = '', onClose }: FilterSidebarProps) {
         <CheckOption
           label="With Diamond"
           checked={diamond}
-          onChange={() => update({ diamond: diamond ? null : 'true' })}
+          onChange={() => navigateToScope(diamond ? null : 'diamond')}
         />
         {diamond && (
           <div className="ml-4 mt-2 space-y-2">
@@ -117,7 +101,7 @@ export function FilterSidebar({ className = '', onClose }: FilterSidebarProps) {
                 key={cut}
                 label={cut}
                 checked={cuts.includes(cut)}
-                onChange={() => toggleArr('cut', cut)}
+                onChange={() => undefined}
               />
             ))}
           </div>
@@ -131,7 +115,7 @@ export function FilterSidebar({ className = '', onClose }: FilterSidebarProps) {
             key={cat}
             label={cat.charAt(0).toUpperCase() + cat.slice(1)}
             checked={catArr.includes(cat)}
-            onChange={() => toggleArr('category', cat)}
+            onChange={() => navigateToScope(scopeSlug === cat ? null : cat)}
           />
         ))}
       </FilterGroup>

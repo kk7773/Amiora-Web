@@ -23,15 +23,15 @@ export function WishlistGrid({ products: initialProducts }: WishlistGridProps) {
   }
 
   const handleAddToCart = (product: ProductCardProps['product']) => {
-    const variant = product.product_variants[0]
+    const variant = product.product_variants?.[0]
     if (!variant) return
     addItem({
       productId:    product.id,
       variantId:    variant.id,
       sizeLabel:    '',
       productName:  product.name,
-      variantLabel: variant.purity,
-      imageUrl:     product.product_images.find((i) => i.is_primary)?.url ?? '',
+      variantLabel: variant.sku,
+      imageUrl:     product.product_images?.find((i) => i.is_primary)?.url ?? '',
       unitPrice:    product.basePrice ?? 0,
       quantity:     1,
     })

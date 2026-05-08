@@ -26,7 +26,7 @@ export function FaqSection({ faqs }: { faqs: FaqItem[] }) {
       viewport={{ once: true, margin: '-60px' }}
     >
       <motion.div variants={fadeUp} className="text-center mb-10">
-        <p className="text-2xs uppercase tracking-widest2 text-teal mb-2">Help</p>
+        <p className="text-2xs uppercase tracking-widest2 text-ink mb-2">Help</p>
         <h2 className="font-display text-display-2xl text-ink">Frequently Asked Questions</h2>
       </motion.div>
 
@@ -45,7 +45,7 @@ export function FaqSection({ faqs }: { faqs: FaqItem[] }) {
               <span className="font-medium text-sm text-ink">{faq.question}</span>
               <ChevronDown
                 className={cn(
-                  'h-4 w-4 text-teal shrink-0 transition-transform duration-300',
+                  'h-4 w-4 text-ink shrink-0 transition-transform duration-300',
                   openIdx === faq.id && 'rotate-180'
                 )}
               />

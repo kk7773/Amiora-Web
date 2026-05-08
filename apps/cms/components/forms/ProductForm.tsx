@@ -183,6 +183,9 @@ const schema = z.object({
   category_id:                z.string().optional(),
   tag_ids:                    z.array(z.string()).default([]),
   is_featured:                z.boolean().default(false),
+  is_new_arrival:             z.boolean().default(false),
+  is_best_seller:             z.boolean().default(false),
+  is_coming_soon:             z.boolean().default(false),
   is_active:                  z.boolean().default(true),
   making_charge_pct:          num0to100WithDefault(8),
   making_charge_discount_pct: num0to100WithDefault(0),
@@ -439,10 +442,22 @@ export function ProductForm({ collections, categories, tags, defaultValues }: Pr
             placeholder="Brief product tagline…"
           />
         </Field>
-        <div className="flex items-center gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <label className="flex items-center gap-2 text-sm text-ink cursor-pointer">
             <input type="checkbox" {...register('is_featured')} className="rounded accent-teal" />
             Featured Product
+          </label>
+          <label className="flex items-center gap-2 text-sm text-ink cursor-pointer">
+            <input type="checkbox" {...register('is_new_arrival')} className="rounded accent-teal" />
+            New Arrival
+          </label>
+          <label className="flex items-center gap-2 text-sm text-ink cursor-pointer">
+            <input type="checkbox" {...register('is_best_seller')} className="rounded accent-teal" />
+            Best Seller
+          </label>
+          <label className="flex items-center gap-2 text-sm text-ink cursor-pointer">
+            <input type="checkbox" {...register('is_coming_soon')} className="rounded accent-teal" />
+            Coming Soon
           </label>
           <label className="flex items-center gap-2 text-sm text-ink cursor-pointer">
             <input type="checkbox" {...register('is_active')} className="rounded accent-teal" />

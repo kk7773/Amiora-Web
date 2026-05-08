@@ -10,12 +10,12 @@ import {
 import { useCartStore, useCartHydrated } from '@/stores/cartStore'
 
 const STORE_LINKS = [
-  { label: 'All Collections',  href: '/collections' },
+  { label: 'All Collections',  href: '/shop/collections' },
   { label: 'Shop All',         href: '/shop' },
-  { label: 'Rings',            href: '/categories/rings' },
-  { label: 'Necklaces',        href: '/categories/necklaces' },
-  { label: 'Earrings',         href: '/categories/earrings' },
-  { label: 'Bangles',          href: '/categories/bangles' },
+  { label: 'Rings',            href: '/shop/rings' },
+  { label: 'Necklaces',        href: '/shop/necklaces' },
+  { label: 'Earrings',         href: '/shop/earrings' },
+  { label: 'Bangles',          href: '/shop/bangles' },
   { label: 'About Us',         href: '/about' },
   { label: 'Blogs',            href: '/blogs' },
   { label: 'Our Stores',       href: '/stores' },

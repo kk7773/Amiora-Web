@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { Search, User, Heart, ShoppingBag, Menu, X, Loader2, LogOut, Package, UserCircle, ChevronDown } from 'lucide-react'
@@ -108,15 +109,14 @@ export function Header() {
             aria-label="Amiora home"
             style={{ flex: 1, display: 'flex', justifyContent: 'center', textDecoration: 'none' }}
           >
-            <span style={{
-              fontFamily: 'Cormorant Garamond, Cormorant, Georgia, serif',
-              fontSize: 22,
-              fontWeight: 500,
-              letterSpacing: '0.22em',
-              color: '#C9A84C',
-            }}>
-              AMIORA
-            </span>
+            <Image
+              src="https://res.cloudinary.com/dqayol6fn/image/upload/v1778259827/Amiora-final-logo-01_mu4i6k.png"
+              alt="Amiora"
+              width={120}
+              height={40}
+              className="h-8 w-auto"
+              priority
+            />
           </Link>
 
           {/* Right placeholder — keeps logo visually centered */}
@@ -134,7 +134,14 @@ export function Header() {
           <div className="section-x flex h-16 items-center justify-between gap-4">
             {/* Logo */}
             <Link href="/" className="shrink-0" aria-label="Amiora Diamonds home">
-              <AmigoraLogo />
+              <Image
+                src="https://res.cloudinary.com/dqayol6fn/image/upload/v1778155061/Amiora-final-logo-02_jicz5d.png"
+                alt="Amiora"
+                width={120}
+                height={28}
+                className="h-7 w-auto"
+                priority
+              />
             </Link>
 
             {/* Desktop nav */}
@@ -374,32 +381,4 @@ function IconBtn({
   )
 }
 
-/* ── AMIORA SVG Logo ─────────────────────────────────────────────────────── */
-function AmigoraLogo() {
-  return (
-    <svg viewBox="0 0 180 40" width="120" height="28" aria-hidden="true" fill="none">
-      {/* Faceted gem mark */}
-      <polygon
-        points="12,2 22,2 26,10 12,22 -2,10 2,2"
-        stroke="#285260"
-        strokeWidth="1.5"
-        fill="none"
-        transform="translate(0,8)"
-      />
-      <line x1="12" y1="10" x2="12" y2="30" stroke="#548C92" strokeWidth="1" opacity="0.5" />
-      <line x1="2"  y1="18" x2="22" y2="18" stroke="#548C92" strokeWidth="1" opacity="0.5" />
-      {/* AMIORA wordmark */}
-      <text
-        x="32"
-        y="28"
-        fontFamily="'Cormorant Garamond', serif"
-        fontSize="26"
-        fontWeight="500"
-        letterSpacing="4"
-        fill="#285260"
-      >
-        AMIORA
-      </text>
-    </svg>
-  )
-}
+

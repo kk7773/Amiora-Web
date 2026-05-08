@@ -1,7 +1,8 @@
 'use client'
 
-import { useRouter, usePathname, useSearchParams } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { ChevronDown } from 'lucide-react'
+import { buildShopListingHref, parseShopSegments } from '@/lib/shop/paths'
 
 const SORT_OPTIONS = [
   { value: 'newest',    label: 'Newest First' },
@@ -12,16 +13,21 @@ const SORT_OPTIONS = [
 ]
 
 export function SortDropdown() {
-  const router      = useRouter()
-  const pathname    = usePathname()
-  const searchParams = useSearchParams()
-  const current     = searchParams.get('sort') ?? 'newest'
+  const router = useRouter()
+  const pathname = usePathname()
+  const segments = pathname.replace(/^\/shop\/?/, '').split('/').filter(Boolean)
+  const listing = parseShopSegments(segments)
+  const current = listing?.sort ?? 'newest'
 
   const handleChange = (value: string) => {
-    const params = new URLSearchParams(searchParams.toString())
-    params.set('sort', value)
-    params.delete('page')
-    router.push(`${pathname}?${params.toString()}`, { scroll: false })
+    router.push(
+      buildShopListingHref({
+        scopeSlug: listing?.scopeSlug ?? null,
+        sort: value,
+        page: 1,
+      }),
+      { scroll: false },
+    )
   }
 
   return (

@@ -56,7 +56,7 @@ export function Testimonials({ testimonials }: TestimonialsProps) {
     >
       <div className="section-x">
         <div className="text-center mb-12">
-          <p className="text-2xs uppercase tracking-widest2 text-teal mb-3">Reviews</p>
+          <p className="text-2xs uppercase tracking-widest2 text-ink mb-3">Reviews</p>
           <h2 className="font-display text-display-2xl text-ink">What Our Customers Say</h2>
         </div>
 
@@ -88,14 +88,14 @@ export function Testimonials({ testimonials }: TestimonialsProps) {
           <button
             onClick={() => goTo(idx - 1, -1)}
             aria-label="Previous testimonial"
-            className="absolute left-0 top-1/2 -translate-y-1/2 p-1.5 sm:p-2 text-ink-muted hover:text-deep-teal transition-colors"
+            className="absolute left-0 top-1/2 -translate-y-1/2 p-1.5 sm:p-2 text-ink-muted hover:text-ink transition-colors"
           >
             <ChevronLeft className="h-5 w-5 sm:h-6 sm:w-6" />
           </button>
           <button
             onClick={() => goTo(idx + 1, 1)}
             aria-label="Next testimonial"
-            className="absolute right-0 top-1/2 -translate-y-1/2 p-1.5 sm:p-2 text-ink-muted hover:text-deep-teal transition-colors"
+            className="absolute right-0 top-1/2 -translate-y-1/2 p-1.5 sm:p-2 text-ink-muted hover:text-ink transition-colors"
           >
             <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6" />
           </button>
@@ -108,7 +108,7 @@ export function Testimonials({ testimonials }: TestimonialsProps) {
               key={i}
               onClick={() => goTo(i, i > idx ? 1 : -1)}
               className={`h-1.5 rounded-full transition-all duration-300 ${
-                i === idx ? 'w-8 bg-teal' : 'w-2 bg-divider'
+                i === idx ? 'w-8 bg-ink' : 'w-2 bg-divider'
               }`}
             />
           ))}

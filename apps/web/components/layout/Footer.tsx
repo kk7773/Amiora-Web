@@ -88,7 +88,7 @@ export function Footer() {
               {SHOP_LINKS.map((item) => (
                 <li key={item}>
                   <Link
-                    href={`/categories/${item.toLowerCase()}`}
+                    href={`/shop/${item.toLowerCase()}`}
                     className="text-sm text-cream/60 hover:text-cream transition-colors"
                   >
                     {item}

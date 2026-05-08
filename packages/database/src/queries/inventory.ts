@@ -3,7 +3,7 @@ import type { SupabaseClient } from '../client'
 export async function getVariantInventory(client: SupabaseClient, variantId: string) {
   return client
     .from('product_variants')
-    .select('id, sku, stock_quantity, reserved_quantity, is_available')
+    .select('id, sku, stock_qty, is_active')
     .eq('id', variantId)
     .single()
 }
@@ -12,22 +12,21 @@ export async function getLowStockVariants(client: SupabaseClient, threshold = 5)
   return client
     .from('product_variants')
     .select(`*, products (name, slug)`)
-    .lte('stock_quantity', threshold)
-    .eq('is_available', true)
-    .order('stock_quantity', { ascending: true })
+    .lte('stock_qty', threshold)
+    .eq('is_active', true)
+    .order('stock_qty', { ascending: true })
 }
 
 export async function updateVariantStock(
   client: SupabaseClient,
   variantId: string,
-  stockQuantity: number
+  stockQuantity: number,
 ) {
   return client
     .from('product_variants')
     .update({
-      stock_quantity: stockQuantity,
-      is_available: stockQuantity > 0,
-      updated_at: new Date().toISOString(),
+      stock_qty:  stockQuantity,
+      is_active: stockQuantity > 0,
     })
     .eq('id', variantId)
     .select()

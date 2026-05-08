@@ -72,16 +72,16 @@ export default async function CategoryPage({ params, searchParams }: Props) {
 
   const orderMap: Record<string, { col: string; asc: boolean }> = {
     newest:     { col: 'created_at', asc: false },
-    price_asc:  { col: 'sort_order', asc: true  },
-    price_desc: { col: 'sort_order', asc: false },
-    popular:    { col: 'sort_order', asc: true  },
+    price_asc:  { col: 'created_at', asc: true  },
+    price_desc: { col: 'created_at', asc: false },
+    popular:    { col: 'created_at', asc: false },
   }
   const ord = orderMap[sort] ?? orderMap['newest']!
 
   const { data: rows, count } = await supabase
     .from('products')
-    .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,product_images(*),product_variants(*)', { count: 'exact' })
-    .eq('is_active', true)
+    .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(*)', { count: 'exact' })
+    .eq('status', 'active')
     .eq('category_id', category.id)
     .order(ord.col, { ascending: ord.asc })
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
@@ -89,16 +89,51 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   type RawProduct = {
     id: string; name: string; slug: string; making_charge_pct: number
     product_images:   { url: string; alt_text: string | null; is_primary: boolean; is_hover: boolean }[]
-    product_variants: { id: string; purity: string; weight_grams: number | null; gem_price_override: number | null; stock_status: string }[]
+    product_color_groups?: Array<{ id: string; color_id: string; images: string[] | null; display_order: number; is_active: boolean }>
+    product_variants: {
+      id: string
+      sku: string
+      price: number
+      stock_qty: number
+      is_active: boolean
+    }[]
   }
 
-  const products = ((rows ?? []) as unknown as RawProduct[]).map((p) =>
-    attachCardPrice(
-      { ...p, product_variants: p.product_variants ?? [] },
+  const products = ((rows ?? []) as unknown as RawProduct[]).map((p) => {
+    // If product_images is empty, generate from product_color_groups
+    let images = p.product_images ?? []
+    if (images.length === 0 && p.product_color_groups && p.product_color_groups.length > 0) {
+      // Collect all images from color groups
+      const colorGroupImages: { url: string; alt_text: string | null; is_primary: boolean; is_hover: boolean }[] = []
+      for (let i = 0; i < p.product_color_groups.length; i++) {
+        const cg = p.product_color_groups[i]
+        if (cg && Array.isArray(cg.images)) {
+          for (let j = 0; j < cg.images.length; j++) {
+            const imgUrl = cg.images[j]
+            colorGroupImages.push({
+              url: imgUrl,
+              alt_text: `${p.name} — image ${colorGroupImages.length + 1}`,
+              is_primary: colorGroupImages.length === 0, // First image is primary
+              is_hover: colorGroupImages.length === 1,   // Second image is hover
+            })
+          }
+        }
+      }
+      images = colorGroupImages
+    }
+    
+    return attachCardPrice(
+      {
+        ...p,
+        product_images: images,
+        collectionSlug: (p as RawProduct & { collection?: { slug?: string } | null }).collection?.slug ?? null,
+        categorySlug: (p as RawProduct & { category?: { slug?: string } | null }).category?.slug ?? null,
+        product_variants: p.product_variants ?? [],
+      },
       prices.gold?.pricePerGram ?? 7200,
       prices.silver?.pricePerGram ?? 90
     )
-  )
+  })
 
   const meta = CATEGORY_META[slug] ?? {
     gradient: 'from-deep-teal/20 to-light-teal/10',
@@ -247,7 +282,7 @@ function ComingSoon({ categoryName, slug }: { categoryName: string; slug: string
           {OTHER_CATEGORIES.map((c) => (
             <Link
               key={c.slug}
-              href={`/categories/${c.slug}`}
+              href={`/shop/${c.slug}`}
               className="px-5 py-2 rounded-full border border-divider text-sm text-ink-muted hover:border-teal hover:text-teal transition-colors"
             >
               {c.name}

@@ -22,8 +22,8 @@ export async function GET() {
           .from('products')
           .select('name, slug')
           .eq('collection_id', col.id)
-          .eq('is_active', true)
-          .order('sort_order')
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
           .limit(5)
 
         return { ...col, products: products ?? [] }

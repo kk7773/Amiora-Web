@@ -33,6 +33,17 @@ function getTabSlug(pathname: string): string | null {
   return null
 }
 
+/** After getUser() refresh, Set-Cookie must be on the same response we return — redirects are new objects. */
+function redirectPreservingSupabaseSession(url: URL, sessionResponse: NextResponse): NextResponse {
+  const redir = NextResponse.redirect(url)
+  for (const c of sessionResponse.cookies.getAll()) {
+    redir.cookies.set(c.name, c.value)
+  }
+  const cacheControl = sessionResponse.headers.get('cache-control')
+  if (cacheControl) redir.headers.set('cache-control', cacheControl)
+  return redir
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
@@ -48,17 +59,24 @@ export async function middleware(req: NextRequest) {
 
   // ── Check 2: Supabase Auth session ─────────────────────────────────────────
   try {
-    const res      = NextResponse.next()
+    let supabaseResponse = NextResponse.next()
+
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
           getAll: () => req.cookies.getAll(),
-          setAll: (cookies) =>
-            cookies.forEach(({ name, value, options }) =>
-              res.cookies.set(name, value, options)
-            ),
+          setAll(cookiesToSet, responseHeaders) {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              supabaseResponse.cookies.set(name, value, options)
+            })
+            if (responseHeaders) {
+              Object.entries(responseHeaders).forEach(([key, value]) => {
+                supabaseResponse.headers.set(key, String(value))
+              })
+            }
+          },
         },
       }
     )
@@ -66,12 +84,12 @@ export async function middleware(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
-      return NextResponse.redirect(new URL('/login', req.url))
+      return redirectPreservingSupabaseSession(new URL('/login', req.url), supabaseResponse)
     }
 
     // Env allowlist: full access without user_metadata
     if (isListedSuperAdminEmail(user.email)) {
-      return res
+      return supabaseResponse
     }
 
     const tabSlug = getTabSlug(pathname)
@@ -88,38 +106,46 @@ export async function middleware(req: NextRequest) {
     if (hasProfile && prof) {
       if (!prof.is_active) {
         await supabase.auth.signOut()
-        return NextResponse.redirect(new URL('/login', req.url))
+        return redirectPreservingSupabaseSession(new URL('/login', req.url), supabaseResponse)
       }
       if (prof.role === 'super_admin') {
-        return res
+        return supabaseResponse
       }
       if (prof.role !== 'admin') {
         await supabase.auth.signOut()
-        return NextResponse.redirect(new URL('/login', req.url))
+        return redirectPreservingSupabaseSession(new URL('/login', req.url), supabaseResponse)
       }
       if (!tabSlug || pathname.startsWith('/api/')) {
-        return res
+        return supabaseResponse
       }
       const { data: can, error: rpcErr } = await supabase.rpc('cms_user_has_tab', { p_slug: tabSlug })
       if (!rpcErr && can === true) {
-        return res
+        return supabaseResponse
       }
       if (!rpcErr && can === false) {
+        if (tabSlug !== 'admin-management') {
+          const { count, error: permCountErr } = await supabase
+            .from('admin_tab_permissions')
+            .select('id', { count: 'exact', head: true })
+            .eq('admin_id', user.id)
+          if (!permCountErr && (count ?? 0) === 0) {
+            return supabaseResponse
+          }
+        }
         const url = new URL('/dashboard', req.url)
         url.searchParams.set('blocked', tabSlug)
-        return NextResponse.redirect(url)
+        return redirectPreservingSupabaseSession(url, supabaseResponse)
       }
-      // RPC missing / error — fall through to legacy tab check below
       const { data: leg } = await supabase
         .from('cms_admin_permissions')
         .select('tab_slug')
         .eq('user_id', user.id)
         .eq('tab_slug', tabSlug)
         .maybeSingle()
-      if (leg) return res
+      if (leg) return supabaseResponse
       const block = new URL('/dashboard', req.url)
       block.searchParams.set('blocked', tabSlug)
-      return NextResponse.redirect(block)
+      return redirectPreservingSupabaseSession(block, supabaseResponse)
     }
 
     // ── Legacy: user_metadata + cms_admin_permissions ─────────────────────
@@ -133,19 +159,19 @@ export async function middleware(req: NextRequest) {
 
     if (!effectiveRole) {
       await supabase.auth.signOut()
-      return NextResponse.redirect(new URL('/login', req.url))
+      return redirectPreservingSupabaseSession(new URL('/login', req.url), supabaseResponse)
     }
 
     if (effectiveRole === 'super_admin') {
-      return res
+      return supabaseResponse
     }
 
     if (!tabSlug || pathname.startsWith('/api/')) {
-      return res
+      return supabaseResponse
     }
 
     if (tabSlug === 'admin-management') {
-      return NextResponse.redirect(new URL('/dashboard', req.url))
+      return redirectPreservingSupabaseSession(new URL('/dashboard', req.url), supabaseResponse)
     }
 
     const { data: perm } = await supabase
@@ -158,10 +184,10 @@ export async function middleware(req: NextRequest) {
     if (!perm) {
       const url = new URL('/dashboard', req.url)
       url.searchParams.set('blocked', tabSlug)
-      return NextResponse.redirect(url)
+      return redirectPreservingSupabaseSession(url, supabaseResponse)
     }
 
-    return res
+    return supabaseResponse
   } catch {
     // Supabase not configured
   }

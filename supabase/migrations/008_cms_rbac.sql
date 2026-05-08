@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 );
 
 CREATE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles (lower(email));
-CREATE INDEX IF NOT EXISTS idx_profiles_role ON public.profiles (role);
+CREATE INDEX IF NOT EXISTS idx_profiles_role ON public.profiles (role); 
 
 COMMENT ON TABLE public.profiles IS 'CMS operators; one row per auth user that may access the CMS.';
 
@@ -122,6 +122,13 @@ BEGIN
     RETURN false;
   END IF;
 
+  -- No admin_tab_permissions rows yet: full CMS admin (except admin-management above).
+  IF NOT EXISTS (
+    SELECT 1 FROM public.admin_tab_permissions atp WHERE atp.admin_id = uid
+  ) THEN
+    RETURN true;
+  END IF;
+
   RETURN EXISTS (
     SELECT 1
     FROM public.admin_tab_permissions atp
@@ -136,7 +143,7 @@ $$;
 REVOKE ALL ON FUNCTION public.cms_user_has_tab(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.cms_user_has_tab(text) TO authenticated, service_role;
 
-COMMENT ON FUNCTION public.cms_user_has_tab IS 'True if current user may open CMS route tab by slug.';
+COMMENT ON FUNCTION public.cms_user_has_tab IS 'True if current user may open CMS route tab by slug. Admin with no admin_tab_permissions rows gets all non–super-admin tabs.';
 
 -- ── 6. Optional helper: current role (API / debugging) ─────────────────
 CREATE OR REPLACE FUNCTION public.cms_current_role()

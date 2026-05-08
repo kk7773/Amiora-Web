@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { ShoppingBag, Search, Heart, Menu, X } from 'lucide-react'
@@ -9,7 +10,7 @@ import { MobileMenu } from './MobileMenu'
 import { cn } from '@amiora/ui'
 
 const NAV_LINKS = [
-  { label: 'Collections', href: '/collections' },
+  { label: 'Collections', href: '/shop/collections' },
   { label: 'Rings', href: '/products?category=rings' },
   { label: 'Necklaces', href: '/products?category=necklaces' },
   { label: 'Earrings', href: '/products?category=earrings' },
@@ -40,8 +41,14 @@ export function Navbar() {
         )}
       >
         <div className="section-padding flex h-16 items-center justify-between">
-          <Link href="/" className="font-display text-2xl font-light tracking-widest">
-            AMIORA
+          <Link href="/" className="flex items-center">
+            <Image
+              src="https://res.cloudinary.com/dqayol6fn/image/upload/v1778155061/Amiora-final-logo-02_jicz5d.png"
+              alt="Amiora"
+              width={148}
+              height={36}
+              className="h-auto w-auto max-h-10"
+            />
           </Link>
 
           <nav className="hidden items-center gap-8 md:flex">

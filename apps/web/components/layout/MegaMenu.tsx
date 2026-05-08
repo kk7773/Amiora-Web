@@ -54,7 +54,7 @@ export function MegaMenu({ onClose }: MegaMenuProps) {
                   onMouseEnter={() => setActiveImage(col.thumb_url)}
                 >
                   <Link
-                    href={`/collections/${col.slug}`}
+                    href={`/shop/${col.slug}`}
                     onClick={onClose}
                     className="font-display text-lg text-deep-teal hover:text-teal transition-colors block mb-2"
                   >
@@ -64,7 +64,7 @@ export function MegaMenu({ onClose }: MegaMenuProps) {
                     {col.products.slice(0, 5).map((p) => (
                       <li key={p.slug}>
                         <Link
-                          href={`/products/${p.slug}`}
+                          href={`/shop/${col.slug}/${p.slug}`}
                           onClick={onClose}
                           className="text-xs text-ink-muted hover:text-teal transition-colors flex items-center gap-1 group"
                         >
@@ -95,7 +95,7 @@ export function MegaMenu({ onClose }: MegaMenuProps) {
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-deep-teal/40 to-transparent" />
           <Link
-            href="/collections"
+            href="/shop/collections"
             onClick={onClose}
             className="absolute bottom-4 left-4 text-xs uppercase tracking-widest text-white hover:text-cream transition-colors"
           >

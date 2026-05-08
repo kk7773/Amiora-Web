@@ -16,9 +16,9 @@ interface ProductGridSectionProps {
 }
 
 const GRID_CLASS: Record<2 | 4 | 5, string> = {
-  2: 'grid-cols-1 sm:grid-cols-2',
+  2: 'grid-cols-2',
   4: 'grid-cols-2 lg:grid-cols-4',
-  5: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5',
+  5: 'grid-cols-2 lg:grid-cols-5',
 }
 
 const VISIBLE_COUNT: Record<2 | 4 | 5, number> = {
@@ -34,10 +34,10 @@ export function ProductGridSection({
   loading = false,
   columns = 4,
 }: ProductGridSectionProps) {
-  const gridClass   = GRID_CLASS[columns]
+  const gridClass = GRID_CLASS[columns]
   const visibleCount = VISIBLE_COUNT[columns]
-  const visibleProducts = products.slice(0, visibleCount)
-  const skeletonCount   = loading ? visibleCount : 0
+  const visibleProducts = (products ?? []).slice(0, visibleCount)
+  const skeletonCount = loading ? visibleCount : 0
 
   return (
     <motion.section
@@ -50,12 +50,12 @@ export function ProductGridSection({
       {/* Header */}
       <motion.div variants={fadeUp} className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-10">
         <div>
-          <p className="text-2xs uppercase tracking-widest2 text-teal mb-2">Curated</p>
+          <p className="text-2xs uppercase tracking-widest2 text-ink mb-2">Curated</p>
           <h2 className="font-display text-display-2xl text-ink">{heading}</h2>
         </div>
         <Link
           href={viewAllHref}
-          className="text-sm text-teal hover:text-deep-teal transition-colors underline-offset-4 hover:underline shrink-0"
+          className="text-sm text-ink hover:text-ink-muted transition-colors underline-offset-4 hover:underline shrink-0"
         >
           View All →
         </Link>
@@ -69,8 +69,8 @@ export function ProductGridSection({
                 <ProductCardSkeleton />
               </motion.div>
             ))
-          : visibleProducts.map((product) => (
-              <motion.div key={product.id} variants={fadeUp}>
+          : visibleProducts.map((product, index) => (
+              <motion.div key={product.id ?? `${product.slug ?? 'product'}-${index}`} variants={fadeUp}>
                 <ProductCard
                   product={product}
                   className={columns === 5 ? 'text-sm' : ''}

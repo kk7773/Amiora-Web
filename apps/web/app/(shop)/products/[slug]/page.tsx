@@ -6,30 +6,229 @@ import { ProductCard }         from '@/components/product/ProductCard'
 import { ReviewsSection }      from '@/components/product/ReviewsSection'
 import { ProductFAQ }          from '@/components/product/ProductFAQ'
 import { attachCardPrice } from '@/lib/pricing/attachCardPrice'
-import { getLatestPrices }   from '@/lib/pricing/engine'
 
-interface Props { params: Promise<{ slug: string }> }
+interface Props {
+  params: Promise<{ slug: string }>
+}
 
 const BASE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.amioradiamonds.in'
+
+type CatalogBundle = {
+  catalogColorGroups: {
+    colorId: string
+    code: string
+    label: string
+    hex: string | null
+    images: string[]
+  }[]
+  catalogPurities: { id: string; code: string; label: string; display_order: number }[]
+  catalogVariants: {
+    id: string
+    color_id: string
+    purity_id: string
+    sku: string
+    price: number
+    stock_qty: number
+    is_active: boolean
+  }[]
+}
+
+function isCatalogVariantRow(r: Record<string, unknown>): boolean {
+  return (
+    typeof r.color_id === 'string' &&
+    typeof r.purity_id === 'string' &&
+    typeof r.sku === 'string' &&
+    (typeof r.price === 'number' || typeof r.price === 'string')
+  )
+}
+
+async function legacyVariantCatalog(
+  supabase: ReturnType<typeof createServerClient>,
+  product: { id: string; slug: string; sku?: string | null },
+  variantRecords: Record<string, unknown>[],
+  fallbackImageUrls: string[],
+): Promise<CatalogBundle> {
+  const productSku = typeof product.sku === 'string' ? product.sku : product.slug
+
+  const legacy = variantRecords.filter((r) => typeof r.id === 'string') as Array<{
+    id: string
+    is_active?: boolean
+    metal_variant_id?: string | null
+    purity?: unknown
+    gem_price_override?: unknown
+    stock_status?: unknown
+  }>
+
+  const mvIds = [
+    ...new Set(legacy.map((r) => r.metal_variant_id).filter((x): x is string => typeof x === 'string')),
+  ]
+
+  const mvMeta = new Map<string, string>()
+  if (mvIds.length > 0) {
+    const { data: mvs } = await supabase.from('metal_variants').select('id, variant_name').in('id', mvIds)
+    for (const m of mvs ?? []) {
+      if (m && typeof m.id === 'string') {
+        mvMeta.set(m.id, typeof m.variant_name === 'string' ? m.variant_name : m.id)
+      }
+    }
+  }
+
+  const puritiesUniq = [...new Set(legacy.map((r) => String(r.purity ?? '').trim()).filter(Boolean))]
+  const catalogPurities = puritiesUniq.map((p, i) => ({
+    id:        `legacy-pur:${p}`,
+    code:      p,
+    label:     p,
+    display_order: i,
+  }))
+
+  const colorKeys = mvIds.length > 0 ? mvIds : ['legacy-default']
+  const catalogColorGroups = colorKeys.map((cid) => {
+    const label = mvMeta.get(cid) ?? (cid === 'legacy-default' ? 'Default' : 'Metal')
+    const code  = label.replace(/\s+/g, '-').toLowerCase().slice(0, 24) || 'metal'
+    return { colorId: cid, code, label, hex: null as string | null, images: fallbackImageUrls }
+  })
+
+  const catalogVariants = legacy.map((v) => {
+    const purityKey = String(v.purity ?? 'default').trim() || 'default'
+    const inStock     = v.stock_status !== 'out_of_stock'
+    return {
+      id:         v.id,
+      color_id:   typeof v.metal_variant_id === 'string' ? v.metal_variant_id : 'legacy-default',
+      purity_id:  `legacy-pur:${purityKey}`,
+      sku:        `${productSku}-${v.id.slice(0, 8)}`,
+      price:      Number(v.gem_price_override ?? 0),
+      stock_qty:  inStock ? 99 : 0,
+      is_active:  v.is_active !== false,
+    }
+  })
+
+  return { catalogColorGroups, catalogPurities, catalogVariants }
+}
+
+/** Normalized shape the PDP expects (works after 010 or on legacy `products`). */
+type PdpProductRow = {
+  id: string
+  name: string
+  slug: string
+  short_desc: string | null
+  description: string | null
+  faqs: unknown | null
+  diamond_shape: string | null
+  diamond_count: number | null
+  total_diamond_wt: number | null
+  diamond_color: string | null
+  diamond_clarity: string | null
+  size_range: string | null
+  making_charge_pct: number | null
+  making_charge_discount_pct: number | null
+  gem_price_discount_pct: number | null
+  collection: unknown
+  category: unknown
+  product_images: unknown
+  sku?: string | null
+}
+
+const PDP_PRODUCT_MODERN_SELECT = `
+  id, name, slug, short_desc, description, faqs,
+  diamond_shape, diamond_count, total_diamond_wt, diamond_color, diamond_clarity, size_range,
+  making_charge_pct, making_charge_discount_pct, gem_price_discount_pct,
+  collection:collections(id, name, slug),
+  category:categories(id, name, slug),
+  product_images(id, url, alt_text, sort_order, is_primary)
+`
+
+const PDP_PRODUCT_LEGACY_SELECT = `
+  id, name, slug, description, short_description, sku,
+  making_charge_pct,
+  collection:collections(id, name, slug),
+  category:categories(id, name, slug),
+  product_images(id, url, alt_text, sort_order, is_primary)
+`
+
+async function fetchPdpProduct(
+  supabase: ReturnType<typeof createServerClient>,
+  slug: string,
+): Promise<{ data: PdpProductRow | null; error: { message: string; code?: string } | null }> {
+  const modern = await supabase
+    .from('products')
+    .select(PDP_PRODUCT_MODERN_SELECT)
+    .eq('slug', slug)
+    .eq('status', 'active')
+    .single()
+
+  const modernCode = (modern.error as { code?: string } | null)?.code
+  if (!modern.error && modern.data) {
+    return { data: modern.data as PdpProductRow, error: null }
+  }
+
+  if (modern.error && modernCode !== '42703') {
+    return { data: null, error: modern.error as { message: string; code?: string } }
+  }
+
+  const leg = await supabase
+    .from('products')
+    .select(PDP_PRODUCT_LEGACY_SELECT)
+    .eq('slug', slug)
+    .eq('is_active', true)
+    .single()
+
+  if (leg.error || !leg.data) {
+    return { data: null, error: (leg.error ?? modern.error) as { message: string; code?: string } }
+  }
+
+  const r = leg.data as Record<string, unknown>
+  const row: PdpProductRow = {
+    id:                         r.id as string,
+    name:                       r.name as string,
+    slug:                       r.slug as string,
+    short_desc:                 (r.short_description as string | null) ?? null,
+    description:                (r.description as string | null) ?? null,
+    faqs:                       null,
+    diamond_shape:              null,
+    diamond_count:              null,
+    total_diamond_wt:           null,
+    diamond_color:              null,
+    diamond_clarity:            null,
+    size_range:                 null,
+    making_charge_pct:          (r.making_charge_pct as number | null) ?? null,
+    making_charge_discount_pct: null,
+    gem_price_discount_pct:     null,
+    collection:                 r.collection,
+    category:                   r.category,
+    product_images:             r.product_images,
+    sku:                        (r.sku as string | null) ?? null,
+  }
+  return { data: row, error: null }
+}
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   try {
     const { slug } = await params
-    const supabase  = createServerClient()
-    const { data }  = await supabase
-      .from('products')
-      .select('name, short_description, product_images(url, is_primary)')
-      .eq('slug', slug)
-      .single()
+    const supabase = createServerClient()
+    const { data } = await fetchPdpProduct(supabase, slug)
     if (!data) return {}
-    const imgs = (data.product_images ?? []) as { url: string; is_primary: boolean }[]
-    const primaryImage = imgs.find(i => i.is_primary)?.url ?? imgs[0]?.url
-    const title       = `${data.name} — AMIORA Jewellery`
-    const description = data.short_description ?? `Explore ${data.name} — crafted in gold, silver & diamonds by AMIORA.`
+    type Img = { url: string; is_primary: boolean }
+    const imgs = (data.product_images ?? []) as Img[]
+    const primaryImage = imgs.find((i) => i.is_primary)?.url ?? imgs[0]?.url
+    const title = `${data.name} — AMIORA Jewellery`
+    const description =
+      data.short_desc ?? `Explore ${data.name} — crafted in gold & diamonds by AMIORA.`
     return {
-      title, description,
-      openGraph: { title, description, url: `${BASE}/products/${slug}`, images: primaryImage ? [{ url: primaryImage }] : [], type: 'website' },
-      twitter:   { card: 'summary_large_image', title, description, images: primaryImage ? [primaryImage] : [] },
+      title,
+      description,
+      openGraph: {
+        title,
+        description,
+        url: `${BASE}/products/${slug}`,
+        images: primaryImage ? [{ url: primaryImage }] : [],
+        type: 'website',
+      },
+      twitter: {
+        card: 'summary_large_image',
+        title,
+        description,
+        images: primaryImage ? [primaryImage] : [],
+      },
       alternates: { canonical: `${BASE}/products/${slug}` },
     }
   } catch {
@@ -37,62 +236,208 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 }
 
-// ISR: cache product pages for 60s, regenerate in background on next request
 export const revalidate    = 60
-export const dynamicParams = true   // on-demand ISR for slugs not pre-built
+export const dynamicParams = true
 
 export default async function ProductPage({ params }: Props) {
-  const { slug }  = await params
-  const supabase  = createServerClient()
+  const { slug } = await params
+  const supabase = createServerClient()
 
-  // ── Round 1: Product + live prices run IN PARALLEL ─────────────────────────
-  const [{ data: product, error: productError }, prices] = await Promise.all([
-    supabase
-      .from('products')
-      .select(`
-        id, name, slug, short_description, description, making_charge_pct,
-        making_charge_discount_pct, gem_price_discount_pct, faqs,
-        collection:collections(id, name, slug),
-        category:categories(id, name, slug),
-        product_images(id, url, alt_text, sort_order, variant_id, is_primary),
-        product_variants(
-          id, purity, weight_grams, gem_weight_ct, gem_price_override, stock_status, is_active,
-          metal_variant_id, gem_variant_id,
-          metal_variant:metal_variants(variant_name),
-          gem_variant:gem_variants(cut_name),
-          sizes:product_sizes(*)
-        )
-      `)
-      .eq('slug', slug)
-      .eq('is_active', true)
-      .single(),
-    getLatestPrices().catch(() => ({ gold: null, silver: null })),
-  ])
+  const { data: product, error: productError } = await fetchPdpProduct(supabase, slug)
 
   if (productError) {
     console.error('[ProductPage] query error:', productError.message, '| slug:', slug)
   }
   if (!product) notFound()
 
-  // ── Round 2: Reviews + smart-pairs + you-may-also-like (all parallel) ───────
+  const { data: variantRowsRaw, error: variantFetchError } = await supabase
+    .from('product_variants')
+    .select('*')
+    .eq('product_id', product.id)
+
+  if (variantFetchError) {
+    console.error('[ProductPage] product_variants fetch error:', variantFetchError.message, '| slug:', slug)
+  }
+
+  const variantRecords = (variantRowsRaw ?? []) as Record<string, unknown>[]
+  const catalogVariantSource = variantRecords.filter(isCatalogVariantRow)
+  const useLegacyVariants      = catalogVariantSource.length === 0 && variantRecords.length > 0
+
+  type PurRow = { id: string; label: string; code: string; display_order: number }
+  const purityIdsForLookup = [
+    ...new Set(catalogVariantSource.map((v) => v.purity_id as string).filter(Boolean)),
+  ]
+
+  const emptyPurities = Promise.resolve({ data: [] as PurRow[], error: null as null })
+
+  /** Separate queries: avoid PostgREST embeds when FK relationships are missing from schema cache. */
+  const [{ data: productColorGroupRows, error: pcgError }, { data: purityRows, error: purityErr }] =
+    await Promise.all([
+      supabase
+        .from('product_color_groups')
+        .select(`
+      id, color_id, images, display_order, is_active,
+      color:metal_colors(id, label, code, hex, display_order)
+    `)
+        .eq('product_id', product.id)
+        .eq('is_active', true)
+        .order('display_order', { ascending: true }),
+      purityIdsForLookup.length > 0 && !useLegacyVariants
+        ? supabase.from('metal_purities').select('id, label, code, display_order').in('id', purityIdsForLookup)
+        : emptyPurities,
+    ])
+
+  const pcgErrCode = (pcgError as { code?: string } | null)?.code
+  if (pcgError && pcgErrCode !== 'PGRST205') {
+    console.error('[ProductPage] product_color_groups error:', pcgError.message, '| slug:', slug)
+  }
+  if (purityErr) {
+    console.error('[ProductPage] metal_purities error:', purityErr.message, '| slug:', slug)
+  }
+
+  type ImgRow = { id: string; url: string; alt_text: string | null; sort_order: number; is_primary: boolean }
+  const fallbackImages: ImgRow[] = ((product.product_images ?? []) as ImgRow[])
+    .slice()
+    .sort((a, b) => a.sort_order - b.sort_order)
+
+  type Pcg = {
+    id: string
+    color_id: string
+    images: string[] | null
+    display_order: number
+    is_active?: boolean
+    color:
+      | { id: string; label: string; code: string; hex: string | null; display_order: number }
+      | [{ id: string; label: string; code: string; hex: string | null; display_order: number }]
+      | null
+  }
+  const rawGroups = ((productColorGroupRows ?? []) as Pcg[])
+    .filter((row) => row.is_active !== false)
+    .slice()
+    .sort((a, b) => a.display_order - b.display_order)
+
+  let catalogColorGroups = rawGroups.map((row) => {
+    const mc = Array.isArray(row.color) ? row.color[0] : row.color
+    return {
+      colorId: mc?.id ?? row.color_id,
+      code:    mc?.code ?? '',
+      label:   mc?.label ?? '',
+      hex:     mc?.hex ?? null,
+      images:  row.images ?? [],
+    }
+  })
+
+  type Pvv = {
+    id: string
+    color_id: string
+    purity_id: string
+    sku: string
+    price: number | string
+    stock_qty: number
+    is_active: boolean
+  }
+
+  let catalogPurities: { id: string; code: string; label: string; display_order: number }[] = []
+  let catalogVariants: {
+    id: string
+    color_id: string
+    purity_id: string
+    sku: string
+    price: number
+    stock_qty: number
+    is_active: boolean
+  }[] = []
+
+  if (useLegacyVariants) {
+    const urls = fallbackImages.map((i) => i.url)
+    const built = await legacyVariantCatalog(supabase, product, variantRecords, urls)
+    catalogColorGroups = built.catalogColorGroups
+    catalogPurities    = built.catalogPurities
+    catalogVariants    = built.catalogVariants
+  } else {
+    const rawVariants = catalogVariantSource as Pvv[]
+
+    const purityMeta = new Map<string, { id: string; code: string; label: string; display_order: number }>()
+    for (const r of purityRows ?? []) {
+      purityMeta.set(r.id, r)
+    }
+    catalogPurities = [...purityMeta.values()].sort(
+      (a, b) => a.display_order - b.display_order || a.code.localeCompare(b.code),
+    )
+
+    catalogVariants = rawVariants
+      .filter((variant) => variant.is_active !== false)
+      .map((v) => ({
+        id:         v.id,
+        color_id:   v.color_id,
+        purity_id:  v.purity_id,
+        sku:        v.sku,
+        price:      Number(v.price ?? 0),
+        stock_qty:  typeof v.stock_qty === 'number' ? v.stock_qty : 0,
+        is_active:  v.is_active ?? true,
+      }))
+
+    if (catalogVariants.length > 0) {
+      const activeColorIds = new Set(catalogVariants.map((variant) => variant.color_id))
+      catalogColorGroups = catalogColorGroups.filter((group) => activeColorIds.has(group.colorId))
+    }
+
+    /** Colour groups derived from masters when PCC rows missing (legacy / partial CMS data). */
+    if (catalogColorGroups.length === 0 && catalogVariants.length > 0) {
+      const colorIds = [...new Set(catalogVariants.map((x) => x.color_id))]
+      const { data: mcRows } = await supabase
+        .from('metal_colors')
+        .select('id, label, code, hex')
+        .in('id', colorIds)
+      const urls = fallbackImages.map((i) => i.url)
+      for (const r of mcRows ?? []) {
+        catalogColorGroups.push({
+          colorId: r.id,
+          code:    r.code,
+          label:   r.label,
+          hex:     r.hex,
+          images:  urls.length > 0 ? urls : [],
+        })
+      }
+    }
+  }
+
+  if (catalogColorGroups.length === 0 && catalogVariants.length === 0) {
+    console.warn('[ProductPage] Product has no color groups or variants:', slug)
+  }
+
   type SmartPairRow = { paired_product_id: string }
-  type ReviewRow    = { id: string; reviewer_name: string | null; rating: number; title: string | null; body: string | null; created_at: string; is_verified_purchase: boolean }
+  type ReviewRow = {
+    id: string
+    reviewer_name: string | null
+    rating: number
+    title: string | null
+    body: string | null
+    created_at: string
+    is_verified_purchase: boolean
+  }
+
   type SuggestedProduct = {
     id: string
     name: string
     slug: string
+    collection?: { slug?: string } | null
+    category?: { slug?: string } | null
     making_charge_pct: number
     making_charge_discount_pct: number | null
     gem_price_discount_pct: number | null
-    product_images: { url: string; is_primary: boolean; is_hover: boolean; alt_text: string | null }[]
+    product_images: {
+      url: string
+      is_primary: boolean
+      is_hover: boolean
+      alt_text: string | null
+    }[]
     product_variants: {
       id: string
-      purity: string
-      weight_grams: number | null
-      gem_price_override: number | null
-      stock_status: string
-      making_charge_discount_pct: number | null
-      gem_price_discount_pct: number | null
+      sku: string
+      price: number
+      stock_qty: number
+      is_active: boolean
     }[]
   }
 
@@ -105,93 +450,83 @@ export default async function ProductPage({ params }: Props) {
         .select('id, reviewer_name, rating, title, body, created_at, is_verified_purchase')
         .eq('product_id', product.id)
         .eq('status', 'approved')
-        .order('created_at', { ascending: false })
-    ).then(r => (r.data ?? []) as ReviewRow[]).catch(() => [] as ReviewRow[]),
+        .order('created_at', { ascending: false }),
+    ).then((r) => (r.data ?? []) as ReviewRow[]).catch(() => []),
 
     Promise.resolve(
-      supabase
-        .from('smart_pairs')
-        .select('paired_product_id')
-        .eq('product_id', product.id)
-        .limit(6)
-    ).then(r => ((r.data ?? []) as SmartPairRow[]).map(x => x.paired_product_id).filter(Boolean))
-     .catch(() => [] as string[]),
+      supabase.from('smart_pairs').select('paired_product_id').eq('product_id', product.id).limit(6),
+    )
+      .then((r) => ((r.data ?? []) as SmartPairRow[]).map((x) => x.paired_product_id).filter(Boolean))
+      .catch(() => [] as string[]),
 
-    // Fetch products from OTHER collections (not the current product's collection)
     Promise.resolve(
       currentCollectionId
         ? supabase
             .from('products')
-            .select('id, name, slug, making_charge_pct, making_charge_discount_pct, gem_price_discount_pct, product_images(url, is_primary, is_hover, alt_text), product_variants(*)')
+            .select(
+              'id, name, slug, collection:collections(slug), category:categories(slug), making_charge_pct, making_charge_discount_pct, gem_price_discount_pct, product_images(url, is_primary, is_hover, alt_text), product_variants(id, sku, price, stock_qty, is_active)',
+            )
             .neq('collection_id', currentCollectionId)
             .neq('id', product.id)
-            .eq('is_active', true)
+            .eq('status', 'active')
             .limit(8)
         : supabase
             .from('products')
-            .select('id, name, slug, making_charge_pct, making_charge_discount_pct, gem_price_discount_pct, product_images(url, is_primary, is_hover, alt_text), product_variants(*)')
+            .select(
+              'id, name, slug, collection:collections(slug), category:categories(slug), making_charge_pct, making_charge_discount_pct, gem_price_discount_pct, product_images(url, is_primary, is_hover, alt_text), product_variants(id, sku, price, stock_qty, is_active)',
+            )
             .neq('id', product.id)
-            .eq('is_active', true)
-            .limit(8)
-    ).then(r => (r.data ?? []) as SuggestedProduct[]).catch(() => [] as SuggestedProduct[]),
+            .eq('status', 'active')
+            .limit(8),
+    ).then((r) => (r.data ?? []) as SuggestedProduct[]).catch(() => []),
   ])
 
-  const reviews             = reviewsRes
   const smartPairProductIds = smartPairsRes
   const suggestedProducts   = suggestedRes
 
-  // ── Round 3: Paired products (conditional, smart-pair IDs known) ────────────
-  type PairedProduct = {
-    id: string
-    name: string
-    slug: string
-    making_charge_pct: number
-    making_charge_discount_pct: number | null
-    gem_price_discount_pct: number | null
-    product_images: { url: string; is_primary: boolean }[]
-    product_variants: {
-      purity: string
-      weight_grams: number | null
-      gem_price_override: number | null
-      making_charge_discount_pct: number | null
-      gem_price_discount_pct: number | null
-      stock_status: string
-    }[]
-  }
-  let pairedProducts: PairedProduct[] = []
+  let pairedProducts: SuggestedProduct[] = []
   if (smartPairProductIds.length) {
     pairedProducts = await Promise.resolve(
       supabase
         .from('products')
-        .select('id, name, slug, making_charge_pct, making_charge_discount_pct, gem_price_discount_pct, product_images(*), product_variants(*)')
+        .select(
+          'id, name, slug, collection:collections(slug), category:categories(slug), making_charge_pct, making_charge_discount_pct, gem_price_discount_pct, product_images(*), product_variants(id, sku, price, stock_qty, is_active)',
+        )
         .in('id', smartPairProductIds)
-        .eq('is_active', true)
-    ).then(r => (r.data ?? []) as PairedProduct[]).catch(() => [])
+        .eq('status', 'active'),
+    ).then((r) => (r.data ?? []) as SuggestedProduct[]).catch(() => [])
   }
 
-  const goldPrice   = (prices as { gold?: { pricePerGram: number } | null }).gold?.pricePerGram   ?? 7200
-  const silverPrice = (prices as { silver?: { pricePerGram: number } | null }).silver?.pricePerGram ?? 90
+  const goldPrice = 7200
+  const silverPrice = 90
 
-  // ── Smart pairs with prices ───────────────────────────────────────────────
-  const smartPairs = pairedProducts.map(p =>
+  const smartPairs = pairedProducts.map((p) =>
     attachCardPrice(
-      { ...p, product_variants: p.product_variants ?? [] },
+      {
+        ...p,
+        collectionSlug: p.collection?.slug ?? null,
+        categorySlug: p.category?.slug ?? null,
+        product_variants: p.product_variants ?? [],
+      },
       goldPrice,
-      silverPrice
-    )
+      silverPrice,
+    ),
   ) as Parameters<typeof ProductCard>[0]['product'][]
 
-  // ── You May Also Like — products from other collections with prices ──────
-  const youMayAlsoLike = suggestedProducts.map(p =>
+  const youMayAlsoLike = suggestedProducts.map((p) =>
     attachCardPrice(
-      { ...p, product_variants: p.product_variants ?? [] },
+      {
+        ...p,
+        collectionSlug: p.collection?.slug ?? null,
+        categorySlug: p.category?.slug ?? null,
+        product_variants: p.product_variants ?? [],
+      },
       goldPrice,
-      silverPrice
-    )
+      silverPrice,
+    ),
   ) as Parameters<typeof ProductCard>[0]['product'][]
 
-  // ── Review stats ──────────────────────────────────────────────────────────
-  const safeReviews = (reviews ?? []).map(r => ({
+  const safeReviews = (reviewsRes ?? []).map((r) => ({
     ...r,
     reviewer_name: r.reviewer_name ?? 'Anonymous',
   }))
@@ -199,82 +534,33 @@ export default async function ProductPage({ params }: Props) {
     ? safeReviews.reduce((s, r) => s + r.rating, 0) / safeReviews.length
     : 0
 
-  // ── JSON-LD ───────────────────────────────────────────────────────────────
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const imgs = ((product.product_images ?? []) as any[]).map((img: any, idx: number) => ({
-    id:         String(img.id        ?? `img-${idx}`),
-    url:        String(img.url       ?? ''),
-    alt_text:   img.alt_text != null  ? String(img.alt_text) : null,
+  const imgs = fallbackImages.map((img, idx) => ({
+    id:         String(img.id ?? `img-${idx}`),
+    url:        String(img.url ?? ''),
+    alt_text:   img.alt_text != null ? String(img.alt_text) : null,
     sort_order: Number(img.sort_order ?? idx),
-    variant_id: img.variant_id != null ? String(img.variant_id) : null,
+    variant_id: null as string | null,
   }))
-  const primaryImg = (product.product_images as any[])?.find((i: any) => i.is_primary)?.url ?? imgs[0]?.url
+  const primaryImg = imgs.find((i) => i.id && fallbackImages.find((f) => f.id === i.id)?.is_primary)?.url ?? imgs[0]?.url
+
   const jsonLd = {
-    '@context': 'https://schema.org',
-    '@type':    'Product',
-    name:        product.name,
-    description: product.short_description ?? '',
-    image:       primaryImg ?? '',
-    url:         `${BASE}/products/${slug}`,
-    brand:       { '@type': 'Brand', name: 'AMIORA' },
+    '@context':     'https://schema.org',
+    '@type':        'Product',
+    name:           product.name,
+    description:    product.short_desc ?? '',
+    image:          primaryImg ?? '',
+    url:            `${BASE}/products/${slug}`,
+    brand:          { '@type': 'Brand', name: 'AMIORA' },
     ...(safeReviews.length > 0 && {
       aggregateRating: {
-        '@type':      'AggregateRating',
-        ratingValue:  avgRating.toFixed(1),
-        reviewCount:  safeReviews.length,
-        bestRating:   5,
-        worstRating:  1,
+        '@type':       'AggregateRating',
+        ratingValue:   avgRating.toFixed(1),
+        reviewCount:   safeReviews.length,
+        bestRating:    5,
+        worstRating:   1,
       },
     }),
   }
-
-  // Explicit type that matches VariantSelector's Variant interface exactly
-  type NormalizedVariant = {
-    id:                 string
-    purity:             string
-    metal_variant_id:   string | null
-    gem_variant_id:     string | null
-    weight_grams:       number | null
-    gem_price_override: number | null
-    gem_weight_ct:      number | null
-    stock_status:       string
-    making_charge_discount_pct: number | null
-    gem_price_discount_pct:     number | null
-    metal_variant:      { variant_name: string } | null
-    gem_variant:        { cut_name: string }     | null
-    sizes:              { size_label: string; in_stock: boolean }[]
-  }
-
-  // Supabase returns foreign-key joins as arrays — normalize to single objects
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const normalizedVariants: NormalizedVariant[] = (product.product_variants ?? []).map((v: any): NormalizedVariant => {
-    const rawMetal = Array.isArray(v.metal_variant) ? v.metal_variant[0] : v.metal_variant
-    const rawGem   = Array.isArray(v.gem_variant)   ? v.gem_variant[0]   : v.gem_variant
-
-    return {
-      id:                 String(v.id   ?? ''),
-      purity:             String(v.purity ?? ''),
-      metal_variant_id:   v.metal_variant_id   != null ? String(v.metal_variant_id)   : null,
-      gem_variant_id:     v.gem_variant_id     != null ? String(v.gem_variant_id)     : null,
-      weight_grams:       v.weight_grams       != null ? Number(v.weight_grams)       : null,
-      gem_price_override: v.gem_price_override != null ? Number(v.gem_price_override) : null,
-      gem_weight_ct:      v.gem_weight_ct      != null ? Number(v.gem_weight_ct)      : null,
-      stock_status:       String(v.stock_status ?? 'in_stock'),
-      making_charge_discount_pct:
-        v.making_charge_discount_pct != null && v.making_charge_discount_pct !== ''
-          ? Number(v.making_charge_discount_pct)
-          : null,
-      gem_price_discount_pct:
-        v.gem_price_discount_pct != null && v.gem_price_discount_pct !== ''
-          ? Number(v.gem_price_discount_pct)
-          : null,
-      metal_variant:      rawMetal ? { variant_name: String(rawMetal.variant_name ?? '') } : null,
-      gem_variant:        rawGem   ? { cut_name:     String(rawGem.cut_name       ?? '') } : null,
-      sizes: Array.isArray(v.sizes)
-        ? v.sizes.map((s: any) => ({ size_label: String(s.size_label ?? ''), in_stock: Boolean(s.in_stock) }))
-        : [],
-    }
-  })
 
   return (
     <>
@@ -282,20 +568,29 @@ export default async function ProductPage({ params }: Props) {
 
       <ProductDetailClient
         product={{
-          id:                product.id,
-          name:              product.name,
-          short_description: product.short_description,
-          making_charge_pct: product.making_charge_pct,
-          making_charge_discount_pct: Number((product as { making_charge_discount_pct?: number | null }).making_charge_discount_pct ?? 0),
-          gem_price_discount_pct:     Number((product as { gem_price_discount_pct?: number | null }).gem_price_discount_pct ?? 0),
+          id:               product.id,
+          name:             product.name,
+          short_desc:       product.short_desc,
+          description:      product.description,
+          diamond_shape:    product.diamond_shape,
+          diamond_count:    product.diamond_count,
+          total_diamond_wt: product.total_diamond_wt,
+          diamond_color:    product.diamond_color,
+          diamond_clarity:  product.diamond_clarity,
+          size_range:       product.size_range,
+          making_charge_pct: Number(product.making_charge_pct ?? 0),
           avgRating,
-          reviewCount:    safeReviews.length,
-          collectionName: (product.collection as unknown as { name: string } | null)?.name ?? null,
-          collectionSlug: (product.collection as unknown as { slug: string } | null)?.slug ?? null,
-          categoryName:   (product.category   as unknown as { name: string } | null)?.name ?? null,
+          reviewCount:     safeReviews.length,
+          collectionName:  (product.collection as unknown as { name: string } | null)?.name ?? null,
+          collectionSlug:  (product.collection as unknown as { slug: string } | null)?.slug ?? null,
+          categoryName:    (product.category   as unknown as { name: string } | null)?.name ?? null,
         }}
-        variants={normalizedVariants}
-        images={imgs}
+        catalog={{
+          colorGroups: catalogColorGroups,
+          purities:    catalogPurities,
+          variants:    catalogVariants,
+        }}
+        fallbackImages={fallbackImages}
       />
 
       {smartPairs.length > 0 && (
@@ -313,11 +608,7 @@ export default async function ProductPage({ params }: Props) {
 
       <ProductFAQ faqs={(product.faqs as { question: string; answer: string }[] | null) ?? []} />
 
-      <ReviewsSection
-        reviews={safeReviews}
-        total={safeReviews.length}
-        avgRating={avgRating}
-      />
+      <ReviewsSection reviews={safeReviews} total={safeReviews.length} avgRating={avgRating} />
 
       {youMayAlsoLike.length > 0 && (
         <section className="section-x py-14 border-t border-divider">

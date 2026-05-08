@@ -1,7 +1,8 @@
 'use client'
 
-import { useRouter, usePathname, useSearchParams } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { buildShopListingHref, parseShopSegments } from '@/lib/shop/paths'
 
 interface PaginationProps {
   total:    number
@@ -10,17 +11,23 @@ interface PaginationProps {
 }
 
 export function Pagination({ total, pageSize, page }: PaginationProps) {
-  const router      = useRouter()
-  const pathname    = usePathname()
-  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+  const segments = pathname.replace(/^\/shop\/?/, '').split('/').filter(Boolean)
+  const listing = parseShopSegments(segments)
   const totalPages  = Math.ceil(total / pageSize)
 
   if (totalPages <= 1) return null
 
   const goTo = (p: number) => {
-    const params = new URLSearchParams(searchParams.toString())
-    params.set('page', String(p))
-    router.push(`${pathname}?${params.toString()}`, { scroll: true })
+    router.push(
+      buildShopListingHref({
+        scopeSlug: listing?.scopeSlug ?? null,
+        sort: listing?.sort ?? 'newest',
+        page: p,
+      }),
+      { scroll: true },
+    )
   }
 
   const pages = Array.from({ length: totalPages }, (_, i) => i + 1).filter(

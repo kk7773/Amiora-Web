@@ -1,142 +1,131 @@
-import { createServerClient } from '@amiora/database'
-import { ProductForm } from '@/components/forms/ProductForm'
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { createServerClient } from '@amiora/database'
+import { ProductCatalogCreateForm } from '@/components/forms/ProductCatalogCreateForm'
 
-interface Props { params: Promise<{ id: string }> }
+interface Props {
+  params: Promise<{ id: string }>
+}
 
 export default async function EditProductPage({ params }: Props) {
   const { id } = await params
   const supabase = createServerClient()
 
-  const [{ data: product }, { data: collections }, { data: categories }, { data: tags }, { data: productTags }] = await Promise.all([
-    supabase
-      .from('products')
-      .select(`
-        *,
-        collection:collections(id, name),
-        category:categories(id, name),
-        product_images(id, url, is_primary, sort_order),
-        product_variants(
-          id, purity, weight_grams, gem_weight_ct,
-          gem_price_override, stock_status,
-          metal_variant_id, gem_variant_id,
-          metal_variant:metal_variants(variant_name),
-          gem_variant:gem_variants(cut_name)
-        )
-      `)
-      .eq('id', id)
-      .single(),
-    supabase
-      .from('collections')
-      .select('id, name, parent_id, menu_type')
-      .eq('is_active', true)
-      .order('sort_order'),
-    supabase
-      .from('categories')
-      .select('id, name, parent_id')
-      .eq('is_active', true)
-      .order('sort_order'),
-    supabase
-      .from('tags')
-      .select('id, name, slug, color')
-      .eq('is_active', true)
-      .order('sort_order'),
-    supabase
-      .from('product_tags')
-      .select('tag_id')
-      .eq('product_id', id),
-  ])
+  const [{ data: product }, { data: collections }, { data: categories }, { data: metalColors }, { data: metalPurities }] =
+    await Promise.all([
+      supabase
+        .from('products')
+        .select(`
+          id, name, slug, category_id, collection_id, product_number, short_desc, description,
+          diamond_shape, diamond_count, total_diamond_wt, diamond_color, diamond_clarity, size_range,
+          meta_title, meta_description, status, is_featured, is_new_arrival, is_best_seller, is_coming_soon, making_charge_pct,
+          product_color_groups(
+            id, color_id, images, display_order
+          ),
+          product_variants(
+            id, color_id, purity_id, sku, price, stock_qty, is_active
+          )
+        `)
+        .eq('id', id)
+        .single(),
+      supabase.from('collections').select('id, name').eq('is_active', true).order('sort_order'),
+      supabase.from('categories').select('id, name, code').eq('is_active', true).order('sort_order'),
+      supabase
+        .from('metal_colors')
+        .select('id, label, code, hex, display_order')
+        .eq('is_active', true)
+        .order('display_order'),
+      supabase
+        .from('metal_purities')
+        .select('id, label, code, display_order')
+        .eq('is_active', true)
+        .order('display_order'),
+    ])
 
   if (!product) notFound()
 
-  // ── Images: sort by sort_order ────────────────────────────────────────────
-  const sortedImages = ((product.product_images ?? []) as {
-    url: string; is_primary: boolean; sort_order: number
-  }[])
-    .sort((a, b) => a.sort_order - b.sort_order)
-    .map(({ url, is_primary }) => ({ url, is_primary }))
-
-  // ── Variants: map DB columns → form fields ────────────────────────────────
-  type DBVariant = {
+  const colorVariants = ((product.product_color_groups ?? []) as Array<{
     id: string
-    purity:             string
-    weight_grams:       number | null
-    gem_weight_ct:      number | null
-    gem_price_override: number | null
-    stock_status:       string
-    making_charge_discount_pct: number | null
-    gem_price_discount_pct:     number | null
-    metal_variant:      { variant_name: string } | null
-    gem_variant:        { cut_name: string }     | null
-  }
+    color_id: string
+    images: string[] | null
+    display_order: number
+  }>)
+    .slice()
+    .sort((a, b) => a.display_order - b.display_order)
+    .map((row) => ({
+      id: row.id,
+      color_id: row.color_id,
+      images: row.images ?? [],
+      display_order: row.display_order,
+    }))
 
-  const mappedVariants = ((product.product_variants ?? []) as unknown as DBVariant[]).map(v => {
-    // Derive metal_type from variant_name (e.g. "Yellow Gold" → "gold", "Sterling Silver" → "silver")
-    const variantName = (v.metal_variant?.variant_name ?? '').toLowerCase()
-    const metal_type  = variantName.includes('silver') ? 'silver'
-                      : variantName.includes('platinum') ? 'platinum'
-                      : 'gold'
-
-    // Derive gold colour variant from name (yellow / rose / white)
-    const gold_variant = variantName.includes('rose')  ? 'rose'
-                       : variantName.includes('white') ? 'white'
-                       : variantName.includes('yellow') ? 'yellow'
-                       : ''
-
-    return {
-      id: v.id,
-      metal_type,
-      purity:       v.purity        ?? '',
-      gold_variant,
-      gem_cut:      v.gem_variant?.cut_name ?? '',
-      weight_grams: v.weight_grams       ?? 0,
-      gem_weight_ct:v.gem_weight_ct      ?? undefined,
-      gem_price_inr:v.gem_price_override ?? undefined,
-      stock_status: v.stock_status       ?? 'in_stock',
-      making_charge_discount_pct:
-        v.making_charge_discount_pct != null && v.making_charge_discount_pct !== undefined
-          ? Number(v.making_charge_discount_pct)
-          : null,
-      gem_price_discount_pct:
-        v.gem_price_discount_pct != null && v.gem_price_discount_pct !== undefined
-          ? Number(v.gem_price_discount_pct)
-          : null,
-    }
-  })
-
-  const existingTagIds = (productTags ?? []).map((pt: { tag_id: string }) => pt.tag_id)
+  const matrix = ((product.product_variants ?? []) as Array<{
+    id: string
+    color_id: string
+    purity_id: string
+    sku: string
+    price: number | string
+    stock_qty: number
+    is_active: boolean
+  }>).map((row) => ({
+    id: row.id,
+    color_id: row.color_id,
+    purity_id: row.purity_id,
+    sku: row.sku,
+    price: Number(row.price),
+    stock_qty: row.stock_qty,
+    is_active: row.is_active,
+  }))
 
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="font-display text-2xl text-deep-teal">Edit Product</h2>
-        <p className="text-sm text-ink-muted mt-0.5">{product.name}</p>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h2 className="font-display text-2xl text-deep-teal">Edit product</h2>
+          <p className="text-sm text-ink-muted mt-0.5">{product.name}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Link href="/products" className="text-sm text-teal underline underline-offset-4">
+            Back to products
+          </Link>
+          <Link href="/products/new" className="text-sm text-teal underline underline-offset-4">
+            Create another
+          </Link>
+        </div>
       </div>
-      <ProductForm
+
+      <ProductCatalogCreateForm
         collections={collections ?? []}
-        categories={categories   ?? []}
-        tags={tags               ?? []}
-        defaultValues={{
-          id,
-          name:              product.name,
-          slug:              product.slug,
-          sku:               product.sku               ?? '',
-          short_description: product.short_description ?? '',
-          full_description:  product.description       ?? '',
-          collection_id:     (product.collection as { id: string } | null)?.id ?? '',
-          category_id:       (product.category   as { id: string } | null)?.id ?? '',
-          tag_ids:           existingTagIds,
-          is_featured:       product.is_featured       ?? false,
-          is_active:         product.is_active         ?? true,
-          making_charge_pct: product.making_charge_pct ?? 8,
-          making_charge_discount_pct:
-            (product as { making_charge_discount_pct?: number | null }).making_charge_discount_pct ?? 0,
-          gem_price_discount_pct:
-            (product as { gem_price_discount_pct?: number | null }).gem_price_discount_pct ?? 0,
-          meta_title:        product.meta_title        ?? '',
-          meta_description:  product.meta_description  ?? '',
-          product_images:    sortedImages,
-          variants:          mappedVariants,
+        categories={(categories ?? []) as Parameters<typeof ProductCatalogCreateForm>[0]['categories']}
+        metalColors={(metalColors ?? []) as Parameters<typeof ProductCatalogCreateForm>[0]['metalColors']}
+        metalPurities={(metalPurities ?? []) as Parameters<typeof ProductCatalogCreateForm>[0]['metalPurities']}
+        initialData={{
+          id: product.id,
+          product: {
+            name: product.name,
+            slug: product.slug,
+            category_id: product.category_id ?? '',
+            collection_id: product.collection_id,
+            product_number: product.product_number,
+            short_desc: product.short_desc,
+            description: product.description,
+            diamond_shape: product.diamond_shape,
+            diamond_count: product.diamond_count,
+            total_diamond_wt: product.total_diamond_wt,
+            diamond_color: product.diamond_color,
+            diamond_clarity: product.diamond_clarity,
+            size_range: product.size_range,
+            meta_title: product.meta_title,
+            meta_description: product.meta_description,
+            status: product.status,
+            is_featured: product.is_featured,
+            is_new_arrival: product.is_new_arrival,
+            is_best_seller: product.is_best_seller,
+            is_coming_soon: product.is_coming_soon,
+            making_charge_pct: Number(product.making_charge_pct ?? 8),
+          },
+          colorVariants,
+          matrix,
         }}
       />
     </div>

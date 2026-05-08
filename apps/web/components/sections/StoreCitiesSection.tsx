@@ -25,7 +25,7 @@ export function StoreCitiesSection({ cities }: { cities: CityGroup[] }) {
     >
       {/* Header */}
       <motion.div variants={fadeUp} className="mb-10">
-        <p className="text-2xs uppercase tracking-widest2 text-teal mb-2">Our Presence</p>
+        <p className="text-2xs uppercase tracking-widest2 text-ink mb-2">Our Presence</p>
         <h2 className="font-display text-display-2xl text-ink">Locate Us Near You</h2>
       </motion.div>
 
@@ -38,7 +38,7 @@ export function StoreCitiesSection({ cities }: { cities: CityGroup[] }) {
               className="group block rounded-2xl overflow-hidden bg-surface hover:shadow-md transition-shadow"
             >
               {/* Image */}
-              <div className="relative aspect-[4/3] overflow-hidden bg-gradient-to-br from-light-teal/30 to-cream">
+              <div className="relative aspect-[4/3] overflow-hidden bg-gradient-to-br from-white/30 to-cream">
                 {c.image_url ? (
                   <Image
                     src={c.image_url}
@@ -49,7 +49,7 @@ export function StoreCitiesSection({ cities }: { cities: CityGroup[] }) {
                   />
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <MapPin className="h-10 w-10 text-teal/30" />
+                    <MapPin className="h-10 w-10 text-ink/30" />
                   </div>
                 )}
               </div>
@@ -57,21 +57,21 @@ export function StoreCitiesSection({ cities }: { cities: CityGroup[] }) {
               {/* Info */}
               <div className="p-4 flex items-center justify-between">
                 <div>
-                  <p className="font-display text-base text-ink group-hover:text-deep-teal transition-colors">
+                  <p className="font-display text-base text-ink group-hover:text-ink-muted transition-colors">
                     {c.city}
                   </p>
                   <p className="text-xs text-ink-muted mt-0.5">
                     {c.count} {c.count === 1 ? 'store' : 'stores'}
                   </p>
                 </div>
-                <div className="flex items-center gap-1 text-teal">
+                <div className="flex items-center gap-1 text-ink">
                   <MapPin className="h-4 w-4" />
                 </div>
               </div>
 
               {/* View Stores link */}
               <div className="px-4 pb-4">
-                <span className="text-xs text-teal group-hover:text-deep-teal transition-colors underline-offset-2 group-hover:underline">
+                <span className="text-xs text-ink group-hover:text-ink-muted transition-colors underline-offset-2 group-hover:underline">
                   View Stores →
                 </span>
               </div>

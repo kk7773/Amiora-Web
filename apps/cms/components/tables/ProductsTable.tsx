@@ -12,7 +12,7 @@ interface Product {
   name: string
   slug: string
   is_featured: boolean
-  is_active: boolean
+  status: 'draft' | 'active' | 'archived'
   created_at: string
   collection?: { name: string } | null
   category?:   { name: string } | null
@@ -31,13 +31,14 @@ export function ProductsTable({ products, collections, categories }: Props) {
   const [filterCollection, setFilterCollection] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [failedThumbnails, setFailedThumbnails] = useState<string[]>([])
 
   const filtered = products.filter(p => {
     const q = search.toLowerCase()
     if (q && !p.name.toLowerCase().includes(q) && !p.slug.includes(q)) return false
     if (filterCollection && p.collection?.name !== filterCollection) return false
-    if (filterStatus === 'active' && !p.is_active) return false
-    if (filterStatus === 'inactive' && p.is_active) return false
+    if (filterStatus === 'active' && p.status !== 'active') return false
+    if (filterStatus === 'inactive' && p.status === 'active') return false
     return true
   })
 
@@ -77,7 +78,7 @@ export function ProductsTable({ products, collections, categories }: Props) {
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="bg-surface border border-divider rounded-lg px-3 py-2 text-sm outline-none text-ink-muted">
             <option value="">All Status</option>
             <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
+            <option value="inactive">Draft / archived</option>
           </select>
         </div>
       </div>
@@ -104,7 +105,18 @@ export function ProductsTable({ products, collections, categories }: Props) {
                   <td className="px-5 py-3">
                     {primary ? (
                       <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-surface-2">
-                        <Image src={primary.url} alt={p.name} fill className="object-cover" sizes="40px" />
+                        {!failedThumbnails.includes(p.id) ? (
+                          <Image
+                            src={primary.url}
+                            alt={p.name}
+                            fill
+                            className="object-cover"
+                            sizes="40px"
+                            onError={() => setFailedThumbnails((prev) => [...prev, p.id])}
+                          />
+                        ) : (
+                          <img src={primary.url} alt={p.name} className="h-full w-full object-cover" />
+                        )}
                       </div>
                     ) : (
                       <div className="w-10 h-10 rounded-lg bg-surface-2" />
@@ -122,7 +134,9 @@ export function ProductsTable({ products, collections, categories }: Props) {
                     </span>
                   </td>
                   <td className="px-5 py-3">
-                    <Badge variant={p.is_active ? 'success' : 'default'}>{p.is_active ? 'Active' : 'Inactive'}</Badge>
+                    <Badge variant={p.status === 'active' ? 'success' : 'default'}>
+                      {p.status === 'active' ? 'Active' : p.status === 'draft' ? 'Draft' : 'Archived'}
+                    </Badge>
                   </td>
                   <td className="px-5 py-3 text-ink-muted text-xs">{new Date(p.created_at).toLocaleDateString('en-IN')}</td>
                   <td className="px-5 py-3">

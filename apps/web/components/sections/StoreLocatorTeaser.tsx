@@ -18,14 +18,14 @@ export function StoreLocatorTeaser({ storeCount = 3 }: { storeCount?: number }) 
     >
       <div className="section-x py-12 flex flex-col sm:flex-row items-center gap-6 justify-between">
         <div className="flex items-center gap-4">
-          <div className="p-3 bg-deep-teal/10 rounded-full">
-            <MapPin className="h-6 w-6 text-deep-teal" />
+          <div className="p-3 bg-ink/10 rounded-full">
+            <MapPin className="h-6 w-6 text-ink" />
           </div>
           <div>
             <h3 className="font-display text-xl text-ink">Visit Us In Store</h3>
             <p className="text-sm text-ink-muted">Experience jewellery in person</p>
           </div>
-          <span className="hidden sm:block bg-teal text-white text-xs px-3 py-1 rounded-full">
+          <span className="hidden sm:block bg-ink text-white text-xs px-3 py-1 rounded-full">
             {storeCount} Stores
           </span>
         </div>
@@ -43,7 +43,7 @@ export function StoreLocatorTeaser({ storeCount = 3 }: { storeCount?: number }) 
 
         <Link
           href="/stores"
-          className="shrink-0 bg-deep-teal text-cream px-6 py-3 text-sm font-medium uppercase tracking-widest rounded-md hover:bg-teal transition-colors"
+          className="shrink-0 bg-ink text-white px-6 py-3 text-sm font-medium uppercase tracking-widest rounded-md hover:bg-ink-muted transition-colors"
         >
           Find Nearest Store
         </Link>

@@ -7,6 +7,9 @@ export async function getProducts(
     category?: string
     collectionId?: string
     isFeatured?: boolean
+    isNewArrival?: boolean
+    isBestSeller?: boolean
+    isComingSoon?: boolean
     status?: string
   } = {}
 ) {
@@ -27,6 +30,9 @@ export async function getProducts(
   if (params.category) query = query.eq('category', params.category)
   if (params.collectionId) query = query.eq('collection_id', params.collectionId)
   if (params.isFeatured !== undefined) query = query.eq('is_featured', params.isFeatured)
+  if (params.isNewArrival !== undefined) query = query.eq('is_new_arrival', params.isNewArrival)
+  if (params.isBestSeller !== undefined) query = query.eq('is_best_seller', params.isBestSeller)
+  if (params.isComingSoon !== undefined) query = query.eq('is_coming_soon', params.isComingSoon)
   if (params.status) query = query.eq('status', params.status)
   if (search) query = query.ilike('name', `%${search}%`)
 

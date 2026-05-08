@@ -5,7 +5,7 @@
  *   pnpm supabase gen types typescript --project-id <your-project-id> \
  *     > packages/database/src/types/supabase.ts
  *
- * This file reflects the 24-table schema from 001_initial_schema.sql
+ * Includes migrations through 010_cms_shop_color_purity_catalog.sql
  */
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
@@ -25,6 +25,7 @@ export type DemoRequestType    = 'visit_store' | 'home_visit'
 export type DemoStatus         = 'pending' | 'confirmed' | 'completed' | 'cancelled'
 export type NotificationType   = 'new_order' | 'custom_request' | 'callback' | 'demo_request' | 'review'
 export type LiveMetal          = 'gold_999' | 'silver_999'
+export type ProductPublishStatus = 'draft' | 'active' | 'archived'
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -118,6 +119,9 @@ export interface Database {
           image_url: string | null
           is_active: boolean
           sort_order: number
+          parent_id: string | null
+          code: string | null
+          display_order: number
           created_at: string
         }
         Insert: {
@@ -128,6 +132,9 @@ export interface Database {
           image_url?: string | null
           is_active?: boolean
           sort_order?: number
+          parent_id?: string | null
+          code?: string | null
+          display_order?: number
           created_at?: string
         }
         Update: Record<string, unknown>
@@ -145,6 +152,8 @@ export interface Database {
           thumb_url: string | null
           is_active: boolean
           sort_order: number
+          parent_id: string | null
+          menu_type: string
           created_at: string
           updated_at: string
         }
@@ -157,8 +166,56 @@ export interface Database {
           thumb_url?: string | null
           is_active?: boolean
           sort_order?: number
+          parent_id?: string | null
+          menu_type?: string
           created_at?: string
           updated_at?: string
+        }
+        Update: Record<string, unknown>
+        Relationships: []
+      }
+
+      // ── metal_purities ───────────────────────────────────────────────────────
+      metal_purities: {
+        Row: {
+          id: string
+          label: string
+          code: string
+          display_order: number
+          is_active: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          label: string
+          code: string
+          display_order?: number
+          is_active?: boolean
+          created_at?: string
+        }
+        Update: Record<string, unknown>
+        Relationships: []
+      }
+
+      // ── metal_colors ─────────────────────────────────────────────────────────
+      metal_colors: {
+        Row: {
+          id: string
+          label: string
+          code: string
+          hex: string | null
+          display_order: number
+          is_active: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          label: string
+          code: string
+          hex?: string | null
+          display_order?: number
+          is_active?: boolean
+          created_at?: string
         }
         Update: Record<string, unknown>
         Relationships: []
@@ -171,14 +228,25 @@ export interface Database {
           name: string
           slug: string
           description: string | null
-          short_description: string | null
+          short_desc: string | null
           category_id: string | null
           collection_id: string | null
-          sku: string | null
-          is_active: boolean
+          product_number: number
+          diamond_shape: string | null
+          diamond_count: number | null
+          total_diamond_wt: number | null
+          diamond_color: string | null
+          diamond_clarity: string | null
+          size_range: string | null
+          status: ProductPublishStatus
           is_featured: boolean
+          is_new_arrival: boolean
+          is_best_seller: boolean
+          is_coming_soon: boolean
           making_charge_pct: number
-          sort_order: number
+          making_charge_discount_pct: number
+          gem_price_discount_pct: number
+          faqs: Json
           meta_title: string | null
           meta_description: string | null
           created_at: string
@@ -189,18 +257,53 @@ export interface Database {
           name: string
           slug: string
           description?: string | null
-          short_description?: string | null
+          short_desc?: string | null
           category_id?: string | null
           collection_id?: string | null
-          sku?: string | null
-          is_active?: boolean
+          product_number?: number
+          diamond_shape?: string | null
+          diamond_count?: number | null
+          total_diamond_wt?: number | null
+          diamond_color?: string | null
+          diamond_clarity?: string | null
+          size_range?: string | null
+          status?: ProductPublishStatus
           is_featured?: boolean
+          is_new_arrival?: boolean
+          is_best_seller?: boolean
+          is_coming_soon?: boolean
           making_charge_pct?: number
-          sort_order?: number
+          making_charge_discount_pct?: number
+          gem_price_discount_pct?: number
+          faqs?: Json
           meta_title?: string | null
           meta_description?: string | null
           created_at?: string
           updated_at?: string
+        }
+        Update: Record<string, unknown>
+        Relationships: []
+      }
+
+      // ── product_color_groups ────────────────────────────────────────────────
+      product_color_groups: {
+        Row: {
+          id: string
+          product_id: string
+          color_id: string
+          images: string[]
+          display_order: number
+          is_active: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          product_id: string
+          color_id: string
+          images?: string[]
+          display_order?: number
+          is_active?: boolean
+          created_at?: string
         }
         Update: Record<string, unknown>
         Relationships: []
@@ -211,48 +314,26 @@ export interface Database {
         Row: {
           id: string
           product_id: string
-          metal_variant_id: string | null
-          purity: string
-          gem_variant_id: string | null
-          weight_grams: number | null
-          gem_weight_ct: number | null
-          gem_price_override: number | null
-          stock_status: StockStatus
+          color_group_id: string
+          color_id: string
+          purity_id: string
+          sku: string
+          price: number
+          stock_qty: number
           is_active: boolean
           created_at: string
         }
         Insert: {
           id?: string
           product_id: string
-          metal_variant_id?: string | null
-          purity: string
-          gem_variant_id?: string | null
-          weight_grams?: number | null
-          gem_weight_ct?: number | null
-          gem_price_override?: number | null
-          stock_status?: StockStatus
+          color_group_id: string
+          color_id: string
+          purity_id: string
+          sku: string
+          price: number
+          stock_qty?: number
           is_active?: boolean
           created_at?: string
-        }
-        Update: Record<string, unknown>
-        Relationships: []
-      }
-
-      // ── product_sizes ──────────────────────────────────────────────────────
-      product_sizes: {
-        Row: {
-          id: string
-          variant_id: string
-          size_label: string
-          size_type: SizeType
-          in_stock: boolean
-        }
-        Insert: {
-          id?: string
-          variant_id: string
-          size_label: string
-          size_type: SizeType
-          in_stock?: boolean
         }
         Update: Record<string, unknown>
         Relationships: []
@@ -263,7 +344,6 @@ export interface Database {
         Row: {
           id: string
           product_id: string
-          variant_id: string | null
           url: string
           alt_text: string | null
           sort_order: number
@@ -274,7 +354,6 @@ export interface Database {
         Insert: {
           id?: string
           product_id: string
-          variant_id?: string | null
           url: string
           alt_text?: string | null
           sort_order?: number
@@ -291,14 +370,14 @@ export interface Database {
         Row: {
           id: string
           product_id: string
-          paired_with_id: string
+          paired_product_id: string
           reason: string | null
           sort_order: number
         }
         Insert: {
           id?: string
           product_id: string
-          paired_with_id: string
+          paired_product_id: string
           reason?: string | null
           sort_order?: number
         }

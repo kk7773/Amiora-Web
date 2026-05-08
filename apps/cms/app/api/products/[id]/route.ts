@@ -1,123 +1,273 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@amiora/database'
-import { buildDbProductRow } from '@/lib/productPayload'
+import { generateAmioraSKU } from '@/lib/sku'
 
 type Ctx = { params: Promise<{ id: string }> }
+
+type ColorVariantIn = {
+  id?: string
+  color_id: string
+  images: string[]
+  display_order?: number
+  is_active?: boolean
+}
+
+type MatrixCell = {
+  id?: string
+  color_id: string
+  purity_id: string
+  price: number
+  stock_qty?: number
+  is_active?: boolean
+}
+
+type Body = {
+  product: {
+    name: string
+    slug: string
+    category_id: string
+    collection_id?: string | null
+    product_number: number
+    short_desc?: string | null
+    description?: string | null
+    diamond_shape?: string | null
+    diamond_count?: number | null
+    total_diamond_wt?: number | null
+    diamond_color?: string | null
+    diamond_clarity?: string | null
+    size_range?: string | null
+    meta_title?: string | null
+    meta_description?: string | null
+    status?: 'draft' | 'active' | 'archived'
+    is_featured?: boolean
+    is_new_arrival?: boolean
+    is_best_seller?: boolean
+    is_coming_soon?: boolean
+    making_charge_pct?: number
+  }
+  color_variants: ColorVariantIn[]
+  matrix: MatrixCell[]
+}
 
 export async function PATCH(req: NextRequest, { params }: Ctx) {
   try {
     const { id } = await params
-    const supabase = createServerClient()
-    const { images, variants, full_description, tag_ids, faqs, ...rest } = await req.json()
+    const body = (await req.json()) as Body
 
-    // Map form field → DB column
-    const product = {
-      ...rest,
-      ...(full_description !== undefined && { description: full_description }),
-      ...(Array.isArray(faqs) && { faqs: faqs.filter((f: { question: string; answer: string }) => f.question && f.answer) }),
+    if (!body.product?.name || !body.product.slug || !body.product.category_id) {
+      return NextResponse.json({ error: 'Missing name, slug, or category' }, { status: 400 })
+    }
+    if (!Array.isArray(body.color_variants) || body.color_variants.length === 0) {
+      return NextResponse.json({ error: 'Add at least one colour variant with images' }, { status: 400 })
+    }
+    if (!Array.isArray(body.matrix) || body.matrix.length === 0) {
+      return NextResponse.json({ error: 'Pricing matrix empty' }, { status: 400 })
     }
 
-    const dbProduct = buildDbProductRow(product as Record<string, unknown>)
+    const uniqColors = new Set(body.color_variants.map((row) => row.color_id))
+    if (uniqColors.size !== body.color_variants.length) {
+      return NextResponse.json({ error: 'Colour variants must be unique per product' }, { status: 400 })
+    }
 
-    const { data, error } = await supabase
-      .from('products')
-      .update(dbProduct)
-      .eq('id', id)
-      .select()
+    const supabase = createServerClient()
+
+    const { data: catRow, error: catErr } = await supabase
+      .from('categories')
+      .select('code')
+      .eq('id', body.product.category_id)
       .single()
 
-    if (error) {
-      console.error('[PATCH /api/products] Supabase error:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (catErr || !catRow?.code) {
+      return NextResponse.json({ error: 'Invalid category or missing category code' }, { status: 400 })
     }
 
-    // Replace images
-    if (Array.isArray(images)) {
-      await supabase.from('product_images').delete().eq('product_id', id)
-      if (images.length) {
-        const { error: imgErr } = await supabase.from('product_images').insert(
-          images.map((img: { url: string; is_primary: boolean }, i: number) => ({
-            product_id: id,
-            url:        img.url,
-            is_primary: img.is_primary,
-            sort_order: i,
-          }))
-        )
-        if (imgErr) console.error('[PATCH /api/products] image insert error:', imgErr)
-      }
-    }
-
-    // Replace tags — delete existing then re-insert selected
-    if (Array.isArray(tag_ids)) {
-      await supabase.from('product_tags').delete().eq('product_id', id)
-      if (tag_ids.length > 0) {
-        const { error: tagErr } = await supabase.from('product_tags').insert(
-          tag_ids.map((tag_id: string) => ({ product_id: id, tag_id }))
-        )
-        if (tagErr) console.error('[PATCH /api/products] tag insert error:', tagErr)
-      }
-    }
-
-    if (Array.isArray(variants)) {
-      const { data: existingRows, error: exErr } = await supabase
+    const [purityRes, colorRes, existingGroupsRes, existingVariantsRes] = await Promise.all([
+      supabase
+        .from('metal_purities')
+        .select('id, code')
+        .in('id', [...new Set(body.matrix.map((row) => row.purity_id))]),
+      supabase
+        .from('metal_colors')
+        .select('id, code')
+        .in('id', [...new Set(body.color_variants.map((row) => row.color_id))]),
+      supabase
+        .from('product_color_groups')
+        .select('id, color_id')
+        .eq('product_id', id),
+      supabase
         .from('product_variants')
-        .select('id')
+        .select('id, color_group_id, color_id, purity_id')
+        .eq('product_id', id),
+    ])
+
+    const purityCode = Object.fromEntries((purityRes.data ?? []).map((row) => [row.id, row.code]))
+    const colorCode = Object.fromEntries((colorRes.data ?? []).map((row) => [row.id, row.code]))
+    const existingGroups = existingGroupsRes.data ?? []
+    const existingVariants = existingVariantsRes.data ?? []
+
+    const productUpdate = {
+      name: body.product.name.trim(),
+      slug: body.product.slug.trim(),
+      category_id: body.product.category_id,
+      collection_id: body.product.collection_id ?? null,
+      product_number: Math.max(1, Math.floor(body.product.product_number)),
+      short_desc: body.product.short_desc ?? null,
+      description: body.product.description ?? null,
+      diamond_shape: body.product.diamond_shape ?? null,
+      diamond_count: body.product.diamond_count ?? null,
+      total_diamond_wt: body.product.total_diamond_wt ?? null,
+      diamond_color: body.product.diamond_color ?? null,
+      diamond_clarity: body.product.diamond_clarity ?? null,
+      size_range: body.product.size_range ?? null,
+      meta_title: body.product.meta_title ?? null,
+      meta_description: body.product.meta_description ?? null,
+      status: body.product.status ?? 'draft',
+      is_featured: body.product.is_featured ?? false,
+      is_new_arrival: body.product.is_new_arrival ?? false,
+      is_best_seller: body.product.is_best_seller ?? false,
+      is_coming_soon: body.product.is_coming_soon ?? false,
+      making_charge_pct: body.product.making_charge_pct ?? 8,
+    }
+
+    const { error: productError } = await supabase
+      .from('products')
+      .update(productUpdate)
+      .eq('id', id)
+
+    if (productError) {
+      console.error('[PATCH /api/products/:id] product update', productError)
+      return NextResponse.json({ error: productError.message }, { status: 500 })
+    }
+
+    const keepGroupIds = new Set(body.color_variants.map((row) => row.id).filter((value): value is string => !!value))
+    const groupsToDelete = existingGroups.filter((row) => !keepGroupIds.has(row.id))
+
+    if (groupsToDelete.length > 0) {
+      const groupIds = groupsToDelete.map((row) => row.id)
+      const { error: deleteVariantsError } = await supabase
+        .from('product_variants')
+        .delete()
         .eq('product_id', id)
-      if (exErr) console.error('[PATCH /api/products] variant list error:', exErr)
-      const existingIds = new Set((existingRows ?? []).map((r: { id: string }) => r.id))
-      type V = {
-        id?: string
-        purity?: string
-        weight_grams?: number
-        gem_weight_ct?: number | null
-        gem_price_inr?: number | null
-        stock_status?: string
-        making_charge_discount_pct?: number | null
-        gem_price_discount_pct?: number | null
+        .in('color_group_id', groupIds)
+      if (deleteVariantsError) {
+        console.error('[PATCH /api/products/:id] delete variants for removed groups', deleteVariantsError)
+        return NextResponse.json({ error: deleteVariantsError.message }, { status: 500 })
       }
-      const list = variants as V[]
-      const keepIds = new Set(list.map((v) => v.id).filter((x): x is string => Boolean(x)))
-      for (const eid of existingIds) {
-        if (!keepIds.has(eid)) {
-          const { error: delErr } = await supabase
-            .from('product_variants')
-            .delete()
-            .eq('id', eid)
-            .eq('product_id', id)
-          if (delErr) console.error('[PATCH /api/products] variant delete error:', delErr)
+
+      const { error: deleteGroupsError } = await supabase
+        .from('product_color_groups')
+        .delete()
+        .eq('product_id', id)
+        .in('id', groupIds)
+      if (deleteGroupsError) {
+        console.error('[PATCH /api/products/:id] delete groups', deleteGroupsError)
+        return NextResponse.json({ error: deleteGroupsError.message }, { status: 500 })
+      }
+    }
+
+    const groupByColorId = new Map<string, string>()
+    for (let index = 0; index < body.color_variants.length; index++) {
+      const colorVariant = body.color_variants[index]!
+      if (colorVariant.id) {
+        const { error } = await supabase
+          .from('product_color_groups')
+          .update({
+            color_id: colorVariant.color_id,
+            images: colorVariant.images ?? [],
+            display_order: colorVariant.display_order ?? index,
+            is_active: colorVariant.is_active ?? true,
+          })
+          .eq('id', colorVariant.id)
+          .eq('product_id', id)
+        if (error) {
+          console.error('[PATCH /api/products/:id] update group', error)
+          return NextResponse.json({ error: error.message }, { status: 500 })
         }
+        groupByColorId.set(colorVariant.color_id, colorVariant.id)
+        continue
       }
-      for (const v of list) {
-        const row = {
+
+      const { data, error } = await supabase
+        .from('product_color_groups')
+        .insert({
           product_id: id,
-          purity: (v.purity as string) ?? '18K',
-          weight_grams: (v.weight_grams as number) ?? 0,
-          gem_weight_ct: v.gem_weight_ct ?? null,
-          gem_price_override: v.gem_price_inr ?? null,
-          stock_status: (v.stock_status as string) ?? 'in_stock',
-          making_charge_discount_pct: v.making_charge_discount_pct ?? null,
-          gem_price_discount_pct: v.gem_price_discount_pct ?? null,
+          color_id: colorVariant.color_id,
+          images: colorVariant.images ?? [],
+          display_order: colorVariant.display_order ?? index,
+          is_active: colorVariant.is_active ?? true,
+        })
+        .select('id')
+        .single()
+
+      if (error || !data) {
+        console.error('[PATCH /api/products/:id] insert group', error)
+        return NextResponse.json({ error: error?.message ?? 'Color group insert failed' }, { status: 500 })
+      }
+      groupByColorId.set(colorVariant.color_id, data.id)
+    }
+
+    const incomingVariantIds = new Set(body.matrix.map((row) => row.id).filter((value): value is string => !!value))
+    const variantsToDelete = existingVariants.filter((row) => !incomingVariantIds.has(row.id))
+    if (variantsToDelete.length > 0) {
+      const { error } = await supabase
+        .from('product_variants')
+        .delete()
+        .eq('product_id', id)
+        .in('id', variantsToDelete.map((row) => row.id))
+      if (error) {
+        console.error('[PATCH /api/products/:id] delete variants', error)
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+    }
+
+    for (const cell of body.matrix) {
+      const groupId = groupByColorId.get(cell.color_id)
+      const purity = purityCode[cell.purity_id]
+      const color = colorCode[cell.color_id]
+      const price = Number(cell.price)
+
+      if (!groupId || !purity || !color || !Number.isFinite(price) || price <= 0) continue
+
+      const payload = {
+        color_group_id: groupId,
+        color_id: cell.color_id,
+        purity_id: cell.purity_id,
+        sku: generateAmioraSKU(String(catRow.code), productUpdate.product_number, String(purity), String(color)),
+        price,
+        stock_qty: Math.max(0, Math.floor(cell.stock_qty ?? 0)),
+        is_active: cell.is_active ?? true,
+      }
+
+      if (cell.id) {
+        const { error } = await supabase
+          .from('product_variants')
+          .update(payload)
+          .eq('id', cell.id)
+          .eq('product_id', id)
+        if (error) {
+          console.error('[PATCH /api/products/:id] update variant', error)
+          return NextResponse.json({ error: error.message }, { status: 500 })
         }
-        if (v.id) {
-          const { error: upErr } = await supabase
-            .from('product_variants')
-            .update(row)
-            .eq('id', v.id)
-            .eq('product_id', id)
-          if (upErr) console.error('[PATCH /api/products] variant update error:', upErr)
-        } else {
-          const { error: insErr } = await supabase.from('product_variants').insert(row)
-          if (insErr) console.error('[PATCH /api/products] variant insert error:', insErr)
+      } else {
+        const { error } = await supabase
+          .from('product_variants')
+          .insert({
+            product_id: id,
+            ...payload,
+          })
+        if (error) {
+          console.error('[PATCH /api/products/:id] insert variant', error)
+          return NextResponse.json({ error: error.message }, { status: 500 })
         }
       }
     }
 
-    return NextResponse.json({ data })
+    return NextResponse.json({ id })
   } catch (err: unknown) {
-    console.error('[PATCH /api/products] Unexpected error:', err)
+    console.error('[PATCH /api/products/:id]', err)
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Server error' },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }
@@ -132,7 +282,7 @@ export async function DELETE(_: NextRequest, { params }: Ctx) {
   } catch (err: unknown) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Server error' },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }

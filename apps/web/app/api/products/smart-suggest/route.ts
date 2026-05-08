@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
         .from('products')
         .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,product_images(*),product_variants(*)')
         .in('id', ids.slice(0, 4))
-        .eq('is_active', true)
+        .eq('status', 'active')
       products = data ?? []
     }
 
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
       const { data: featured } = await supabase
         .from('products')
         .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,product_images(*),product_variants(*)')
-        .eq('is_active', true)
+        .eq('status', 'active')
         .eq('is_featured', true)
         .not('id', 'in', `(${product_ids.join(',')})`)
         .limit(4 - products.length)

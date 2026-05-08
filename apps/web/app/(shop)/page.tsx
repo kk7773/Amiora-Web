@@ -20,7 +20,7 @@ export const metadata: Metadata = {
 export const revalidate = 300
 import { HeroBanner }          from '@/components/sections/HeroBanner'
 import { MarqueeStrip }        from '@/components/sections/MarqueeStrip'
-import { PriceTicker }         from '@/components/sections/PriceTicker'
+// import { PriceTicker }         from '@/components/sections/PriceTicker'
 import { FeaturedCollections } from '@/components/sections/FeaturedCollections'
 import { ProductGridSection }  from '@/components/sections/ProductGridSection'
 import { MaterialShowcase }    from '@/components/sections/MaterialShowcase'
@@ -41,6 +41,7 @@ export default async function HomePage() {
     { data: collections },
     { data: newArrivalRows },
     { data: bestSellerRows },
+    { data: topPickRows },
     { data: testimonials },
     { data: blogs },
     { data: stores },
@@ -48,8 +49,9 @@ export default async function HomePage() {
     prices,
   ] = await Promise.all([
     supabase.from('collections').select('id,name,slug,banner_url,description').eq('is_active', true).order('sort_order').limit(4),
-    supabase.from('products').select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,product_images(*),product_variants(*)').eq('is_active', true).order('created_at', { ascending: false }).limit(10),
-    supabase.from('products').select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,product_images(*),product_variants(*)').eq('is_active', true).eq('is_featured', true).order('sort_order').limit(10),
+    supabase.from('products').select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(*)').eq('status', 'active').eq('is_new_arrival', true).order('created_at', { ascending: false }).limit(10),
+    supabase.from('products').select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(*)').eq('status', 'active').or('is_best_seller.eq.true,is_featured.eq.true').order('created_at', { ascending: false }).limit(10),
+    supabase.from('products').select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(*)').eq('status', 'active').order('created_at', { ascending: false }).limit(40),
     supabase.from('testimonials').select('id,name,location,quote,rating').eq('is_featured', true).order('sort_order').limit(8),
     supabase.from('blogs').select('id,title,slug,excerpt,cover_url,tags,published_at').eq('is_published', true).order('published_at', { ascending: false }).limit(3),
     supabase.from('stores').select('id, city, image_url').eq('is_active', true).order('city'),
@@ -57,22 +59,73 @@ export default async function HomePage() {
     getLatestPrices(),
   ])
 
+  type RawProduct = {
+    id: string
+    name: string
+    slug: string
+    making_charge_pct: number
+    making_charge_discount_pct?: number | null
+    gem_price_discount_pct?: number | null
+    product_images?: { url: string; alt_text: string | null; is_primary: boolean; is_hover: boolean }[] | null
+    product_color_groups?: Array<{ id: string; color_id: string; images: string[] | null; display_order: number; is_active: boolean }> | null
+    product_variants?: { id: string; sku: string; price: number; stock_qty: number; is_active?: boolean }[] | null
+    collection?: { slug?: string } | null
+    category?: { slug?: string } | null
+  }
+
   const attachPrice = (rows: typeof newArrivalRows) =>
-    (rows ?? []).map((p) =>
-      attachCardPrice(
+    (rows ?? []).map((p) => {
+      let images = (p as RawProduct).product_images ?? []
+      if (images.length === 0 && Array.isArray((p as RawProduct).product_color_groups)) {
+        const colorGroupImages: { url: string; alt_text: string | null; is_primary: boolean; is_hover: boolean }[] = []
+        for (const cg of (p as RawProduct).product_color_groups ?? []) {
+          if (!cg || !Array.isArray(cg.images)) continue
+          for (const imgUrl of cg.images) {
+            if (typeof imgUrl !== 'string' || imgUrl.trim() === '') continue
+            colorGroupImages.push({
+              url: imgUrl,
+              alt_text: `${(p as RawProduct).name} — image ${colorGroupImages.length + 1}`,
+              is_primary: colorGroupImages.length === 0,
+              is_hover: colorGroupImages.length === 1,
+            })
+          }
+        }
+        images = colorGroupImages
+      }
+
+      return attachCardPrice(
         {
           ...p,
+          collectionSlug: (p.collection as { slug?: string } | null)?.slug ?? null,
+          categorySlug: (p.category as { slug?: string } | null)?.slug ?? null,
           making_charge_discount_pct: p.making_charge_discount_pct,
           gem_price_discount_pct: p.gem_price_discount_pct,
+          product_images: images,
           product_variants: p.product_variants ?? [],
         },
         prices.gold?.pricePerGram ?? 7200,
         prices.silver?.pricePerGram ?? 90
       )
-    )
+    })
 
   const newArrivals = attachPrice(newArrivalRows)
-  const bestSellers = attachPrice(bestSellerRows)
+
+  const featuredBestSellerRows = Array.isArray(bestSellerRows) && bestSellerRows.length > 0
+    ? bestSellerRows
+    : await supabase
+        .from('products')
+        .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(*)')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(10)
+        .then((res) => res.data ?? [])
+
+  const bestSellers = attachPrice(featuredBestSellerRows)
+  const monthlyTopPicks = attachPrice(
+    [...(topPickRows ?? [])]
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 10)
+  )
 
   // Group stores by city for the city cards section
   type StoreRow = { id: string; city: string; image_url: string | null }
@@ -99,19 +152,25 @@ export default async function HomePage() {
     <>
       <HeroBanner />
       <MarqueeStrip />
-      <PriceTicker />
+      {/* <PriceTicker /> */}
       <FeaturedCollections collections={collections ?? []} />
       <ProductGridSection
         heading="New Arrivals"
-        viewAllHref="/shop?sort=newest"
+        viewAllHref="/shop"
         products={newArrivals as Parameters<typeof ProductGridSection>[0]['products']}
         columns={5}
       />
       <MaterialShowcase />
       <ProductGridSection
         heading="Best Sellers"
-        viewAllHref="/shop?sort=popular"
+        viewAllHref="/shop/sort/popular"
         products={bestSellers as Parameters<typeof ProductGridSection>[0]['products']}
+        columns={5}
+      />
+      <ProductGridSection
+        heading="This Month’s Top Picks"
+        viewAllHref="/shop"
+        products={monthlyTopPicks as Parameters<typeof ProductGridSection>[0]['products']}
         columns={5}
       />
       <CustomizationCTA />

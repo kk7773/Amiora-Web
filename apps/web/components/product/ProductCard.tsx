@@ -10,9 +10,10 @@ import { cn } from '@amiora/ui'
 import { StarRating } from '@/components/ui/StarRating'
 import { useCartStore } from '@/stores/cartStore'
 import { formatINR } from '@/lib/pricing/calculator'
+import { getProductHref } from '@/lib/shop/paths'
 
 interface ProductCardImage {
-  url: string
+  url: string | null
   alt_text: string | null
   is_primary: boolean
   is_hover: boolean
@@ -20,12 +21,10 @@ interface ProductCardImage {
 
 interface ProductCardVariant {
   id: string
-  purity: string
-  weight_grams: number | null
-  gem_price_override: number | null
-  stock_status: string
-  making_charge_discount_pct?: number | null
-  gem_price_discount_pct?: number | null
+  sku: string
+  price: number
+  stock_qty: number
+  is_active?: boolean
 }
 
 export interface ProductCardProps {
@@ -36,8 +35,8 @@ export interface ProductCardProps {
     making_charge_pct: number
     making_charge_discount_pct?: number | null
     gem_price_discount_pct?: number | null
-    product_images: ProductCardImage[]
-    product_variants: ProductCardVariant[]
+    product_images?: ProductCardImage[] | null
+    product_variants?: ProductCardVariant[] | null
     /** computed live price — pass from server or pricing hook */
     basePrice?: number
     /** Effective % off vs undiscounted total; from `attachCardPrice` */
@@ -45,7 +44,9 @@ export interface ProductCardProps {
     avgRating?: number
     reviewCount?: number
     collectionName?: string | null
+    collectionSlug?: string | null
     categoryName?: string | null
+    categorySlug?: string | null
   }
   badgeLabel?: string
   className?: string
@@ -54,21 +55,23 @@ export interface ProductCardProps {
 export function ProductCard({ product, badgeLabel, className }: ProductCardProps) {
   const [hovered,  setHovered]  = useState(false)
   const [wishlisted, setWishlisted] = useState(false)
+  const [imageFailed, setImageFailed] = useState(false)
   const addItem  = useCartStore((s) => s.addItem)
   const router   = useRouter()
 
-  const primaryImage = product.product_images.find((i) => i.is_primary)
-    ?? product.product_images[0]
-  const hoverImage   = product.product_images.find((i) => i.is_hover)
-    ?? product.product_images[1]
-    ?? primaryImage
+  const images = Array.isArray(product.product_images) ? product.product_images : []
+  const validImages = images.filter((img) => typeof img?.url === 'string' && img.url.trim() !== '')
+  const primaryImage = validImages.find((i) => i.is_primary && i.url) ?? validImages[0] ?? null
+  const hoverImage = validImages.find((i) => i.is_hover && i.url) ?? validImages.find((i) => i.url && i !== primaryImage) ?? primaryImage
 
   const displayImg = hovered && hoverImage ? hoverImage : primaryImage
+  const hasImage = Boolean(displayImg?.url)
 
-  const firstVariant  = product.product_variants.find((v) => v.stock_status !== 'out_of_stock')
-    ?? product.product_variants[0]
-  const displayPrice  = product.basePrice ?? 0
-  const inStock       = firstVariant?.stock_status !== 'out_of_stock'
+  const variants = Array.isArray(product.product_variants) ? product.product_variants : []
+  const firstVariant = variants.find((v) => (v.stock_qty ?? 0) > 0 && (v.is_active ?? true)) ?? variants[0] ?? null
+  const displayPrice = product.basePrice ?? 0
+  const inStock = firstVariant ? (firstVariant.stock_qty ?? 0) > 0 : false
+  const productHref = product.slug ? getProductHref(product as { slug: string; collectionSlug?: string | null; categorySlug?: string | null }) : '/shop'
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -78,7 +81,7 @@ export function ProductCard({ product, badgeLabel, className }: ProductCardProps
       variantId:    firstVariant.id,
       sizeLabel:    '',
       productName:  product.name,
-      variantLabel: firstVariant.purity,
+      variantLabel: firstVariant.sku,
       imageUrl:     primaryImage?.url ?? '',
       unitPrice:    displayPrice,
       quantity:     1,
@@ -96,21 +99,30 @@ export function ProductCard({ product, badgeLabel, className }: ProductCardProps
 
   return (
     <Link
-      href={`/products/${product.slug}`}
+      href={productHref}
       className={cn('group block', className)}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
       {/* Image container */}
       <div className="relative aspect-square overflow-hidden rounded-lg bg-surface">
-        {displayImg ? (
-          <Image
-            src={displayImg.url}
-            alt={displayImg.alt_text ?? product.name}
-            fill
-            className="object-cover transition-transform duration-500 group-hover:scale-105"
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-          />
+        {hasImage ? (
+          !imageFailed ? (
+            <Image
+              src={displayImg!.url!}
+              alt={displayImg?.alt_text ?? product.name}
+              fill
+              className="object-cover transition-transform duration-500 group-hover:scale-105"
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+              onError={() => setImageFailed(true)}
+            />
+          ) : (
+            <img
+              src={displayImg!.url!}
+              alt={displayImg?.alt_text ?? product.name}
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            />
+          )
         ) : (
           <div className="h-full w-full bg-gradient-to-br from-light-teal/20 to-cream" />
         )}
@@ -168,7 +180,7 @@ export function ProductCard({ product, badgeLabel, className }: ProductCardProps
           <button
             type="button"
             className="hidden md:flex items-center justify-center gap-2 w-full py-2 bg-bg/90 backdrop-blur-sm text-ink text-xs font-medium uppercase tracking-widest rounded-md hover:bg-surface transition-colors"
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.push(`/products/${product.slug}`) }}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.push(productHref) }}
           >
             <Eye className="h-3.5 w-3.5" />
             View Product

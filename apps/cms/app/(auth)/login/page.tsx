@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useRouter } from 'next/navigation'
 import { Eye, EyeOff, Loader2, ShieldCheck, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { createBrowserClient } from '@/lib/supabase/client'
@@ -31,7 +30,6 @@ function supabaseAuthMessage(err: unknown): string {
 }
 
 export default function AdminLoginPage() {
-  const router = useRouter()
   const [showPw,    setShowPw]    = useState(false)
   const [loading,   setLoading]   = useState(false)
   const [envIssue,  setEnvIssue]  = useState<string | null>(null)
@@ -63,8 +61,7 @@ export default function AdminLoginPage() {
       }
       if (step1.success) {
         toast.success('Welcome back, Admin!')
-        router.push('/dashboard')
-        router.refresh()
+        window.location.assign('/dashboard')
         return
       }
 
@@ -77,10 +74,18 @@ export default function AdminLoginPage() {
         email,
         password: data.password,
       })
+
       if (error) throw error
+
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        toast.error('Could not establish a session. Check Supabase settings and try again.')
+        return
+      }
 
       const meRes = await fetch('/api/me', { credentials: 'same-origin' })
       const me    = await meRes.json() as { cms_role?: string; error?: string }
+
       if (!meRes.ok || me.error) {
         await supabase.auth.signOut()
         toast.error(me.error ?? 'Access denied. Admin privileges required.')
@@ -93,8 +98,7 @@ export default function AdminLoginPage() {
       }
 
       toast.success('Welcome back, Admin!')
-      router.push('/dashboard')
-      router.refresh()
+      window.location.assign('/dashboard')
     } catch (err: unknown) {
       toast.error(supabaseAuthMessage(err))
     } finally {

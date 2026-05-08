@@ -45,15 +45,20 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   const { data: rows } = await supabase
     .from('products')
-    .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,product_images(*),product_variants(*)')
-    .eq('is_active', true)
+    .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,collection:collections(slug),category:categories(slug),product_images(*),product_variants(*)')
+    .eq('status', 'active')
     .ilike('name', `%${query}%`)
     .order('created_at', { ascending: false })
     .limit(48)
 
   const products = (rows ?? []).map((p) =>
     attachCardPrice(
-      { ...p, product_variants: p.product_variants ?? [] },
+      {
+        ...p,
+        collectionSlug: (p.collection as { slug?: string } | null)?.slug ?? null,
+        categorySlug: (p.category as { slug?: string } | null)?.slug ?? null,
+        product_variants: p.product_variants ?? [],
+      },
       prices.gold?.pricePerGram ?? 7200,
       prices.silver?.pricePerGram ?? 90
     )

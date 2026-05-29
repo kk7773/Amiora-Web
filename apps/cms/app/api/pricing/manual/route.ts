@@ -9,7 +9,7 @@ interface ManualPriceBody {
 
 export async function POST(req: NextRequest) {
   const perm = await requireCmsAccess('pricing', 'edit')
-  if (!perm.ok) return perm.response
+  if (perm.ok === false) return perm.response
   const body = (await req.json()) as ManualPriceBody
   const { gold, silver } = body
 

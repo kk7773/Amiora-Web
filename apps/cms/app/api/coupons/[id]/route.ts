@@ -4,7 +4,7 @@ import { requireCmsAccess, writeAuditLog } from '@/lib/rbac'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const perm = await requireCmsAccess('coupons', 'edit')
-  if (!perm.ok) return perm.response
+  if (perm.ok === false) return perm.response
   const { id } = await params
   const body    = await req.json()
   const supabase = createServerClient()
@@ -35,7 +35,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const perm = await requireCmsAccess('coupons', 'edit')
-  if (!perm.ok) return perm.response
+  if (perm.ok === false) return perm.response
   const { id } = await params
   const supabase = createServerClient()
 

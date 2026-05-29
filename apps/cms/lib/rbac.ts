@@ -16,7 +16,7 @@ export type CmsAccessResult =
  *
  * Call at the top of every API handler:
  *   const perm = await requireCmsAccess('products', 'edit')
- *   if (!perm.ok) return perm.response
+ *   if (perm.ok === false) return perm.response
  *
  * Access tiers (first match wins):
  * 1. Hardcoded super-admin cookie → allow all

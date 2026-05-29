@@ -3,7 +3,7 @@ import { requireCmsAccess, writeAuditLog } from '@/lib/rbac'
 
 export async function POST() {
   const perm = await requireCmsAccess('pricing', 'edit')
-  if (!perm.ok) return perm.response
+  if (perm.ok === false) return perm.response
   try {
     const storefrontUrl = process.env.NEXT_PUBLIC_STOREFRONT_URL ?? 'http://localhost:3000'
     const res = await fetch(`${storefrontUrl}/api/pricing/refresh`, {

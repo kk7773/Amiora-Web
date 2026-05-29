@@ -12,7 +12,7 @@ type Ctx = { params: Promise<{ table: string; id: string }> }
 
 export async function PATCH(req: NextRequest, { params }: Ctx) {
   const perm = await requireCmsAccess('requests', 'edit')
-  if (!perm.ok) return perm.response
+  if (perm.ok === false) return perm.response
   const { table, id } = await params
   const dbTable = TABLE_MAP[table]
   if (!dbTable) return NextResponse.json({ error: 'Invalid table' }, { status: 400 })

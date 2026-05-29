@@ -95,7 +95,7 @@ type Body = {
 
 export async function POST(req: NextRequest) {
   const perm = await requireCmsAccess('products', 'edit')
-  if (!perm.ok) return perm.response
+  if (perm.ok === false) return perm.response
   try {
     const body = (await req.json()) as Body
     if (!body.product?.name || !body.product.slug || !body.product.category_id) {

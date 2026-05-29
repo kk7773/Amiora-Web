@@ -6,7 +6,7 @@ type Ctx = { params: Promise<{ id: string }> }
 
 export async function PATCH(req: NextRequest, { params }: Ctx) {
   const perm = await requireCmsAccess('collections', 'edit')
-  if (!perm.ok) return perm.response
+  if (perm.ok === false) return perm.response
   const { id } = await params
   const body    = await req.json()
   const supabase = createServerClient()
@@ -23,7 +23,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 
 export async function DELETE(_: NextRequest, { params }: Ctx) {
   const perm = await requireCmsAccess('collections', 'edit')
-  if (!perm.ok) return perm.response
+  if (perm.ok === false) return perm.response
   const { id } = await params
   const supabase = createServerClient()
   // Unlink children before deleting parent

@@ -4,7 +4,7 @@ import { requireCmsAccess, writeAuditLog } from '@/lib/rbac'
 
 export async function PATCH(req: NextRequest) {
   const perm = await requireCmsAccess('settings', 'edit')
-  if (!perm.ok) return perm.response
+  if (perm.ok === false) return perm.response
   const body = await req.json()
   const supabase = createServerClient()
 

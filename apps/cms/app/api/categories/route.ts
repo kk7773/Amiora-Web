@@ -4,7 +4,7 @@ import { requireCmsAccess, writeAuditLog } from '@/lib/rbac'
 
 export async function GET() {
   const perm = await requireCmsAccess('collections', 'view')
-  if (!perm.ok) return perm.response
+  if (perm.ok === false) return perm.response
   const supabase = createServerClient()
   const { data, error } = await supabase
     .from('categories')
@@ -16,7 +16,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const perm = await requireCmsAccess('collections', 'edit')
-  if (!perm.ok) return perm.response
+  if (perm.ok === false) return perm.response
   const body = await req.json()
   const supabase = createServerClient()
   const { data, error } = await supabase

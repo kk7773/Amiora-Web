@@ -97,7 +97,7 @@ type Body = {
 
 export async function PATCH(req: NextRequest, { params }: Ctx) {
   const perm = await requireCmsAccess('products', 'edit')
-  if (!perm.ok) return perm.response
+  if (perm.ok === false) return perm.response
   try {
     const { id } = await params
     const body = (await req.json()) as Body
@@ -326,7 +326,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 
 export async function DELETE(_: NextRequest, { params }: Ctx) {
   const perm = await requireCmsAccess('products', 'edit')
-  if (!perm.ok) return perm.response
+  if (perm.ok === false) return perm.response
   try {
     const { id } = await params
     const supabase = createServerClient()

@@ -5,7 +5,7 @@ import { requireCmsAccess, writeAuditLog } from '@/lib/rbac'
 
 export async function POST(req: NextRequest) {
   const perm = await requireCmsAccess('products', 'edit')
-  if (!perm.ok) return perm.response
+  if (perm.ok === false) return perm.response
   try {
     const supabase = createServerClient()
     const { images, variants, full_description, tag_ids, faqs, ...rest } = await req.json()

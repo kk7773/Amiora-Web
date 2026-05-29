@@ -797,7 +797,6 @@ export interface Database {
         Update: Record<string, unknown>
         Relationships: []
       }
-    }
 
       // ── profiles ─────────────────────────────────────────────────────────
       profiles: {

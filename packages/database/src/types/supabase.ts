@@ -819,7 +819,7 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
-        Update: Partial<Omit<Database['public']['Tables']['profiles']['Insert'], 'id'>>
+        Update: Record<string, unknown>
         Relationships: []
       }
 
@@ -839,7 +839,7 @@ export interface Database {
           sort_order?: number
           created_at?: string
         }
-        Update: Partial<Omit<Database['public']['Tables']['cms_tabs']['Insert'], 'id'>>
+        Update: Record<string, unknown>
         Relationships: []
       }
 
@@ -863,7 +863,7 @@ export interface Database {
           assigned_by?: string | null
           created_at?:  string
         }
-        Update: Partial<Omit<Database['public']['Tables']['admin_tab_permissions']['Insert'], 'id'>>
+        Update: Record<string, unknown>
         Relationships: [
           { foreignKeyName: 'admin_tab_permissions_admin_id_fkey'; columns: ['admin_id']; referencedRelation: 'profiles'; referencedColumns: ['id'] },
           { foreignKeyName: 'admin_tab_permissions_tab_id_fkey';   columns: ['tab_id'];   referencedRelation: 'cms_tabs'; referencedColumns: ['id'] },
@@ -884,7 +884,7 @@ export interface Database {
           tab_slug:   string
           created_at?: string
         }
-        Update: Partial<Omit<Database['public']['Tables']['cms_admin_permissions']['Insert'], 'id'>>
+        Update: Record<string, unknown>
         Relationships: []
       }
 
@@ -908,7 +908,7 @@ export interface Database {
           meta?:        Record<string, unknown> | null
           created_at?:  string
         }
-        Update: Partial<Omit<Database['public']['Tables']['admin_audit_logs']['Insert'], 'id'>>
+        Update: Record<string, unknown>
         Relationships: [
           { foreignKeyName: 'admin_audit_logs_admin_id_fkey'; columns: ['admin_id']; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         ]

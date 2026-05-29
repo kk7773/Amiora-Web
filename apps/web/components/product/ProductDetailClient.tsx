@@ -94,40 +94,40 @@ function readAmount(value: unknown): number | string | null {
 function parseBreakupRows(rawRows: unknown): PriceBreakupRow[] {
   if (!Array.isArray(rawRows)) return []
 
-  return rawRows
-    .map((row) => {
-      if (!row || typeof row !== 'object') return null
-      const record = row as Record<string, unknown>
+  const result: PriceBreakupRow[] = []
+  for (const row of rawRows) {
+    if (!row || typeof row !== 'object') continue
+    const record = row as Record<string, unknown>
 
-      const labelRaw =
-        (typeof record.label === 'string' && record.label) ||
-        (typeof record.particular === 'string' && record.particular) ||
-        (typeof record.particulars === 'string' && record.particulars) ||
-        (typeof record.name === 'string' && record.name) ||
-        (typeof record.title === 'string' && record.title) ||
-        null
+    const labelRaw =
+      (typeof record.label === 'string' && record.label) ||
+      (typeof record.particular === 'string' && record.particular) ||
+      (typeof record.particulars === 'string' && record.particulars) ||
+      (typeof record.name === 'string' && record.name) ||
+      (typeof record.title === 'string' && record.title) ||
+      null
 
-      const amount =
-        readAmount(record.amount) ??
-        readAmount(record.price) ??
-        readAmount(record.value) ??
-        readAmount(record.net) ??
-        readAmount(record.total)
+    const amount =
+      readAmount(record.amount) ??
+      readAmount(record.price) ??
+      readAmount(record.value) ??
+      readAmount(record.net) ??
+      readAmount(record.total)
 
-      if (!labelRaw || amount == null) return null
+    if (!labelRaw || amount == null) continue
 
-      return {
-        label: prettifyLabel(labelRaw),
-        amount,
-        originalAmount:
-          readAmount(record.original_amount) ??
-          readAmount(record.originalAmount) ??
-          readAmount(record.mrp) ??
-          readAmount(record.old_price) ??
-          null,
-      } satisfies PriceBreakupRow
+    result.push({
+      label: prettifyLabel(labelRaw),
+      amount,
+      originalAmount:
+        readAmount(record.original_amount) ??
+        readAmount(record.originalAmount) ??
+        readAmount(record.mrp) ??
+        readAmount(record.old_price) ??
+        null,
     })
-    .filter((row): row is PriceBreakupRow => row != null)
+  }
+  return result
 }
 
 function normalizePriceBreakup(raw: unknown): PriceBreakupPayload | null {

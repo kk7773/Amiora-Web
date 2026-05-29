@@ -9,7 +9,7 @@ const HARDCODED_COOKIE_VALUE = 'amiora-admin-authenticated-2024'
 
 // Map route prefix → tab slug (must match ALL_NAV_ITEMS slugs in Sidebar)
 const ROUTE_TO_TAB: Record<string, string> = {
-  '/dashboard':        'dashboard',
+  // /dashboard is intentionally omitted — it is always accessible to any authenticated admin
   '/products':         'products',
   '/collections':      'collections',
   '/orders':           'orders',
@@ -24,6 +24,7 @@ const ROUTE_TO_TAB: Record<string, string> = {
   '/pricing':          'pricing',
   '/settings':         'settings',
   '/admin-management': 'admin-management',
+  '/audit-logs':       'audit-logs',
 }
 
 function getTabSlug(pathname: string): string | null {
@@ -123,7 +124,8 @@ export async function middleware(req: NextRequest) {
         return supabaseResponse
       }
       if (!rpcErr && can === false) {
-        if (tabSlug !== 'admin-management') {
+        const superAdminOnlySlug = tabSlug === 'admin-management' || tabSlug === 'audit-logs'
+        if (!superAdminOnlySlug) {
           const { count, error: permCountErr } = await supabase
             .from('admin_tab_permissions')
             .select('id', { count: 'exact', head: true })
@@ -170,7 +172,7 @@ export async function middleware(req: NextRequest) {
       return supabaseResponse
     }
 
-    if (tabSlug === 'admin-management') {
+    if (tabSlug === 'admin-management' || tabSlug === 'audit-logs') {
       return redirectPreservingSupabaseSession(new URL('/dashboard', req.url), supabaseResponse)
     }
 

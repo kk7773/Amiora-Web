@@ -182,6 +182,7 @@ export interface Database {
           label: string
           code: string
           display_order: number
+          metal: string
           is_active: boolean
           created_at: string
         }
@@ -190,6 +191,7 @@ export interface Database {
           label: string
           code: string
           display_order?: number
+          metal?: string
           is_active?: boolean
           created_at?: string
         }
@@ -238,6 +240,7 @@ export interface Database {
           diamond_color: string | null
           diamond_clarity: string | null
           size_range: string | null
+          metal_weight_g: number | null
           status: ProductPublishStatus
           is_featured: boolean
           is_new_arrival: boolean
@@ -246,6 +249,8 @@ export interface Database {
           making_charge_pct: number
           making_charge_discount_pct: number
           gem_price_discount_pct: number
+          has_stone: boolean
+          stone_lines: Json
           faqs: Json
           meta_title: string | null
           meta_description: string | null
@@ -267,6 +272,7 @@ export interface Database {
           diamond_color?: string | null
           diamond_clarity?: string | null
           size_range?: string | null
+          metal_weight_g?: number | null
           status?: ProductPublishStatus
           is_featured?: boolean
           is_new_arrival?: boolean
@@ -275,6 +281,8 @@ export interface Database {
           making_charge_pct?: number
           making_charge_discount_pct?: number
           gem_price_discount_pct?: number
+          has_stone?: boolean
+          stone_lines?: Json
           faqs?: Json
           meta_title?: string | null
           meta_description?: string | null
@@ -791,6 +799,122 @@ export interface Database {
       }
     }
 
+      // ── profiles ─────────────────────────────────────────────────────────
+      profiles: {
+        Row: {
+          id:         string
+          email:      string | null
+          full_name:  string | null
+          role:       'super_admin' | 'admin'
+          is_active:  boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id:         string
+          email?:     string | null
+          full_name?: string | null
+          role?:      'super_admin' | 'admin'
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Omit<Database['public']['Tables']['profiles']['Insert'], 'id'>>
+        Relationships: []
+      }
+
+      // ── cms_tabs ──────────────────────────────────────────────────────────
+      cms_tabs: {
+        Row: {
+          id:         string
+          slug:       string
+          label:      string
+          sort_order: number
+          created_at: string
+        }
+        Insert: {
+          id?:         string
+          slug:        string
+          label:       string
+          sort_order?: number
+          created_at?: string
+        }
+        Update: Partial<Omit<Database['public']['Tables']['cms_tabs']['Insert'], 'id'>>
+        Relationships: []
+      }
+
+      // ── admin_tab_permissions ─────────────────────────────────────────────
+      admin_tab_permissions: {
+        Row: {
+          id:          string
+          admin_id:    string
+          tab_id:      string
+          can_view:    boolean
+          can_edit:    boolean
+          assigned_by: string | null
+          created_at:  string
+        }
+        Insert: {
+          id?:          string
+          admin_id:     string
+          tab_id:       string
+          can_view?:    boolean
+          can_edit?:    boolean
+          assigned_by?: string | null
+          created_at?:  string
+        }
+        Update: Partial<Omit<Database['public']['Tables']['admin_tab_permissions']['Insert'], 'id'>>
+        Relationships: [
+          { foreignKeyName: 'admin_tab_permissions_admin_id_fkey'; columns: ['admin_id']; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+          { foreignKeyName: 'admin_tab_permissions_tab_id_fkey';   columns: ['tab_id'];   referencedRelation: 'cms_tabs'; referencedColumns: ['id'] },
+        ]
+      }
+
+      // ── cms_admin_permissions (legacy) ────────────────────────────────────
+      cms_admin_permissions: {
+        Row: {
+          id:        string
+          user_id:   string
+          tab_slug:  string
+          created_at: string
+        }
+        Insert: {
+          id?:        string
+          user_id:    string
+          tab_slug:   string
+          created_at?: string
+        }
+        Update: Partial<Omit<Database['public']['Tables']['cms_admin_permissions']['Insert'], 'id'>>
+        Relationships: []
+      }
+
+      // ── admin_audit_logs ──────────────────────────────────────────────────
+      admin_audit_logs: {
+        Row: {
+          id:          string
+          admin_id:    string | null
+          action:      string
+          resource:    string | null
+          resource_id: string | null
+          meta:        Record<string, unknown> | null
+          created_at:  string
+        }
+        Insert: {
+          id?:          string
+          admin_id?:    string | null
+          action:       string
+          resource?:    string | null
+          resource_id?: string | null
+          meta?:        Record<string, unknown> | null
+          created_at?:  string
+        }
+        Update: Partial<Omit<Database['public']['Tables']['admin_audit_logs']['Insert'], 'id'>>
+        Relationships: [
+          { foreignKeyName: 'admin_audit_logs_admin_id_fkey'; columns: ['admin_id']; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        ]
+      }
+    }
+
     Views: {
       [_ in never]: never
     }
@@ -798,6 +922,10 @@ export interface Database {
     Functions: {
       is_admin: {
         Args: Record<string, never>
+        Returns: boolean
+      }
+      cms_user_has_tab: {
+        Args: { p_slug: string }
         Returns: boolean
       }
     }

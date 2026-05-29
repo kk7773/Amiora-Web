@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@amiora/database'
+import { requireCmsAccess, writeAuditLog } from '@/lib/rbac'
 
 type Ctx = { params: Promise<{ id: string }> }
 
 export async function PATCH(req: NextRequest, { params }: Ctx) {
+  const perm = await requireCmsAccess('stores', 'edit')
+  if (!perm.ok) return perm.response
   try {
     const { id } = await params
     const supabase = createServerClient()
@@ -35,6 +38,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       console.error('[PATCH /api/stores]', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
+    await writeAuditLog({ adminId: perm.adminId, action: 'update_store', resource: 'stores', resourceId: id })
     return NextResponse.json({ data })
   } catch (err: unknown) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Server error' }, { status: 500 })
@@ -42,11 +46,14 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 }
 
 export async function DELETE(_: NextRequest, { params }: Ctx) {
+  const perm = await requireCmsAccess('stores', 'edit')
+  if (!perm.ok) return perm.response
   try {
     const { id } = await params
     const supabase = createServerClient()
     const { error } = await supabase.from('stores').delete().eq('id', id)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    await writeAuditLog({ adminId: perm.adminId, action: 'delete_store', resource: 'stores', resourceId: id })
     return NextResponse.json({ success: true })
   } catch (err: unknown) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Server error' }, { status: 500 })

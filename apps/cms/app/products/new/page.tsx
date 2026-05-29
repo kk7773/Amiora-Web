@@ -19,7 +19,7 @@ export default async function NewProductPage() {
         .order('display_order'),
       supabase
         .from('metal_purities')
-        .select('id, label, code, display_order')
+        .select('id, label, code, display_order, metal')
         .eq('is_active', true)
         .order('display_order'),
     ])

@@ -35,41 +35,46 @@ export function MegaMenu({ onClose }: MegaMenuProps) {
 
   return (
     <div className="absolute left-0 right-0 top-full bg-bg border-b border-divider shadow-lg animate-fade-in z-50">
-      <div className="section-x py-8 grid grid-cols-[1fr_280px] gap-12 max-w-6xl mx-auto">
+      <div className="section-x py-8 mx-auto grid max-w-6xl grid-cols-1 gap-10 md:grid-cols-[minmax(0,1fr)_min(280px,32%)] md:gap-10 lg:gap-12">
 
-        {/* Left — collections + products */}
-        <div className="grid grid-cols-2 gap-8 lg:grid-cols-4">
+        {/* Left — collections + products (equal-width columns, aligned tops) */}
+        <div className="grid min-w-0 grid-cols-2 gap-x-6 gap-y-8 sm:gap-x-8 md:grid-cols-4 md:gap-x-6 lg:gap-x-8">
           {loading
             ? Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="space-y-2">
-                  <div className="skeleton h-4 w-24 rounded" />
+                <div key={i} className="flex min-w-0 flex-col space-y-3">
+                  <div className="skeleton h-5 w-28 rounded" />
                   {Array.from({ length: 3 }).map((_, j) => (
-                    <div key={j} className="skeleton h-3 w-32 rounded" />
+                    <div key={j} className="skeleton h-4 w-full max-w-[11rem] rounded" />
                   ))}
                 </div>
               ))
             : collections.map((col) => (
                 <div
                   key={col.slug}
+                  className="flex min-w-0 flex-col items-stretch"
                   onMouseEnter={() => setActiveImage(col.thumb_url)}
                 >
                   <Link
                     href={`/shop/${col.slug}`}
                     onClick={onClose}
-                    className="font-display text-lg text-deep-teal hover:text-teal transition-colors block mb-2"
+                    className="font-display text-xl text-deep-teal hover:text-teal transition-colors mb-3 block leading-tight"
                   >
                     {col.name}
                   </Link>
-                  <ul className="space-y-1">
+                  <ul className="m-0 list-none p-0 flex flex-col gap-0.5">
                     {col.products.slice(0, 5).map((p) => (
-                      <li key={p.slug}>
+                      <li key={p.slug} className="min-w-0">
                         <Link
                           href={`/shop/${col.slug}/${p.slug}`}
                           onClick={onClose}
-                          className="text-xs text-ink-muted hover:text-teal transition-colors flex items-center gap-1 group"
+                          className="group flex items-start gap-2 py-2 text-base leading-snug text-ink-muted hover:text-teal transition-colors"
                         >
-                          <ChevronRight className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                          {p.name}
+                          {/* Name first so left edge aligns with collection title above */}
+                          <span className="min-w-0 flex-1">{p.name}</span>
+                          <ChevronRight
+                            aria-hidden
+                            className="h-3.5 w-3.5 shrink-0 pt-0.5 opacity-0 transition-opacity group-hover:opacity-100"
+                          />
                         </Link>
                       </li>
                     ))}

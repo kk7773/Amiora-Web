@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Plus, Trash2, ChevronUp, ChevronDown } from 'lucide-react'
@@ -10,7 +10,34 @@ import { generateAmioraSKU, slugifyName } from '@/lib/sku'
 type Category = { id: string; name: string; code: string | null }
 type Collection = { id: string; name: string }
 type MetalColor = { id: string; label: string; code: string; hex: string | null; display_order: number }
-type MetalPurity = { id: string; label: string; code: string; display_order: number }
+type MetalPurity = {
+  id: string
+  label: string
+  code: string
+  display_order: number
+  metal?: 'gold' | 'silver' | 'platinum' | string
+}
+
+function inferProductMetal(metalPuritiesList: MetalPurity[], initial?: InitialData): 'gold' | 'silver' {
+  const pid = initial?.matrix?.[0]?.purity_id
+  if (!pid) return 'gold'
+  const row = metalPuritiesList.find((x) => x.id === pid)
+  const m = (row?.metal ?? 'gold').toLowerCase()
+  return m === 'silver' ? 'silver' : 'gold'
+}
+
+/** Silver catalog uses one internal colour row (Sterling / SV). */
+function pickSilverColorId(colors: MetalColor[]): string {
+  if (!colors.length) return ''
+  const silver = colors.find(
+    (c) =>
+      /silver|925|sterling/i.test(c.label) ||
+      c.code.toUpperCase() === 'SV' ||
+      c.code.toUpperCase() === 'AG',
+  )
+  if (silver) return silver.id
+  return colors[0]!.id
+}
 
 type ColorRow = {
   key: string
@@ -46,6 +73,7 @@ type InitialData = {
     diamond_color: string | null
     diamond_clarity: string | null
     size_range: string | null
+    metal_weight_g?: number | null
     meta_title: string | null
     meta_description: string | null
     status: 'draft' | 'active' | 'archived'
@@ -54,6 +82,8 @@ type InitialData = {
     is_best_seller: boolean
     is_coming_soon: boolean
     making_charge_pct: number
+    has_stone?: boolean
+    stone_lines?: unknown
   }
   colorVariants: Array<{
     id: string
@@ -97,6 +127,49 @@ function buildCellState(matrix: MatrixSeedCell[]) {
   ) as Record<string, CellState>
 }
 
+type StoneLineUi = {
+  key:      string
+  name:     string
+  cut_size: string
+  shape:    string
+  color:    string
+  count:    string
+  rate:     string
+}
+
+function stoneLinesFromDb(raw: unknown): StoneLineUi[] {
+  if (!Array.isArray(raw) || raw.length === 0) return []
+  return raw.map((item, i) => {
+    const o = item as Record<string, unknown>
+    const name     = typeof o.name     === 'string' ? o.name     : ''
+    const cut_size = typeof o.cut_size === 'string' ? o.cut_size : ''
+    const shape    = typeof o.shape    === 'string' ? o.shape    : ''
+    const color    = typeof o.color    === 'string' ? o.color    : ''
+    const rateRaw  = o.rate_inr
+    const rateStr  =
+      typeof rateRaw === 'number' && Number.isFinite(rateRaw)
+        ? String(rateRaw)
+        : typeof rateRaw === 'string' && rateRaw.trim() !== ''
+          ? rateRaw
+          : ''
+    const countRaw = o.count
+    const countStr =
+      typeof countRaw === 'number' && Number.isFinite(countRaw)
+        ? String(countRaw)
+        : typeof countRaw === 'string' && countRaw.trim() !== ''
+          ? countRaw
+          : ''
+    return { key: `st-${i}-${name.slice(0, 8)}`, name, cut_size, shape, color, count: countStr, rate: rateStr }
+  })
+}
+
+function newStoneRow(): StoneLineUi {
+  return {
+    key: `st-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    name: '', cut_size: '', shape: '', color: '', count: '', rate: '',
+  }
+}
+
 export function ProductCatalogCreateForm({
   categories,
   collections,
@@ -109,13 +182,31 @@ export function ProductCatalogCreateForm({
 
   const isEdit = !!initialData
 
-  const sortedPurities = useMemo(
-    () => [...metalPurities].sort((a, b) => a.display_order - b.display_order || a.code.localeCompare(b.code)),
+  const normalizedPurities = useMemo(
+    () =>
+      metalPurities.map((p) => ({
+        ...p,
+        metal: (p.metal ?? 'gold').toLowerCase() as 'gold' | 'silver' | 'platinum',
+      })),
     [metalPurities],
   )
 
+  const [productMetalType, setProductMetalType] = useState<'gold' | 'silver'>(() =>
+    inferProductMetal(metalPurities, initialData),
+  )
+
+  const puritiesForProduct = useMemo(
+    () =>
+      normalizedPurities
+        .filter((p) => p.metal === productMetalType)
+        .sort((a, b) => a.display_order - b.display_order || a.code.localeCompare(b.code)),
+    [normalizedPurities, productMetalType],
+  )
+
   const hasMetalColors = metalColors.length > 0
-  const hasMetalPurities = sortedPurities.length > 0
+  const hasMetalPurities = metalPurities.length > 0
+  const isGoldProduct = productMetalType === 'gold'
+  const appliedLayoutMetalRef = useRef<'gold' | 'silver' | null>(null)
 
   const [name, setName] = useState(initialData?.product.name ?? '')
   const [slug, setSlug] = useState(initialData?.product.slug ?? '')
@@ -149,6 +240,24 @@ export function ProductCatalogCreateForm({
     String(initialData?.product.making_charge_pct ?? 8),
   )
 
+  const [metalWeightG, setMetalWeightG] = useState<string>(() => {
+    const w = initialData?.product.metal_weight_g
+    if (w == null) return ''
+    const n = Number(w)
+    return Number.isFinite(n) ? String(n) : ''
+  })
+
+  const [hasStone, setHasStone] = useState(() => Boolean(initialData?.product.has_stone))
+  const [stoneRows, setStoneRows] = useState<StoneLineUi[]>(() => {
+    const rows = stoneLinesFromDb(initialData?.product.stone_lines)
+    return rows.length > 0 ? rows : []
+  })
+
+  useEffect(() => {
+    if (!hasStone) return
+    setStoneRows((prev) => (prev.length === 0 ? [newStoneRow()] : prev))
+  }, [hasStone])
+
   const [colorRows, setColorRows] = useState<ColorRow[]>(
     initialData?.colorVariants.map((row) => ({
       key: row.id,
@@ -180,16 +289,53 @@ export function ProductCatalogCreateForm({
     if (!slugManual && name) setSlug(slugifyName(name))
   }, [name, slugManual])
 
+  /** New products only: reshape colour rows + matrix when switching gold ↔ silver */
   useEffect(() => {
-    if (isEdit || colorRows.length > 0 || metalColors.length === 0) return
-    const defaultRows = metalColors.slice(0, 3).map((color, index) => ({
-      key: `seed-${color.id}`,
-      color_id: color.id,
-      images: [],
-      display_order: index,
-    }))
-    setColorRows(defaultRows)
-  }, [isEdit, colorRows.length, metalColors])
+    if (isEdit || metalColors.length === 0) return
+    if (appliedLayoutMetalRef.current === productMetalType) return
+
+    const fromLayout = appliedLayoutMetalRef.current
+
+    if (productMetalType === 'silver') {
+      const silverId = pickSilverColorId(metalColors)
+      setColorRows((prev) => {
+        const imgs = prev[0]?.images ?? []
+        return [
+          {
+            key: prev[0]?.key ?? `silver-${silverId}`,
+            id: prev[0]?.id,
+            color_id: silverId,
+            images: imgs,
+            display_order: 0,
+          },
+        ]
+      })
+      setCells({})
+    } else {
+      setColorRows((prev) => {
+        if (fromLayout === 'silver') {
+          return metalColors.slice(0, 3).map((color, index) => ({
+            key: `seed-${color.id}-${index}`,
+            color_id: color.id,
+            images: index === 0 ? prev[0]?.images ?? [] : [],
+            display_order: index,
+          }))
+        }
+        if (prev.length === 0) {
+          return metalColors.slice(0, 3).map((color, index) => ({
+            key: `seed-${color.id}`,
+            color_id: color.id,
+            images: [],
+            display_order: index,
+          }))
+        }
+        return prev
+      })
+      if (fromLayout === 'silver') setCells({})
+    }
+
+    appliedLayoutMetalRef.current = productMetalType
+  }, [productMetalType, metalColors, isEdit])
 
   function addColorRow() {
     if (!hasMetalColors) {
@@ -220,7 +366,7 @@ export function ProductCatalogCreateForm({
     if (!row) return
     setCells((prev) => {
       const next = { ...prev }
-      for (const purity of sortedPurities) {
+      for (const purity of metalPurities) {
         delete next[buildCellKey(row.color_id, purity.id)]
       }
       return next
@@ -319,7 +465,7 @@ export function ProductCatalogCreateForm({
     }> = []
 
     for (const row of colorRows) {
-      for (const purity of sortedPurities) {
+      for (const purity of puritiesForProduct) {
         const current = cells[buildCellKey(row.color_id, purity.id)]
         if (!current) continue
         const price = parseFloat(current.price.trim())
@@ -356,13 +502,38 @@ export function ProductCatalogCreateForm({
         diamond_color: diamondColor.trim() || null,
         diamond_clarity: diamondClarity.trim() || null,
         size_range: sizeRange.trim() || null,
+        metal_weight_g: (() => {
+          const t = metalWeightG.trim()
+          if (t === '') return null
+          const n = parseFloat(t)
+          return Number.isFinite(n) && n >= 0 ? n : null
+        })(),
         meta_title: metaTitle.trim() || null,
         meta_description: metaDesc.trim() || null,
         status: nextStatus,
         is_featured: featured,
-      is_new_arrival: newArrival,
-      is_best_seller: bestSeller,
-      is_coming_soon: comingSoon,
+        is_new_arrival: newArrival,
+        is_best_seller: bestSeller,
+        is_coming_soon: comingSoon,
+        has_stone: hasStone,
+        stone_lines: hasStone
+          ? stoneRows
+              .map((r) => {
+                const rate_inr  = r.rate.trim()  !== '' ? (Number.isFinite(parseFloat(r.rate))  ? parseFloat(r.rate)  : null) : null
+                const count     = r.count.trim() !== '' ? (Number.isFinite(parseInt(r.count))   ? parseInt(r.count)   : null) : null
+                const price_inr = rate_inr != null && count != null ? rate_inr * count : null
+                return {
+                  name:      r.name.trim(),
+                  cut_size:  r.cut_size.trim(),
+                  shape:     r.shape.trim(),
+                  color:     r.color.trim(),
+                  count,
+                  rate_inr,
+                  price_inr,
+                }
+              })
+              .filter((r) => r.name !== '' || r.cut_size !== '' || r.rate_inr != null)
+          : [],
       }
 
       const res = await fetch(isEdit ? `/api/products/${initialData.id}` : '/api/products/catalog', {
@@ -426,6 +597,30 @@ export function ProductCatalogCreateForm({
             </select>
           </label>
           <label className="block space-y-1">
+            <span className="text-xs text-ink-muted">Base metal</span>
+            <select
+              value={productMetalType}
+              disabled={isEdit}
+              title={isEdit ? 'Metal is fixed from existing variants' : undefined}
+              onChange={(e) => {
+                const next = e.target.value as 'gold' | 'silver'
+                setProductMetalType(next)
+                toast.message(
+                  next === 'gold'
+                    ? 'Matrix columns: gold purities (e.g. 18Kt / 14Kt / 9Kt)'
+                    : 'Matrix columns: silver purities (925 / 835)',
+                )
+              }}
+              className="w-full border rounded-lg px-3 py-2 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <option value="gold">Gold</option>
+              <option value="silver">Silver</option>
+            </select>
+            {isEdit && (
+              <span className="text-[11px] text-ink-faint">Edit pe metal change nahi — naya product banao agar metal alag ho.</span>
+            )}
+          </label>
+          <label className="block space-y-1">
             <span className="text-xs text-ink-muted">Product #</span>
             <input
               type="number"
@@ -434,6 +629,19 @@ export function ProductCatalogCreateForm({
               onChange={(e) => setProductNumber(parseInt(e.target.value, 10) || 1)}
               className="w-full border rounded-lg px-3 py-2 text-sm"
             />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-xs text-ink-muted">Metal weight (g)</span>
+            <input
+              type="number"
+              min={0}
+              step="0.001"
+              value={metalWeightG}
+              onChange={(e) => setMetalWeightG(e.target.value)}
+              placeholder="e.g. 4.25"
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+            />
+            <span className="text-[11px] text-ink-faint">One value for the whole product — all gold or silver purities.</span>
           </label>
           <label className="block space-y-1">
             <span className="text-xs text-ink-muted">Making charge %</span>
@@ -483,24 +691,150 @@ export function ProductCatalogCreateForm({
         </div>
       </section>
 
+      {/* Diamond specifications section hidden — fields replaced by Stone (gem) section below */}
+
       <section className="bg-white rounded-xl border border-divider p-6 space-y-4">
-        <h3 className="font-display text-lg text-deep-teal">Diamond specifications</h3>
-        <div className="grid sm:grid-cols-2 gap-4">
-          <label className="block space-y-1"><span className="text-xs text-ink-muted">Shape</span>
-            <input value={diamondShape} onChange={(e) => setDiamondShape(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" /></label>
-          <label className="block space-y-1"><span className="text-xs text-ink-muted">Count</span>
-            <input type="number" value={diamondCount} onChange={(e) => setDiamondCount(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" /></label>
-          <label className="block space-y-1"><span className="text-xs text-ink-muted">Total wt (ct)</span>
-            <input value={totalWt} onChange={(e) => setTotalWt(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" /></label>
-          <label className="block space-y-1"><span className="text-xs text-ink-muted">Diamond colour</span>
-            <input value={diamondColor} onChange={(e) => setDiamondColor(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" /></label>
-          <label className="block space-y-1"><span className="text-xs text-ink-muted">Clarity</span>
-            <input value={diamondClarity} onChange={(e) => setDiamondClarity(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" /></label>
-          <label className="block space-y-1 sm:col-span-2"><span className="text-xs text-ink-muted">Size / length</span>
-            <input value={sizeRange} onChange={(e) => setSizeRange(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" /></label>
-        </div>
+        <h3 className="font-display text-lg text-deep-teal">Stone (gem)</h3>
+        <label className="block space-y-1 max-w-md">
+          <span className="text-xs text-ink-muted">Does this product include stone(s)?</span>
+          <select
+            value={hasStone ? 'yes' : 'no'}
+            onChange={(e) => {
+              const yes = e.target.value === 'yes'
+              setHasStone(yes)
+              if (yes && stoneRows.length === 0) setStoneRows([newStoneRow()])
+            }}
+            className="w-full border rounded-lg px-3 py-2 text-sm"
+          >
+            <option value="no">No</option>
+            <option value="yes">Yes</option>
+          </select>
+        </label>
+
+        {hasStone && (
+          <div className="space-y-4">
+            {stoneRows.map((row, idx) => {
+              const rateNum  = parseFloat(row.rate)
+              const countNum = parseInt(row.count)
+              const price    = Number.isFinite(rateNum) && Number.isFinite(countNum) && countNum > 0
+                ? rateNum * countNum
+                : null
+              const stoneInp = 'w-full border rounded-lg px-3 py-2 text-sm'
+              const update = (field: Partial<typeof row>) =>
+                setStoneRows((prev) => prev.map((r) => r.key === row.key ? { ...r, ...field } : r))
+              return (
+                <div key={row.key} className="border border-divider rounded-xl p-4 space-y-3 bg-surface/40">
+                  {/* Row header */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-ink-muted uppercase tracking-wide">
+                      Stone {idx + 1}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (stoneRows.length <= 1) { setStoneRows([newStoneRow()]); return }
+                        setStoneRows((prev) => prev.filter((r) => r.key !== row.key))
+                      }}
+                      className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                      aria-label="Remove stone"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Row 1: Stone name + Cut/size */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <label className="block space-y-1">
+                      <span className="text-xs text-ink-muted">Stone name</span>
+                      <input
+                        value={row.name}
+                        onChange={(e) => update({ name: e.target.value })}
+                        className={stoneInp}
+                        placeholder="e.g. Ruby"
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-xs text-ink-muted">Cut / size</span>
+                      <input
+                        value={row.cut_size}
+                        onChange={(e) => update({ cut_size: e.target.value })}
+                        className={stoneInp}
+                        placeholder="e.g. Round 0.5 ct"
+                      />
+                    </label>
+                  </div>
+
+                  {/* Row 2: Shape + Color */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <label className="block space-y-1">
+                      <span className="text-xs text-ink-muted">Shape</span>
+                      <input
+                        value={row.shape}
+                        onChange={(e) => update({ shape: e.target.value })}
+                        className={stoneInp}
+                        placeholder="e.g. Oval"
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-xs text-ink-muted">Color</span>
+                      <input
+                        value={row.color}
+                        onChange={(e) => update({ color: e.target.value })}
+                        className={stoneInp}
+                        placeholder="e.g. D"
+                      />
+                    </label>
+                  </div>
+
+                  {/* Row 3: Count + Rate + Price */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <label className="block space-y-1">
+                      <span className="text-xs text-ink-muted">Count</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={row.count}
+                        onChange={(e) => update({ count: e.target.value })}
+                        className={stoneInp}
+                        placeholder="0"
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-xs text-ink-muted">Rate (₹)</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={row.rate}
+                        onChange={(e) => update({ rate: e.target.value })}
+                        className={stoneInp}
+                        placeholder="0"
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-xs text-ink-muted">Price (₹) = Rate × Count</span>
+                      <div className={`${stoneInp} bg-surface text-ink-muted tabular-nums cursor-default select-none`}>
+                        {price != null ? `₹${price.toLocaleString('en-IN')}` : '—'}
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              )
+            })}
+
+            <button
+              type="button"
+              onClick={() => setStoneRows((prev) => [...prev, newStoneRow()])}
+              className="inline-flex items-center gap-1.5 text-sm px-4 py-2 border border-dashed border-teal text-teal rounded-lg hover:bg-teal/5 transition-colors w-full justify-center"
+            >
+              <Plus className="w-4 h-4" /> Add stone
+            </button>
+          </div>
+        )}
       </section>
 
+      {isGoldProduct && (
       <section className="bg-white rounded-xl border border-divider p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="font-display text-lg text-deep-teal">Colour variants &amp; images</h3>
@@ -570,21 +904,79 @@ export function ProductCatalogCreateForm({
           })}
         </div>
       </section>
+      )}
+
+      {!isGoldProduct && (
+        <section className="bg-white rounded-xl border border-divider p-6 space-y-4">
+          <h3 className="font-display text-lg text-deep-teal">Product images</h3>
+          <p className="text-sm text-ink-muted">
+            Silver items use one gallery — no gold colour rows. Har product ke liye kam se kam ek photo zaroori hai.
+          </p>
+          {!hasMetalColors && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              `metal_colors` empty hai. Pehle migration <code className="font-mono text-xs">013_sterling_silver_metal_color.sql</code> run karo (Sterling Silver / SV).
+            </div>
+          )}
+          {colorRows[0] && (
+            <div className="border border-divider rounded-lg p-4 space-y-3">
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={(e) => void onPickFiles(colorRows[0]!.key, e.target.files)}
+                disabled={uploading}
+                className="text-sm"
+              />
+              <div className="flex flex-wrap gap-2 mt-2">
+                {colorRows[0]!.images.map((url, imageIndex) => (
+                  <div key={url} className="relative group w-20 h-20 rounded border overflow-hidden">
+                    <img src={url} alt="" className="w-full h-full object-cover" />
+                    <div className="absolute bottom-1 right-1 flex gap-0.5 opacity-0 group-hover:opacity-100">
+                      <button
+                        type="button"
+                        className="bg-white/90 text-xs px-1 rounded"
+                        onClick={() => reorderImage(colorRows[0]!.key, imageIndex, -1)}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        className="bg-white/90 text-xs px-1 rounded"
+                        onClick={() => reorderImage(colorRows[0]!.key, imageIndex, 1)}
+                      >
+                        ↓
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="bg-white rounded-xl border border-divider p-6 space-y-4 overflow-x-auto">
         <h3 className="font-display text-lg text-deep-teal">Pricing matrix (₹)</h3>
         {!hasMetalPurities ? (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            `metal_purities` table empty hai. Supabase me seed run karo, phir 18Kt / 14Kt / 9Kt columns yahan show honge.
+            `metal_purities` table empty hai. Supabase me seed / migration chalao — gold (18/14/09) aur silver (925/835) columns yahan dikhenge.
+          </div>
+        ) : puritiesForProduct.length === 0 ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            Is base metal ke liye DB me koi active purity nahi. `012_metal_purity_metal_type` migration run karo ya Supabase me silver rows add karo.
           </div>
         ) : colorRows.length === 0 ? (
-          <p className="text-sm text-ink-muted">Pehle colour rows banao. Har purity column me us colour ka price aur stock set hoga.</p>
+          <p className="text-sm text-ink-muted">
+            {isGoldProduct
+              ? 'Pehle colour rows banao. Har purity column me us colour ka price aur stock set hoga.'
+              : 'Silver: upar Product images section complete karo — phir yahan price set karo.'}
+          </p>
         ) : (
           <table className="text-sm border-collapse min-w-full">
             <thead>
               <tr>
-                <th className="text-left px-2 py-2 border-b">Colour</th>
-                {sortedPurities.map((purity) => (
+                {isGoldProduct && <th className="text-left px-2 py-2 border-b">Colour</th>}
+                {puritiesForProduct.map((purity) => (
                   <th key={purity.id} className="text-left px-2 py-2 border-b whitespace-nowrap">{purity.label}</th>
                 ))}
               </tr>
@@ -594,8 +986,10 @@ export function ProductCatalogCreateForm({
                 const color = metalColors.find((entry) => entry.id === row.color_id)
                 return (
                   <tr key={row.key}>
-                    <td className="px-2 py-3 border-b align-top font-medium">{color?.label ?? row.color_id}</td>
-                    {sortedPurities.map((purity) => {
+                    {isGoldProduct && (
+                      <td className="px-2 py-3 border-b align-top font-medium">{color?.label ?? row.color_id}</td>
+                    )}
+                    {puritiesForProduct.map((purity) => {
                       const cell = cells[buildCellKey(row.color_id, purity.id)] ?? { price: '', stock_qty: '1', is_active: true }
                       return (
                         <td key={purity.id} className="px-2 py-2 border-b align-top min-w-[11rem]">

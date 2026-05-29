@@ -30,6 +30,7 @@ type CatalogBundle = {
     price: number
     stock_qty: number
     is_active: boolean
+    price_breakup?: unknown
   }[]
 }
 
@@ -99,6 +100,7 @@ async function legacyVariantCatalog(
       price:      Number(v.gem_price_override ?? 0),
       stock_qty:  inStock ? 99 : 0,
       is_active:  v.is_active !== false,
+      price_breakup: null,
     }
   })
 
@@ -335,6 +337,7 @@ export default async function ProductPage({ params }: Props) {
     price: number | string
     stock_qty: number
     is_active: boolean
+    price_breakup?: unknown
   }
 
   let catalogPurities: { id: string; code: string; label: string; display_order: number }[] = []
@@ -346,6 +349,7 @@ export default async function ProductPage({ params }: Props) {
     price: number
     stock_qty: number
     is_active: boolean
+    price_breakup?: unknown
   }[] = []
 
   if (useLegacyVariants) {
@@ -375,6 +379,7 @@ export default async function ProductPage({ params }: Props) {
         price:      Number(v.price ?? 0),
         stock_qty:  typeof v.stock_qty === 'number' ? v.stock_qty : 0,
         is_active:  v.is_active ?? true,
+        price_breakup: v.price_breakup ?? null,
       }))
 
     if (catalogVariants.length > 0) {

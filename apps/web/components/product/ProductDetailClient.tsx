@@ -66,6 +66,110 @@ function toGallery(images: string[], productName: string) {
   }))
 }
 
+type PriceBreakupRow = {
+  label: string
+  amount: number | string
+  originalAmount?: number | string | null
+}
+
+type PriceBreakupPayload = {
+  rows: PriceBreakupRow[]
+  note: string | null
+}
+
+function prettifyLabel(raw: string): string {
+  return raw
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+function readAmount(value: unknown): number | string | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim() !== '') return value.trim()
+  return null
+}
+
+function parseBreakupRows(rawRows: unknown): PriceBreakupRow[] {
+  if (!Array.isArray(rawRows)) return []
+
+  return rawRows
+    .map((row) => {
+      if (!row || typeof row !== 'object') return null
+      const record = row as Record<string, unknown>
+
+      const labelRaw =
+        (typeof record.label === 'string' && record.label) ||
+        (typeof record.particular === 'string' && record.particular) ||
+        (typeof record.particulars === 'string' && record.particulars) ||
+        (typeof record.name === 'string' && record.name) ||
+        (typeof record.title === 'string' && record.title) ||
+        null
+
+      const amount =
+        readAmount(record.amount) ??
+        readAmount(record.price) ??
+        readAmount(record.value) ??
+        readAmount(record.net) ??
+        readAmount(record.total)
+
+      if (!labelRaw || amount == null) return null
+
+      return {
+        label: prettifyLabel(labelRaw),
+        amount,
+        originalAmount:
+          readAmount(record.original_amount) ??
+          readAmount(record.originalAmount) ??
+          readAmount(record.mrp) ??
+          readAmount(record.old_price) ??
+          null,
+      } satisfies PriceBreakupRow
+    })
+    .filter((row): row is PriceBreakupRow => row != null)
+}
+
+function normalizePriceBreakup(raw: unknown): PriceBreakupPayload | null {
+  if (!raw) return null
+
+  if (Array.isArray(raw)) {
+    const rows = parseBreakupRows(raw)
+    return rows.length ? { rows, note: null } : null
+  }
+
+  if (typeof raw !== 'object') return null
+
+  const record = raw as Record<string, unknown>
+  const nestedRows = parseBreakupRows(record.rows ?? record.items ?? record.lines)
+  const note =
+    (typeof record.note === 'string' && record.note.trim()) ||
+    (typeof record.footer_note === 'string' && record.footer_note.trim()) ||
+    (typeof record.disclaimer === 'string' && record.disclaimer.trim()) ||
+    null
+
+  if (nestedRows.length > 0) return { rows: nestedRows, note }
+
+  const scalarRows = Object.entries(record)
+    .map(([key, value]) => {
+      const amount = readAmount(value)
+      if (amount == null) return null
+      return { label: prettifyLabel(key), amount } satisfies PriceBreakupRow
+    })
+    .filter((row): row is PriceBreakupRow => row != null)
+
+  return scalarRows.length ? { rows: scalarRows, note } : null
+}
+
+function displayMoney(value: number | string): string {
+  if (typeof value === 'number') return formatINR(value)
+  const maybeNumber = Number(value.replace(/[^\d.-]/g, ''))
+  if (Number.isFinite(maybeNumber) && value.trim().match(/^[\d\s,.-]+$/)) {
+    return formatINR(maybeNumber)
+  }
+  return value
+}
+
 export function ProductDetailClient({ product, catalog, fallbackImages }: ProductDetailClientProps) {
   const initialVariant = catalog.variants.find((variant) => variant.is_active) ?? catalog.variants[0] ?? null
   const initialColorId = initialVariant?.color_id ?? catalog.colorGroups[0]?.colorId ?? ''
@@ -124,7 +228,11 @@ export function ProductDetailClient({ product, catalog, fallbackImages }: Produc
     toast.success('Added to cart!', { description: product.name })
   }
 
-  const TABS = ['Description', 'Diamond details', 'Shipping & Returns', 'Care Guide']
+  const TABS = ['Description', 'Diamond details', 'Price Breakup', 'Shipping & Returns', 'Care Guide']
+  const priceBreakup = useMemo(
+    () => normalizePriceBreakup(activeVariant?.price_breakup ?? null),
+    [activeVariant?.price_breakup],
+  )
 
   return (
     <div className="section-x py-10">
@@ -273,8 +381,45 @@ export function ProductDetailClient({ product, catalog, fallbackImages }: Produc
                   </tbody>
                 </table>
               )}
-              {activeTab === 2 && <p>Free shipping on orders above ₹5,000. Easy 100-day returns.</p>}
-              {activeTab === 3 && (
+              {activeTab === 2 && (
+                priceBreakup ? (
+                  <div className="space-y-3">
+                    <h4 className="font-display text-lg text-ink">Price Breakup</h4>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm border-collapse min-w-[22rem]">
+                        <thead>
+                          <tr className="bg-surface">
+                            <th className="text-left px-3 py-2 border border-divider text-ink">Particulars</th>
+                            <th className="text-left px-3 py-2 border border-divider text-ink">Price</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {priceBreakup.rows.map((row) => (
+                            <tr key={`${row.label}-${String(row.amount)}`} className="bg-white">
+                              <td className="px-3 py-2 border border-divider/80 text-ink">{row.label}</td>
+                              <td className="px-3 py-2 border border-divider/80 text-ink">
+                                <span className="inline-flex items-center gap-2">
+                                  {row.originalAmount != null && (
+                                    <span className="text-ink-faint line-through">{displayMoney(row.originalAmount)}</span>
+                                  )}
+                                  <span>{displayMoney(row.amount)}</span>
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="text-xs text-ink-faint">
+                      {priceBreakup.note ?? 'Final price calculated at checkout based on actual weight.'}
+                    </p>
+                  </div>
+                ) : (
+                  <p>Price breakup will be available soon.</p>
+                )
+              )}
+              {activeTab === 3 && <p>Free shipping on orders above ₹5,000. Easy 100-day returns.</p>}
+              {activeTab === 4 && (
                 <p>Store in a dry place. Clean with a soft cloth. Avoid contact with chemicals.</p>
               )}
             </div>

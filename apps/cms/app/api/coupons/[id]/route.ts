@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@amiora/database'
+import { requireCmsAccess, writeAuditLog } from '@/lib/rbac'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const perm = await requireCmsAccess('coupons', 'edit')
+  if (!perm.ok) return perm.response
   const { id } = await params
   const body    = await req.json()
   const supabase = createServerClient()
@@ -26,14 +29,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  await writeAuditLog({ adminId: perm.adminId, action: 'update_coupon', resource: 'coupons', resourceId: id })
   return NextResponse.json({ data })
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const perm = await requireCmsAccess('coupons', 'edit')
+  if (!perm.ok) return perm.response
   const { id } = await params
   const supabase = createServerClient()
 
   const { error } = await supabase.from('coupons').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  await writeAuditLog({ adminId: perm.adminId, action: 'delete_coupon', resource: 'coupons', resourceId: id })
   return NextResponse.json({ success: true })
 }

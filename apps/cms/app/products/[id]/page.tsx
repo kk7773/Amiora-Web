@@ -17,8 +17,9 @@ export default async function EditProductPage({ params }: Props) {
         .from('products')
         .select(`
           id, name, slug, category_id, collection_id, product_number, short_desc, description,
-          diamond_shape, diamond_count, total_diamond_wt, diamond_color, diamond_clarity, size_range,
+          diamond_shape, diamond_count, total_diamond_wt, diamond_color, diamond_clarity, size_range, metal_weight_g,
           meta_title, meta_description, status, is_featured, is_new_arrival, is_best_seller, is_coming_soon, making_charge_pct,
+          has_stone, stone_lines,
           product_color_groups(
             id, color_id, images, display_order
           ),
@@ -37,7 +38,7 @@ export default async function EditProductPage({ params }: Props) {
         .order('display_order'),
       supabase
         .from('metal_purities')
-        .select('id, label, code, display_order')
+        .select('id, label, code, display_order, metal')
         .eq('is_active', true)
         .order('display_order'),
     ])
@@ -115,6 +116,10 @@ export default async function EditProductPage({ params }: Props) {
             diamond_color: product.diamond_color,
             diamond_clarity: product.diamond_clarity,
             size_range: product.size_range,
+            metal_weight_g:
+              product.metal_weight_g != null && Number.isFinite(Number(product.metal_weight_g))
+                ? Number(product.metal_weight_g)
+                : null,
             meta_title: product.meta_title,
             meta_description: product.meta_description,
             status: product.status,
@@ -123,6 +128,8 @@ export default async function EditProductPage({ params }: Props) {
             is_best_seller: product.is_best_seller,
             is_coming_soon: product.is_coming_soon,
             making_charge_pct: Number(product.making_charge_pct ?? 8),
+            has_stone: Boolean(product.has_stone),
+            stone_lines: product.stone_lines ?? [],
           },
           colorVariants,
           matrix,

@@ -46,12 +46,14 @@ export async function GET(_req: NextRequest) {
       .from('admin_tab_permissions')
       .select('cms_tabs ( slug )')
       .eq('admin_id', user.id)
+      .eq('can_view', true)
     if (!pe) {
       const nested = (rows ?? []) as { cms_tabs?: { slug?: string } }[]
       const tabs = nested
         .map(r => r.cms_tabs?.slug)
         .filter((s): s is string => typeof s === 'string')
-      const effectiveTabs = tabs.length === 0 ? null : tabs
+      // Always include dashboard so admin can land on /dashboard after login
+      const effectiveTabs = tabs.length === 0 ? null : [...new Set(['dashboard', ...tabs])]
       return NextResponse.json({ cms_role: 'admin', tabs: effectiveTabs })
     }
   }

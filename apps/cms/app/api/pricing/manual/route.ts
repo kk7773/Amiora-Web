@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@amiora/database'
+import { requireCmsAccess, writeAuditLog } from '@/lib/rbac'
 
 interface ManualPriceBody {
   gold?:   number | null
@@ -7,6 +8,8 @@ interface ManualPriceBody {
 }
 
 export async function POST(req: NextRequest) {
+  const perm = await requireCmsAccess('pricing', 'edit')
+  if (!perm.ok) return perm.response
   const body = (await req.json()) as ManualPriceBody
   const { gold, silver } = body
 
@@ -48,6 +51,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to save one or more prices' }, { status: 500 })
   }
 
+  await writeAuditLog({ adminId: perm.adminId, action: 'update_pricing_manual', resource: 'pricing', meta: { gold, silver } })
   return NextResponse.json({
     success: true,
     updated: { gold: gold ?? null, silver: silver ?? null },

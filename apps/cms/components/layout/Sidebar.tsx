@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 import {
   LayoutDashboard, Package, Layers, ShoppingBag, Users, MessageSquare,
   Star, FileText, Quote, MapPin, Settings, ChevronRight, LogOut,
-  TrendingUp, Ticket, HelpCircle, ShieldCheck
+  TrendingUp, Ticket, HelpCircle, ShieldCheck, ClipboardList,
 } from 'lucide-react'
 import { createBrowserClient } from '@/lib/supabase/client'
 import { useNotificationStore } from '@/stores/notificationStore'
@@ -27,7 +27,8 @@ const ALL_NAV_ITEMS = [
   { href: '/pricing',          slug: 'pricing',          label: 'Pricing',          icon: TrendingUp },
   { href: '/settings',         slug: 'settings',         label: 'Settings',         icon: Settings },
   // Super admin only — never appears in cms_admin_permissions
-  { href: '/admin-management', slug: 'admin-management', label: 'Admin Management', icon: ShieldCheck, superAdminOnly: true },
+  { href: '/admin-management', slug: 'admin-management', label: 'Admin Management', icon: ShieldCheck,    superAdminOnly: true },
+  { href: '/audit-logs',       slug: 'audit-logs',       label: 'Audit Logs',       icon: ClipboardList,  superAdminOnly: true },
 ]
 
 export function Sidebar() {

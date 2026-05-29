@@ -224,7 +224,7 @@ interface Props {
 const METAL_TYPES    = ['gold', 'silver', 'platinum']
 const PURITIES_BY_METAL: Record<string, string[]> = {
   gold:     ['9kt', '18kt', '22kt', '24kt'],
-  silver:   ['99.9%', '92.5%'],
+  silver:   ['925', '835'],
   platinum: ['95%', '90%'],
 }
 const GOLD_VARIANTS  = ['yellow', 'white', 'rose']
@@ -631,8 +631,12 @@ export function ProductForm({ collections, categories, tags, defaultValues }: Pr
                     <select
                       {...register(`variants.${i}.metal_type`)}
                       onChange={e => {
-                        setValue(`variants.${i}.metal_type`, e.target.value, { shouldDirty: true })
+                        const metal = e.target.value
+                        setValue(`variants.${i}.metal_type`, metal, { shouldDirty: true })
                         setValue(`variants.${i}.purity`, '', { shouldDirty: true })
+                        if (metal !== 'gold') {
+                          setValue(`variants.${i}.gold_variant`, '', { shouldDirty: true })
+                        }
                       }}
                       className="border border-divider rounded px-2 py-1 text-xs outline-none focus:border-teal bg-white w-full"
                     >
@@ -650,14 +654,18 @@ export function ProductForm({ collections, categories, tags, defaultValues }: Pr
                     />
                   </td>
                   <td className="px-2 py-2 min-w-[90px]">
-                    <ComboSelect
-                      value={watch(`variants.${i}.gold_variant`) ?? ''}
-                      onChange={val => setValue(`variants.${i}.gold_variant`, val, { shouldDirty: true })}
-                      options={GOLD_VARIANTS}
-                      customOptions={customColours}
-                      onAddCustom={v => setCustomColours(p => p.includes(v) ? p : [...p, v])}
-                      placeholder="Colour"
-                    />
+                    {watch(`variants.${i}.metal_type`) === 'gold' ? (
+                      <ComboSelect
+                        value={watch(`variants.${i}.gold_variant`) ?? ''}
+                        onChange={val => setValue(`variants.${i}.gold_variant`, val, { shouldDirty: true })}
+                        options={GOLD_VARIANTS}
+                        customOptions={customColours}
+                        onAddCustom={v => setCustomColours(p => p.includes(v) ? p : [...p, v])}
+                        placeholder="Colour"
+                      />
+                    ) : (
+                      <span className="text-xs text-ink-faint">—</span>
+                    )}
                   </td>
                   <td className="px-2 py-2 min-w-[90px]">
                     <ComboSelect

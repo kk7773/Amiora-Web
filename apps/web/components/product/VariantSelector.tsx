@@ -26,6 +26,7 @@ export type CatalogVariantRow = {
   price:        number
   stock_qty:    number
   is_active:    boolean
+  price_breakup?: unknown
 }
 
 export interface SelectedVariantState {

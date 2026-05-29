@@ -135,11 +135,11 @@ export function Header() {
             {/* Logo */}
             <Link href="/" className="shrink-0" aria-label="Amiora Diamonds home">
               <Image
-                src="https://res.cloudinary.com/dqayol6fn/image/upload/v1778155061/Amiora-final-logo-02_jicz5d.png"
+                src="https://res.cloudinary.com/dqayol6fn/image/upload/v1778259827/Amiora-final-logo-01_mu4i6k.png"
                 alt="Amiora"
-                width={120}
-                height={28}
-                className="h-7 w-auto"
+                width={150}
+                height={35}
+                className="h-10 w-auto max-h-10"
                 priority
               />
             </Link>
@@ -154,7 +154,10 @@ export function Header() {
                     onMouseLeave={handleMegaLeave}
                     className="relative"
                   >
-                    <button className="text-sm tracking-wide text-ink-muted hover:text-deep-teal transition-colors duration-200 py-2">
+                    <button
+                      type="button"
+                      className="text-lg font-medium tracking-wide text-ink-muted hover:text-deep-teal transition-colors duration-200 py-0.5"
+                    >
                       {link.label}
                     </button>
                   </div>
@@ -162,7 +165,7 @@ export function Header() {
                   <Link
                     key={link.href}
                     href={link.href}
-                    className="text-sm tracking-wide text-ink-muted hover:text-deep-teal transition-colors duration-200"
+                    className="text-lg font-medium tracking-wide text-ink-muted hover:text-deep-teal transition-colors duration-200"
                   >
                     {link.label}
                   </Link>
@@ -171,23 +174,24 @@ export function Header() {
             </nav>
 
             {/* Desktop right actions */}
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-0.5">
               <button
+                type="button"
                 onClick={() => setSearchOpen((v) => !v)}
                 aria-label={searchOpen ? 'Close search' : 'Search'}
-                className="relative p-2 rounded-md text-ink-muted hover:text-deep-teal hover:bg-surface transition-colors"
+                className="relative p-1.5 rounded-md text-ink-muted hover:text-deep-teal hover:bg-surface transition-colors"
               >
                 {pending
-                  ? <Loader2 className="h-[18px] w-[18px] animate-spin" />
+                  ? <Loader2 className="h-6 w-6 animate-spin" />
                   : searchOpen
-                    ? <X className="h-[18px] w-[18px]" />
-                    : <Search className="h-[18px] w-[18px]" />}
+                    ? <X className="h-6 w-6" />
+                    : <Search className="h-6 w-6" />}
               </button>
               <IconBtn href="/account/wishlist" label="Wishlist">
-                <Heart className="h-[18px] w-[18px]" />
+                <Heart className="h-6 w-6" />
               </IconBtn>
               <IconBtn href="/cart" label="Cart" badge={cartBadge}>
-                <ShoppingBag className="h-[18px] w-[18px]" />
+                <ShoppingBag className="h-6 w-6" />
               </IconBtn>
               <UserMenu user={user} />
             </div>
@@ -270,9 +274,9 @@ function UserMenu({ user }: { user: SupabaseUser | null }) {
       <Link
         href="/login"
         aria-label="Sign In"
-        className="relative p-2 rounded-md text-ink-muted hover:text-deep-teal hover:bg-surface transition-colors"
+        className="relative p-1.5 rounded-md text-ink-muted hover:text-deep-teal hover:bg-surface transition-colors"
       >
-        <User className="h-[18px] w-[18px]" />
+        <User className="h-6 w-6" />
       </Link>
     )
   }
@@ -289,14 +293,15 @@ function UserMenu({ user }: { user: SupabaseUser | null }) {
   return (
     <div ref={ref} className="relative">
       <button
+        type="button"
         onClick={() => setOpen(v => !v)}
         aria-label="Account menu"
         className="flex items-center gap-1 p-1 rounded-md text-ink-muted hover:text-deep-teal hover:bg-surface transition-colors"
       >
-        <span className="h-7 w-7 rounded-full bg-deep-teal text-cream text-[11px] font-semibold flex items-center justify-center shrink-0">
-          {initials || <User className="h-3.5 w-3.5" />}
+        <span className="h-8 w-8 rounded-full bg-deep-teal text-cream text-xs font-semibold flex items-center justify-center shrink-0">
+          {initials || <User className="h-4 w-4" />}
         </span>
-        <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
@@ -369,11 +374,11 @@ function IconBtn({
     <Link
       href={href}
       aria-label={label}
-      className="relative p-2 rounded-md text-ink-muted hover:text-deep-teal hover:bg-surface transition-colors"
+      className="relative p-1.5 rounded-md text-ink-muted hover:text-deep-teal hover:bg-surface transition-colors"
     >
       {children}
       {badge != null && badge > 0 && (
-        <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-teal text-[9px] font-semibold text-white leading-none">
+        <span className="absolute -top-0.5 -right-0.5 flex h-[18px] min-w-[18px] px-0.5 items-center justify-center rounded-full bg-teal text-[10px] font-semibold text-white leading-none">
           {badge > 9 ? '9+' : badge}
         </span>
       )}

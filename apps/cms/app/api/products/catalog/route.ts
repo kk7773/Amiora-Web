@@ -1,6 +1,49 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@amiora/database'
 import { generateAmioraSKU } from '@/lib/sku'
+import { requireCmsAccess, writeAuditLog } from '@/lib/rbac'
+
+function parseOptionalGrams(v: unknown): number | null {
+  if (v === null || v === undefined || v === '') return null
+  const n = typeof v === 'number' ? v : parseFloat(String(v))
+  if (!Number.isFinite(n) || n < 0) return null
+  return n
+}
+
+function normalizeStoneLines(input: unknown): Array<{
+  name: string; cut_size: string; shape: string; color: string;
+  count: number | null; rate_inr: number | null; price_inr: number | null
+}> {
+  if (!Array.isArray(input)) return []
+  const out: Array<{
+    name: string; cut_size: string; shape: string; color: string;
+    count: number | null; rate_inr: number | null; price_inr: number | null
+  }> = []
+  for (const row of input) {
+    if (!row || typeof row !== 'object') continue
+    const r        = row as Record<string, unknown>
+    const name     = typeof r.name     === 'string' ? r.name.trim()     : ''
+    const cut_size = typeof r.cut_size === 'string' ? r.cut_size.trim() : ''
+    const shape    = typeof r.shape    === 'string' ? r.shape.trim()    : ''
+    const color    = typeof r.color    === 'string' ? r.color.trim()    : ''
+    let rate_inr: number | null = null
+    if (typeof r.rate_inr === 'number' && Number.isFinite(r.rate_inr)) rate_inr = r.rate_inr
+    else if (r.rate_inr != null && r.rate_inr !== '') {
+      const n = parseFloat(String(r.rate_inr))
+      if (Number.isFinite(n)) rate_inr = n
+    }
+    let count: number | null = null
+    if (typeof r.count === 'number' && Number.isFinite(r.count)) count = Math.floor(r.count)
+    else if (r.count != null && r.count !== '') {
+      const n = parseInt(String(r.count))
+      if (Number.isFinite(n)) count = n
+    }
+    const price_inr = rate_inr != null && count != null ? rate_inr * count : null
+    if (!name && !cut_size && rate_inr == null) continue
+    out.push({ name, cut_size, shape, color, count, rate_inr, price_inr })
+  }
+  return out
+}
 
 type ColorVariantIn = {
   id?:           string
@@ -34,6 +77,7 @@ type Body = {
     diamond_color?:   string | null
     diamond_clarity?: string | null
     size_range?:      string | null
+    metal_weight_g?:  number | null
     meta_title?:      string | null
     meta_description?: string | null
     status?:          'draft' | 'active' | 'archived'
@@ -42,12 +86,16 @@ type Body = {
     is_best_seller?:  boolean
     is_coming_soon?:  boolean
     making_charge_pct?: number
+    has_stone?: boolean
+    stone_lines?: unknown
   }
   color_variants: ColorVariantIn[]
   matrix: MatrixCell[]
 }
 
 export async function POST(req: NextRequest) {
+  const perm = await requireCmsAccess('products', 'edit')
+  if (!perm.ok) return perm.response
   try {
     const body = (await req.json()) as Body
     if (!body.product?.name || !body.product.slug || !body.product.category_id) {
@@ -106,6 +154,7 @@ export async function POST(req: NextRequest) {
       diamond_color:      body.product.diamond_color ?? null,
       diamond_clarity:    body.product.diamond_clarity ?? null,
       size_range:         body.product.size_range ?? null,
+      metal_weight_g:     parseOptionalGrams(body.product.metal_weight_g),
       meta_title:         body.product.meta_title ?? null,
       meta_description:   body.product.meta_description ?? null,
       status:             body.product.status ?? 'draft',
@@ -114,6 +163,8 @@ export async function POST(req: NextRequest) {
       is_best_seller:     body.product.is_best_seller ?? false,
       is_coming_soon:     body.product.is_coming_soon ?? false,
       making_charge_pct:    body.product.making_charge_pct ?? 8,
+      has_stone:             Boolean(body.product.has_stone),
+      stone_lines:           body.product.has_stone ? normalizeStoneLines(body.product.stone_lines) : [],
     }
 
     const { data: prod, error: pErr } = await supabase.from('products').insert(prodInsert).select('id').single()
@@ -180,6 +231,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: vErr.message }, { status: 500 })
     }
 
+    await writeAuditLog({ adminId: perm.adminId, action: 'create_product', resource: 'products', resourceId: productId })
     return NextResponse.json({ id: productId }, { status: 201 })
   } catch (e: unknown) {
     console.error('[catalog]', e)

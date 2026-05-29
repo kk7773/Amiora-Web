@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@amiora/database'
 import { buildDbProductRow } from '@/lib/productPayload'
+import { requireCmsAccess, writeAuditLog } from '@/lib/rbac'
 
 export async function POST(req: NextRequest) {
+  const perm = await requireCmsAccess('products', 'edit')
+  if (!perm.ok) return perm.response
   try {
     const supabase = createServerClient()
     const { images, variants, full_description, tag_ids, faqs, ...rest } = await req.json()
@@ -63,6 +66,7 @@ export async function POST(req: NextRequest) {
       if (tagErr) console.error('[POST /api/products] tag insert error:', tagErr)
     }
 
+    await writeAuditLog({ adminId: perm.adminId, action: 'create_product', resource: 'products', resourceId: prod.id })
     return NextResponse.json({ data: prod }, { status: 201 })
   } catch (err: unknown) {
     console.error('[POST /api/products] Unexpected error:', err)

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@amiora/database'
+import { requireCmsAccess, writeAuditLog } from '@/lib/rbac'
 
 export async function PATCH(req: NextRequest) {
+  const perm = await requireCmsAccess('settings', 'edit')
+  if (!perm.ok) return perm.response
   const body = await req.json()
   const supabase = createServerClient()
 
@@ -17,5 +20,6 @@ export async function PATCH(req: NextRequest) {
       .upsert({ key: 'announcement_bar', value: body.announcement }, { onConflict: 'key' })
   }
 
+  await writeAuditLog({ adminId: perm.adminId, action: 'update_settings', resource: 'settings' })
   return NextResponse.json({ success: true })
 }

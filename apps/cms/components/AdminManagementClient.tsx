@@ -3,11 +3,11 @@
 import { useState, useEffect, useTransition } from 'react'
 import {
   UserPlus, Trash2, Loader2, ShieldCheck, Shield, Eye, EyeOff,
-  ChevronDown, ChevronUp, Check, X, AlertCircle, KeyRound
+  ChevronDown, ChevronUp, Check, X, AlertCircle, KeyRound,
+  ToggleLeft, ToggleRight, Edit2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-// All CMS tabs that can be granted to regular admins
 const ALL_TABS = [
   { slug: 'dashboard',    label: 'Dashboard' },
   { slug: 'products',     label: 'Products' },
@@ -24,6 +24,12 @@ const ALL_TABS = [
   { slug: 'pricing',      label: 'Pricing' },
   { slug: 'settings',     label: 'Settings' },
 ]
+
+interface TabPermission {
+  slug:     string
+  can_view: boolean
+  can_edit: boolean
+}
 
 interface Admin {
   id:         string
@@ -43,6 +49,25 @@ interface CreateForm {
 
 const EMPTY_FORM: CreateForm = { name: '', email: '', password: '', showPass: false }
 
+/** Cycle: none → view → view+edit → none */
+function cyclePermission(p: TabPermission): TabPermission {
+  if (!p.can_view && !p.can_edit) return { ...p, can_view: true,  can_edit: false }
+  if (p.can_view  && !p.can_edit) return { ...p, can_view: true,  can_edit: true  }
+  return { ...p, can_view: false, can_edit: false }
+}
+
+function permLabel(p: TabPermission) {
+  if (!p.can_view) return 'None'
+  if (!p.can_edit) return 'View'
+  return 'View + Edit'
+}
+
+function permColor(p: TabPermission) {
+  if (!p.can_view) return 'bg-white text-gray-400 border-divider hover:border-gray-300'
+  if (!p.can_edit) return 'bg-amber-50 text-amber-700 border-amber-300'
+  return 'bg-deep-teal text-white border-deep-teal'
+}
+
 export function AdminManagementClient() {
   const [admins,      setAdmins]     = useState<Admin[]>([])
   const [loading,     setLoading]    = useState(true)
@@ -51,15 +76,15 @@ export function AdminManagementClient() {
   const [saving,      setSaving]     = useState(false)
   const [error,       setError]      = useState('')
   const [expanded,      setExpanded]     = useState<string | null>(null)
-  const [perms,         setPerms]        = useState<Record<string, string[]>>({})
+  const [perms,         setPerms]        = useState<Record<string, TabPermission[]>>({})
   const [permSaving,    setPermSaving]   = useState<string | null>(null)
   const [resetAdminId,  setResetAdminId] = useState<string | null>(null)
   const [newPassword,   setNewPassword]  = useState('')
   const [showNewPass,   setShowNewPass]  = useState(false)
   const [resetSaving,   setResetSaving]  = useState(false)
+  const [toggling,      setToggling]     = useState<string | null>(null)
   const [, startT]                       = useTransition()
 
-  // Load admins
   useEffect(() => {
     fetch('/api/admin-management')
       .then(r => r.json())
@@ -67,12 +92,21 @@ export function AdminManagementClient() {
       .finally(() => setLoading(false))
   }, [])
 
-  // Load permissions when row is expanded
   async function loadPerms(adminId: string) {
-    if (perms[adminId]) return // already loaded
+    if (perms[adminId]) return
     const res  = await fetch(`/api/admin-management/${adminId}/permissions`)
     const json = await res.json()
-    setPerms(prev => ({ ...prev, [adminId]: json.tabs ?? [] }))
+    // Normalise: API may return TabPermission[] or legacy string[]
+    const raw: (TabPermission | string)[] = json.tabs ?? []
+    const normalised: TabPermission[] = raw.map(t =>
+      typeof t === 'string'
+        ? { slug: t, can_view: true, can_edit: true }
+        : t
+    )
+    // Ensure every tab has an entry (default: no access)
+    const map = new Map(normalised.map(p => [p.slug, p]))
+    const full = ALL_TABS.map(tab => map.get(tab.slug) ?? { slug: tab.slug, can_view: false, can_edit: false })
+    setPerms(prev => ({ ...prev, [adminId]: full }))
   }
 
   function toggleExpand(adminId: string) {
@@ -84,31 +118,37 @@ export function AdminManagementClient() {
     }
   }
 
-  function toggleTab(adminId: string, slug: string) {
+  function cycleTab(adminId: string, slug: string) {
     setPerms(prev => {
-      const cur = prev[adminId] ?? []
+      const cur = prev[adminId] ?? ALL_TABS.map(t => ({ slug: t.slug, can_view: false, can_edit: false }))
       return {
         ...prev,
-        [adminId]: cur.includes(slug) ? cur.filter(s => s !== slug) : [...cur, slug],
+        [adminId]: cur.map(p => p.slug === slug ? cyclePermission(p) : p),
       }
     })
   }
 
   function selectAll(adminId: string) {
-    setPerms(prev => ({ ...prev, [adminId]: ALL_TABS.map(t => t.slug) }))
+    setPerms(prev => ({
+      ...prev,
+      [adminId]: ALL_TABS.map(t => ({ slug: t.slug, can_view: true, can_edit: true })),
+    }))
   }
 
   function clearAll(adminId: string) {
-    setPerms(prev => ({ ...prev, [adminId]: [] }))
+    setPerms(prev => ({
+      ...prev,
+      [adminId]: ALL_TABS.map(t => ({ slug: t.slug, can_view: false, can_edit: false })),
+    }))
   }
 
   async function savePerms(adminId: string) {
     setPermSaving(adminId)
-    const tabs = perms[adminId] ?? []
+    const tabs = (perms[adminId] ?? []).filter(p => p.can_view || p.can_edit)
     const res  = await fetch(`/api/admin-management/${adminId}/permissions`, {
-      method: 'PUT',
+      method:  'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tabs }),
+      body:    JSON.stringify({ tabs }),
     })
     setPermSaving(null)
     if (res.ok) {
@@ -125,9 +165,9 @@ export function AdminManagementClient() {
     }
     setResetSaving(true)
     const res  = await fetch(`/api/admin-management/${adminId}`, {
-      method: 'PUT',
+      method:  'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: newPassword }),
+      body:    JSON.stringify({ password: newPassword }),
     })
     setResetSaving(false)
     if (res.ok) {
@@ -137,6 +177,28 @@ export function AdminManagementClient() {
     } else {
       const j = await res.json()
       toast.error(j.error ?? 'Failed to reset password')
+    }
+  }
+
+  async function toggleActive(admin: Admin) {
+    const newState = !admin.is_active
+    const label    = newState ? 'enable' : 'disable'
+    if (!confirm(`${newState ? 'Enable' : 'Disable'} ${admin.name}? ${newState ? 'They will be able to log in again.' : 'They will be signed out immediately.'}`)) return
+
+    setToggling(admin.id)
+    const res = await fetch(`/api/admin-management/${admin.id}`, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ is_active: newState }),
+    })
+    setToggling(null)
+
+    if (res.ok) {
+      setAdmins(prev => prev.map(a => a.id === admin.id ? { ...a, is_active: newState } : a))
+      toast.success(`Admin ${label}d successfully`)
+    } else {
+      const j = await res.json()
+      toast.error(j.error ?? `Failed to ${label} admin`)
     }
   }
 
@@ -152,9 +214,9 @@ export function AdminManagementClient() {
     setSaving(true)
     setError('')
     const res  = await fetch('/api/admin-management', {
-      method: 'POST',
+      method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: form.name, email: form.email, password: form.password }),
+      body:    JSON.stringify({ name: form.name, email: form.email, password: form.password }),
     })
     const json = await res.json()
     setSaving(false)
@@ -264,6 +326,24 @@ export function AdminManagementClient() {
         </div>
       )}
 
+      {/* Legend */}
+      <div className="flex items-center gap-4 text-xs text-gray-500">
+        <span className="font-medium">Tab permission levels:</span>
+        <span className="flex items-center gap-1.5">
+          <span className="px-2 py-0.5 rounded border border-divider bg-white text-gray-400 text-[11px]">None</span>
+          no access
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="px-2 py-0.5 rounded border border-amber-300 bg-amber-50 text-amber-700 text-[11px]">View</span>
+          read-only
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="px-2 py-0.5 rounded border border-deep-teal bg-deep-teal text-white text-[11px]">View + Edit</span>
+          full access
+        </span>
+        <span className="text-gray-400">(click to cycle)</span>
+      </div>
+
       {/* Admin list */}
       {loading ? (
         <div className="flex items-center justify-center py-20 text-gray-400">
@@ -278,22 +358,32 @@ export function AdminManagementClient() {
         <div className="space-y-3">
           {admins.map(admin => {
             const isOpen     = expanded === admin.id
-            const adminTabs  = perms[admin.id] ?? []
+            const adminPerms = perms[admin.id] ?? []
             const isSuperAdm = admin.cms_role === 'super_admin'
+            const grantedCount = adminPerms.filter(p => p.can_view || p.can_edit).length
 
             return (
-              <div key={admin.id} className="bg-white border border-divider rounded-xl overflow-hidden">
+              <div
+                key={admin.id}
+                className={`bg-white border rounded-xl overflow-hidden transition-colors ${
+                  admin.is_active ? 'border-divider' : 'border-red-200 bg-red-50/30'
+                }`}
+              >
                 {/* Admin row */}
                 <div className="flex items-center gap-4 px-5 py-4">
                   {/* Avatar */}
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0 ${isSuperAdm ? 'bg-deep-teal' : 'bg-teal'}`}>
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0 ${
+                    !admin.is_active ? 'bg-gray-400' : isSuperAdm ? 'bg-deep-teal' : 'bg-teal'
+                  }`}>
                     {(admin.name?.[0] ?? admin.email[0]).toUpperCase()}
                   </div>
 
                   {/* Info */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold text-gray-900 truncate">{admin.name}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className={`text-sm font-semibold truncate ${admin.is_active ? 'text-gray-900' : 'text-gray-400'}`}>
+                        {admin.name}
+                      </p>
                       <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide ${
                         isSuperAdm
                           ? 'bg-deep-teal/10 text-deep-teal'
@@ -302,6 +392,11 @@ export function AdminManagementClient() {
                         {isSuperAdm ? <ShieldCheck className="h-2.5 w-2.5" /> : <Shield className="h-2.5 w-2.5" />}
                         {isSuperAdm ? 'Super Admin' : 'Admin'}
                       </span>
+                      {!admin.is_active && (
+                        <span className="inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide bg-red-100 text-red-600">
+                          Disabled
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-gray-400 truncate">{admin.email}</p>
                   </div>
@@ -310,9 +405,9 @@ export function AdminManagementClient() {
                   {!isSuperAdm && (
                     <span className="text-xs text-gray-400 shrink-0">
                       {isOpen
-                        ? `${adminTabs.length} tab${adminTabs.length !== 1 ? 's' : ''} selected`
+                        ? `${grantedCount} tab${grantedCount !== 1 ? 's' : ''} granted`
                         : perms[admin.id] !== undefined
-                          ? `${perms[admin.id].length} tab${perms[admin.id].length !== 1 ? 's' : ''}`
+                          ? `${grantedCount} tab${grantedCount !== 1 ? 's' : ''}`
                           : '…'}
                     </span>
                   )}
@@ -322,6 +417,28 @@ export function AdminManagementClient() {
 
                   {/* Actions */}
                   <div className="flex items-center gap-1 shrink-0">
+                    {/* Enable / Disable toggle */}
+                    {!isSuperAdm && (
+                      <button
+                        onClick={() => toggleActive(admin)}
+                        disabled={toggling === admin.id}
+                        className={`p-1.5 rounded transition-colors ${
+                          admin.is_active
+                            ? 'hover:bg-red-50 text-gray-400 hover:text-red-500'
+                            : 'hover:bg-green-50 text-gray-400 hover:text-green-600'
+                        }`}
+                        title={admin.is_active ? 'Disable admin' : 'Enable admin'}
+                      >
+                        {toggling === admin.id
+                          ? <Loader2 className="h-4 w-4 animate-spin" />
+                          : admin.is_active
+                            ? <ToggleRight className="h-4 w-4 text-green-500" />
+                            : <ToggleLeft className="h-4 w-4 text-gray-400" />
+                        }
+                      </button>
+                    )}
+
+                    {/* Reset password */}
                     {!isSuperAdm && (
                       <button
                         onClick={() => {
@@ -336,6 +453,8 @@ export function AdminManagementClient() {
                         <KeyRound className="h-3.5 w-3.5" />
                       </button>
                     )}
+
+                    {/* Expand / collapse permissions */}
                     {!isSuperAdm && (
                       <button
                         onClick={() => toggleExpand(admin.id)}
@@ -345,6 +464,8 @@ export function AdminManagementClient() {
                         {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                       </button>
                     )}
+
+                    {/* Delete */}
                     {!isSuperAdm && (
                       <button
                         onClick={() => deleteAdmin(admin)}
@@ -361,7 +482,7 @@ export function AdminManagementClient() {
                 {isOpen && !isSuperAdm && (
                   <div className="border-t border-divider bg-surface/40 px-5 py-4 space-y-4">
 
-                    {/* ── Reset Password inline form ── */}
+                    {/* Reset Password inline form */}
                     {resetAdminId === admin.id && (
                       <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
                         <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide flex items-center gap-1.5">
@@ -403,7 +524,8 @@ export function AdminManagementClient() {
                     )}
 
                     <div className="flex items-center justify-between">
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                        <Edit2 className="h-3 w-3" />
                         Tab Access — <span className="text-deep-teal">{admin.name}</span>
                       </p>
                       <div className="flex gap-2">
@@ -411,35 +533,37 @@ export function AdminManagementClient() {
                           onClick={() => selectAll(admin.id)}
                           className="text-xs text-teal hover:text-deep-teal underline underline-offset-2"
                         >
-                          Select all
+                          Grant all
                         </button>
                         <span className="text-gray-300">·</span>
                         <button
                           onClick={() => clearAll(admin.id)}
                           className="text-xs text-red-400 hover:text-red-600 underline underline-offset-2"
                         >
-                          Clear all
+                          Revoke all
                         </button>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                       {ALL_TABS.map(tab => {
-                        const enabled = adminTabs.includes(tab.slug)
+                        const p = adminPerms.find(x => x.slug === tab.slug) ?? { slug: tab.slug, can_view: false, can_edit: false }
                         return (
                           <button
                             key={tab.slug}
-                            onClick={() => toggleTab(admin.id, tab.slug)}
-                            className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium transition-all ${
-                              enabled
-                                ? 'bg-deep-teal text-white border-deep-teal'
-                                : 'bg-white text-gray-500 border-divider hover:border-teal hover:text-teal'
-                            }`}
+                            onClick={() => cycleTab(admin.id, tab.slug)}
+                            className={`flex items-center justify-between gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-all ${permColor(p)}`}
+                            title="Click to cycle: None → View → View+Edit → None"
                           >
-                            {enabled
-                              ? <Check className="h-3 w-3 shrink-0" />
-                              : <X className="h-3 w-3 shrink-0 opacity-40" />}
-                            {tab.label}
+                            <span className="truncate">{tab.label}</span>
+                            <span className="shrink-0 text-[10px] font-semibold opacity-80">
+                              {!p.can_view
+                                ? <X className="h-3 w-3 opacity-30" />
+                                : !p.can_edit
+                                  ? <Eye className="h-3 w-3" />
+                                  : <Check className="h-3 w-3" />
+                              }
+                            </span>
                           </button>
                         )
                       })}
@@ -454,7 +578,7 @@ export function AdminManagementClient() {
                         {permSaving === admin.id && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                         Save Permissions
                       </button>
-                      <p className="text-xs text-gray-400">Changes take effect on next login.</p>
+                      <p className="text-xs text-gray-400">Changes take effect on next request.</p>
                     </div>
                   </div>
                 )}
@@ -469,3 +593,6 @@ export function AdminManagementClient() {
 
 const lbl = 'block text-xs font-medium text-gray-600 uppercase tracking-wide mb-1.5'
 const inp = 'w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-colors bg-white'
+
+// Re-export permLabel so it can be used in tooltips or summaries if needed
+export { permLabel }

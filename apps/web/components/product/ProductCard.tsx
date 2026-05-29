@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -52,8 +52,12 @@ export interface ProductCardProps {
   className?: string
 }
 
+const HOVER_IMAGE_DELAY_MS = 1000
+
 export function ProductCard({ product, badgeLabel, className }: ProductCardProps) {
-  const [hovered,  setHovered]  = useState(false)
+  const [hovered, setHovered] = useState(false)
+  const [showHoverImage, setShowHoverImage] = useState(false)
+  const hoverImageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [wishlisted, setWishlisted] = useState(false)
   const [imageFailed, setImageFailed] = useState(false)
   const addItem  = useCartStore((s) => s.addItem)
@@ -64,8 +68,32 @@ export function ProductCard({ product, badgeLabel, className }: ProductCardProps
   const primaryImage = validImages.find((i) => i.is_primary && i.url) ?? validImages[0] ?? null
   const hoverImage = validImages.find((i) => i.is_hover && i.url) ?? validImages.find((i) => i.url && i !== primaryImage) ?? primaryImage
 
-  const displayImg = hovered && hoverImage ? hoverImage : primaryImage
+  const displayImg = showHoverImage && hoverImage ? hoverImage : primaryImage
   const hasImage = Boolean(displayImg?.url)
+
+  const handleCardMouseEnter = () => {
+    setHovered(true)
+    if (hoverImageTimerRef.current) clearTimeout(hoverImageTimerRef.current)
+    hoverImageTimerRef.current = setTimeout(() => {
+      setShowHoverImage(true)
+      hoverImageTimerRef.current = null
+    }, HOVER_IMAGE_DELAY_MS)
+  }
+
+  const handleCardMouseLeave = () => {
+    setHovered(false)
+    setShowHoverImage(false)
+    if (hoverImageTimerRef.current) {
+      clearTimeout(hoverImageTimerRef.current)
+      hoverImageTimerRef.current = null
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (hoverImageTimerRef.current) clearTimeout(hoverImageTimerRef.current)
+    }
+  }, [])
 
   const variants = Array.isArray(product.product_variants) ? product.product_variants : []
   const firstVariant = variants.find((v) => (v.stock_qty ?? 0) > 0 && (v.is_active ?? true)) ?? variants[0] ?? null
@@ -101,8 +129,8 @@ export function ProductCard({ product, badgeLabel, className }: ProductCardProps
     <Link
       href={productHref}
       className={cn('group block', className)}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={handleCardMouseEnter}
+      onMouseLeave={handleCardMouseLeave}
     >
       {/* Image container */}
       <div className="relative aspect-square overflow-hidden rounded-lg bg-surface">

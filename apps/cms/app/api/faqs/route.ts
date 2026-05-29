@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@amiora/database'
+import { requireCmsAccess, writeAuditLog } from '@/lib/rbac'
 
 export async function GET() {
+  const perm = await requireCmsAccess('faqs', 'view')
+  if (!perm.ok) return perm.response
   const supabase = createServerClient()
   const { data, error } = await supabase
     .from('site_faqs')
@@ -13,6 +16,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const perm = await requireCmsAccess('faqs', 'edit')
+  if (!perm.ok) return perm.response
   const supabase = createServerClient()
   const body = await req.json()
   const { question, answer, sort_order = 0, is_active = true } = body
@@ -24,5 +29,6 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  await writeAuditLog({ adminId: perm.adminId, action: 'create_faq', resource: 'faqs', resourceId: data.id })
   return NextResponse.json({ data }, { status: 201 })
 }

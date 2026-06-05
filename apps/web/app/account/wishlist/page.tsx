@@ -5,6 +5,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { WishlistGrid } from '@/components/account/WishlistGrid'
 import type { ProductCardProps } from '@/components/product/ProductCard'
 import { attachCardPrice } from '@/lib/pricing/attachCardPrice'
+import { fetchPurityMapForProducts } from '@/lib/pricing/fetchPurityMap'
 import { getLatestPrices } from '@/lib/pricing/engine'
 
 export const metadata: Metadata = { title: 'My Wishlist' }
@@ -17,7 +18,7 @@ export default async function WishlistPage() {
   const [{ data: wishlists }, prices] = await Promise.all([
     supabase
       .from('wishlists')
-      .select('*, product:products(id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,product_images(*),product_variants(*))')
+      .select('*, product:products(id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,stone_lines,product_images(*),product_variants(*))')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false }),
     getLatestPrices().catch(() => ({ gold: null, silver: null })),
@@ -30,16 +31,17 @@ export default async function WishlistPage() {
     making_charge_discount_pct?: number | null
     gem_price_discount_pct?: number | null
   }
-  const products = (wishlists ?? [])
-    .map((w) => w.product)
-    .filter(Boolean)
-    .map((p) =>
-      attachCardPrice(
-        { ...(p as P), product_variants: (p as P).product_variants ?? [] },
-        gold,
-        silver
-      )
-    ) as Parameters<typeof WishlistGrid>[0]['products']
+  const rawProducts = (wishlists ?? []).map((w) => w.product).filter(Boolean)
+  const purityMap = await fetchPurityMapForProducts(supabase, rawProducts)
+
+  const products = rawProducts.map((p) =>
+    attachCardPrice(
+      { ...(p as P), product_variants: (p as P).product_variants ?? [] },
+      gold,
+      silver,
+      purityMap,
+    ),
+  ) as Parameters<typeof WishlistGrid>[0]['products']
 
   return (
     <div>

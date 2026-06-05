@@ -54,6 +54,7 @@ type MatrixSeedCell = {
   price: number
   stock_qty: number
   is_active: boolean
+  metal_weight_g?: number | null
   sku?: string
 }
 
@@ -104,7 +105,7 @@ export type ProductCatalogCreateFormProps = {
 
 type CellState = {
   id?: string
-  price: string
+  metal_weight_g: string
   stock_qty: string
   is_active: boolean
 }
@@ -113,13 +114,20 @@ function buildCellKey(colorId: string, purityId: string) {
   return `${colorId}:${purityId}`
 }
 
-function buildCellState(matrix: MatrixSeedCell[]) {
+function buildCellState(matrix: MatrixSeedCell[], fallbackWeightG?: number | null) {
+  const fallback =
+    fallbackWeightG != null && Number.isFinite(Number(fallbackWeightG))
+      ? String(Number(fallbackWeightG))
+      : ''
   return Object.fromEntries(
     matrix.map((cell) => [
       buildCellKey(cell.color_id, cell.purity_id),
       {
         id: cell.id,
-        price: String(cell.price),
+        metal_weight_g:
+          cell.metal_weight_g != null && Number.isFinite(Number(cell.metal_weight_g))
+            ? String(Number(cell.metal_weight_g))
+            : fallback,
         stock_qty: String(cell.stock_qty),
         is_active: cell.is_active,
       } satisfies CellState,
@@ -240,13 +248,6 @@ export function ProductCatalogCreateForm({
     String(initialData?.product.making_charge_pct ?? 8),
   )
 
-  const [metalWeightG, setMetalWeightG] = useState<string>(() => {
-    const w = initialData?.product.metal_weight_g
-    if (w == null) return ''
-    const n = Number(w)
-    return Number.isFinite(n) ? String(n) : ''
-  })
-
   const [hasStone, setHasStone] = useState(() => Boolean(initialData?.product.has_stone))
   const [stoneRows, setStoneRows] = useState<StoneLineUi[]>(() => {
     const rows = stoneLinesFromDb(initialData?.product.stone_lines)
@@ -268,8 +269,12 @@ export function ProductCatalogCreateForm({
     })) ?? [],
   )
 
-  const [cells, setCells] = useState<Record<string, CellState>>(buildCellState(initialData?.matrix ?? []))
+  const [cells, setCells] = useState<Record<string, CellState>>(
+    buildCellState(initialData?.matrix ?? [], initialData?.product.metal_weight_g),
+  )
   const [saving, setSaving] = useState(false)
+  const [publishing, setPublishing] = useState(false)
+  const [justPublished, setJustPublished] = useState(false)
 
   const categoryCode = categories.find((c) => c.id === categoryId)?.code ?? 'XX'
 
@@ -416,7 +421,7 @@ export function ProductCatalogCreateForm({
   function setCellValue(colorId: string, purityId: string, updater: (current: CellState) => CellState) {
     const key = buildCellKey(colorId, purityId)
     setCells((prev) => {
-      const current = prev[key] ?? { price: '', stock_qty: '1', is_active: true }
+      const current = prev[key] ?? { metal_weight_g: '', stock_qty: '1', is_active: true }
       return { ...prev, [key]: updater(current) }
     })
   }
@@ -459,34 +464,36 @@ export function ProductCatalogCreateForm({
       id?: string
       color_id: string
       purity_id: string
-      price: number
       stock_qty: number
       is_active: boolean
+      metal_weight_g: number
     }> = []
 
     for (const row of colorRows) {
       for (const purity of puritiesForProduct) {
         const current = cells[buildCellKey(row.color_id, purity.id)]
         if (!current) continue
-        const price = parseFloat(current.price.trim())
-        if (!Number.isFinite(price) || price <= 0) continue
+        const weightTrim = current.metal_weight_g.trim()
+        const weightParsed = weightTrim !== '' ? parseFloat(weightTrim) : NaN
+        if (!Number.isFinite(weightParsed) || weightParsed <= 0) continue
         matrix.push({
           id: current.id,
           color_id: row.color_id,
           purity_id: purity.id,
-          price,
           stock_qty: Math.max(0, Math.floor(Number(current.stock_qty) || 0)),
           is_active: current.is_active,
+          metal_weight_g: weightParsed,
         })
       }
     }
 
     if (matrix.length === 0) {
-      toast.error('Enter at least one valid variant price')
+      toast.error('Enter at least one variant with metal weight (g)')
       return
     }
 
     setSaving(true)
+    if (nextStatus === 'active') setPublishing(true)
     try {
       const productPayload = {
         name: name.trim(),
@@ -502,12 +509,6 @@ export function ProductCatalogCreateForm({
         diamond_color: diamondColor.trim() || null,
         diamond_clarity: diamondClarity.trim() || null,
         size_range: sizeRange.trim() || null,
-        metal_weight_g: (() => {
-          const t = metalWeightG.trim()
-          if (t === '') return null
-          const n = parseFloat(t)
-          return Number.isFinite(n) && n >= 0 ? n : null
-        })(),
         meta_title: metaTitle.trim() || null,
         meta_description: metaDesc.trim() || null,
         status: nextStatus,
@@ -549,13 +550,25 @@ export function ProductCatalogCreateForm({
       const body = (await res.json().catch(() => ({}))) as { id?: string; error?: string }
       if (!res.ok) throw new Error(body.error ?? res.statusText)
 
-      toast.success(nextStatus === 'active' ? 'Product published' : nextStatus === 'archived' ? 'Product archived' : 'Draft saved')
-      router.push(body.id ? `/products/${body.id}` : isEdit ? `/products/${initialData.id}` : '/products')
-      router.refresh()
+      if (nextStatus === 'active') {
+        setJustPublished(true)
+        setStatus('active')
+        toast.success('Product published')
+        if (!isEdit && body.id) {
+          router.push(`/products/${body.id}`)
+        } else if (isEdit) {
+          router.refresh()
+        }
+      } else {
+        toast.success(nextStatus === 'archived' ? 'Product archived' : 'Draft saved')
+        router.push(body.id ? `/products/${body.id}` : isEdit ? `/products/${initialData.id}` : '/products')
+        router.refresh()
+      }
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Save failed')
     } finally {
       setSaving(false)
+      setPublishing(false)
     }
   }
 
@@ -629,19 +642,6 @@ export function ProductCatalogCreateForm({
               onChange={(e) => setProductNumber(parseInt(e.target.value, 10) || 1)}
               className="w-full border rounded-lg px-3 py-2 text-sm"
             />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-xs text-ink-muted">Metal weight (g)</span>
-            <input
-              type="number"
-              min={0}
-              step="0.001"
-              value={metalWeightG}
-              onChange={(e) => setMetalWeightG(e.target.value)}
-              placeholder="e.g. 4.25"
-              className="w-full border rounded-lg px-3 py-2 text-sm"
-            />
-            <span className="text-[11px] text-ink-faint">One value for the whole product — all gold or silver purities.</span>
           </label>
           <label className="block space-y-1">
             <span className="text-xs text-ink-muted">Making charge %</span>
@@ -956,7 +956,10 @@ export function ProductCatalogCreateForm({
       )}
 
       <section className="bg-white rounded-xl border border-divider p-6 space-y-4 overflow-x-auto">
-        <h3 className="font-display text-lg text-deep-teal">Pricing matrix (₹)</h3>
+        <h3 className="font-display text-lg text-deep-teal">Weight &amp; stock matrix</h3>
+        <p className="text-sm text-ink-muted">
+          Price is calculated automatically from today&apos;s gold/silver rate, weight, making charge %, and stone lines.
+        </p>
         {!hasMetalPurities ? (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             `metal_purities` table empty hai. Supabase me seed / migration chalao — gold (18/14/09) aur silver (925/835) columns yahan dikhenge.
@@ -968,8 +971,8 @@ export function ProductCatalogCreateForm({
         ) : colorRows.length === 0 ? (
           <p className="text-sm text-ink-muted">
             {isGoldProduct
-              ? 'Pehle colour rows banao. Har purity column me us colour ka price aur stock set hoga.'
-              : 'Silver: upar Product images section complete karo — phir yahan price set karo.'}
+              ? 'Pehle colour rows banao. Har purity column me weight aur stock set karo.'
+              : 'Silver: upar Product images section complete karo — phir yahan weight set karo.'}
           </p>
         ) : (
           <table className="text-sm border-collapse min-w-full">
@@ -990,16 +993,25 @@ export function ProductCatalogCreateForm({
                       <td className="px-2 py-3 border-b align-top font-medium">{color?.label ?? row.color_id}</td>
                     )}
                     {puritiesForProduct.map((purity) => {
-                      const cell = cells[buildCellKey(row.color_id, purity.id)] ?? { price: '', stock_qty: '1', is_active: true }
+                      const cell = cells[buildCellKey(row.color_id, purity.id)] ?? {
+                        metal_weight_g: '',
+                        stock_qty: '1',
+                        is_active: true,
+                      }
                       return (
                         <td key={purity.id} className="px-2 py-2 border-b align-top min-w-[11rem]">
                           <input
                             type="number"
                             min={0}
-                            step={1}
-                            placeholder="Price"
-                            value={cell.price}
-                            onChange={(e) => setCellValue(row.color_id, purity.id, (current) => ({ ...current, price: e.target.value }))}
+                            step="0.001"
+                            placeholder="Weight (g)"
+                            value={cell.metal_weight_g}
+                            onChange={(e) =>
+                              setCellValue(row.color_id, purity.id, (current) => ({
+                                ...current,
+                                metal_weight_g: e.target.value,
+                              }))
+                            }
                             className="w-full border rounded px-2 py-1 mb-2"
                           />
                           <input
@@ -1060,11 +1072,15 @@ export function ProductCatalogCreateForm({
           </button>
           <button
             type="button"
-            disabled={saving}
+            disabled={saving || justPublished}
             onClick={() => void submit('active')}
-            className="px-5 py-2.5 rounded-lg bg-teal text-white text-sm font-medium hover:bg-deep-teal"
+            className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              justPublished
+                ? 'bg-teal/80 text-white cursor-default'
+                : 'bg-teal text-white hover:bg-deep-teal'
+            }`}
           >
-            Publish
+            {publishing && saving ? 'Publishing…' : justPublished ? 'Published' : 'Publish'}
           </button>
         </div>
       </section>

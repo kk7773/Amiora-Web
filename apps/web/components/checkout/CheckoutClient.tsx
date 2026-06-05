@@ -211,6 +211,8 @@ export function CheckoutClient() {
           quantity:   i.quantity,
           unit_price: i.unitPrice,
           size_label: i.sizeLabel,
+          metal_weight_g: i.metalWeightG,
+          metal_rate_per_gram: i.metalRatePerGram,
         })),
         total_amount:    grandTotal,
         delivery_method: deliveryMethod,

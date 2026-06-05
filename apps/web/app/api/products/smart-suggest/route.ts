@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@amiora/database'
 import { attachCardPrice } from '@/lib/pricing/attachCardPrice'
-import { getLatestPrices }       from '@/lib/pricing/engine'
+import { fetchPurityMapForProducts } from '@/lib/pricing/fetchPurityMap'
+import { getLatestPrices } from '@/lib/pricing/engine'
 
 export async function POST(req: NextRequest) {
   try {
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
     if (ids.length > 0) {
       const { data } = await supabase
         .from('products')
-        .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,product_images(*),product_variants(*)')
+        .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,stone_lines,product_images(*),product_variants(*)')
         .in('id', ids.slice(0, 4))
         .eq('status', 'active')
       products = data ?? []
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
     if (products.length < 4) {
       const { data: featured } = await supabase
         .from('products')
-        .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,product_images(*),product_variants(*)')
+        .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,stone_lines,product_images(*),product_variants(*)')
         .eq('status', 'active')
         .eq('is_featured', true)
         .not('id', 'in', `(${product_ids.join(',')})`)
@@ -45,11 +46,14 @@ export async function POST(req: NextRequest) {
       products = [...products, ...(featured ?? [])]
     }
 
+    const purityMap = await fetchPurityMapForProducts(supabase, products)
+
     const withPrices = products.map((p) =>
       attachCardPrice(
         { ...p, product_variants: p.product_variants ?? [] },
         prices.gold?.pricePerGram ?? 7200,
-        prices.silver?.pricePerGram ?? 90
+        prices.silver?.pricePerGram ?? 90,
+        purityMap,
       )
     )
 

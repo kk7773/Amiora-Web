@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@amiora/database'
+import { computeCatalogVariantPrice } from '@amiora/pricing'
 import { generateAmioraSKU } from '@/lib/sku'
 import { requireCmsAccess, writeAuditLog } from '@/lib/rbac'
 
@@ -59,9 +60,10 @@ type MatrixCell = {
   id?: string
   color_id: string
   purity_id: string
-  price: number
+  price?: number
   stock_qty?: number
   is_active?: boolean
+  metal_weight_g: number
 }
 
 type Body = {
@@ -129,10 +131,11 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       return NextResponse.json({ error: 'Invalid category or missing category code' }, { status: 400 })
     }
 
-    const [purityRes, colorRes, existingGroupsRes, existingVariantsRes] = await Promise.all([
+    const [purityRes, colorRes, existingGroupsRes, existingVariantsRes, goldRes, silverRes] =
+      await Promise.all([
       supabase
         .from('metal_purities')
-        .select('id, code')
+        .select('id, code, metal')
         .in('id', [...new Set(body.matrix.map((row) => row.purity_id))]),
       supabase
         .from('metal_colors')
@@ -146,8 +149,29 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         .from('product_variants')
         .select('id, color_group_id, color_id, purity_id')
         .eq('product_id', id),
+      supabase
+        .from('live_prices')
+        .select('price_per_gram')
+        .eq('metal', 'gold_999')
+        .order('fetched_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from('live_prices')
+        .select('price_per_gram')
+        .eq('metal', 'silver_999')
+        .order('fetched_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ])
 
+    const goldPerGram =
+      goldRes.data?.price_per_gram != null ? Number(goldRes.data.price_per_gram) : null
+    const silverPerGram =
+      silverRes.data?.price_per_gram != null ? Number(silverRes.data.price_per_gram) : null
+    const purityMeta = Object.fromEntries(
+      (purityRes.data ?? []).map((row) => [row.id, { code: row.code, metal: row.metal }]),
+    )
     const purityCode = Object.fromEntries((purityRes.data ?? []).map((row) => [row.id, row.code]))
     const colorCode = Object.fromEntries((colorRes.data ?? []).map((row) => [row.id, row.code]))
     const existingGroups = existingGroupsRes.data ?? []
@@ -271,21 +295,36 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       }
     }
 
+    const stoneLines = productUpdate.stone_lines
+
     for (const cell of body.matrix) {
       const groupId = groupByColorId.get(cell.color_id)
       const purity = purityCode[cell.purity_id]
       const color = colorCode[cell.color_id]
-      const price = Number(cell.price)
+      const metalWeight = parseOptionalGrams(cell.metal_weight_g)
 
-      if (!groupId || !purity || !color || !Number.isFinite(price) || price <= 0) continue
+      if (!groupId || !purity || !color || metalWeight == null || metalWeight <= 0) continue
+
+      const meta = purityMeta[cell.purity_id]
+      const breakdown = computeCatalogVariantPrice({
+        metalWeightG: metalWeight,
+        purityCode: String(meta?.code ?? purity),
+        metalType: meta?.metal,
+        makingChargePct: productUpdate.making_charge_pct,
+        stoneLines,
+        goldPerGram,
+        silverPerGram,
+      })
+      const snapshotPrice = breakdown?.finalPrice ?? 0
 
       const payload = {
         color_group_id: groupId,
         color_id: cell.color_id,
         purity_id: cell.purity_id,
         sku: generateAmioraSKU(String(catRow.code), productUpdate.product_number, String(purity), String(color)),
-        price,
+        price: snapshotPrice,
         stock_qty: Math.max(0, Math.floor(cell.stock_qty ?? 0)),
+        metal_weight_g: metalWeight,
         is_active: cell.is_active ?? true,
       }
 

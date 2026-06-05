@@ -2,7 +2,8 @@ import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { createServerClient } from '@amiora/database'
 import { attachCardPrice } from '@/lib/pricing/attachCardPrice'
-import { getLatestPrices }       from '@/lib/pricing/engine'
+import { fetchPurityMapForProducts } from '@/lib/pricing/fetchPurityMap'
+import { getLatestPrices } from '@/lib/pricing/engine'
 import { ProductCard }           from '@/components/product/ProductCard'
 import { FilterSidebar }         from '@/components/shop/FilterSidebar'
 import { SortDropdown }          from '@/components/shop/SortDropdown'
@@ -115,7 +116,7 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
   // ─────────────────────────────────────────────────────────────────
   let query = supabase
     .from('products')
-    .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(*)', { count: 'exact' })
+    .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,stone_lines,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(*)', { count: 'exact' })
     .eq('status', 'active')
 
   // Apply resolved product-ID constraint from variant filters
@@ -152,6 +153,7 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
 
   const { data: rows, count } = await query
+  const purityMap = await fetchPurityMapForProducts(supabase, rows ?? [])
 
   // ─────────────────────────────────────────────────────────────────
   // Step 3 — Attach live prices to each product
@@ -188,7 +190,8 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
         product_variants: p.product_variants ?? [],
       },
       prices.gold?.pricePerGram ?? 7200,
-      prices.silver?.pricePerGram ?? 90
+      prices.silver?.pricePerGram ?? 90,
+      purityMap,
     )
   })
 

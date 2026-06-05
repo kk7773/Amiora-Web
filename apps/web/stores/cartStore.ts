@@ -11,6 +11,9 @@ export interface CartItem {
   imageUrl:     string
   unitPrice:    number
   quantity:     number
+  /** Snapshot at add-to-cart for order audit */
+  metalWeightG?: number
+  metalRatePerGram?: number
 }
 
 interface CartStore {

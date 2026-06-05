@@ -15,7 +15,9 @@ import { ImageGallery } from './ImageGallery'
 import { ProductShare }   from './ProductShare'
 import { StarRating }     from '@/components/ui/StarRating'
 import { useCartStore }   from '@/stores/cartStore'
-import { formatINR }    from '@/lib/pricing/calculator'
+import { breakdownToDisplayRows, formatINR, resolveLiveRate } from '@amiora/pricing'
+import { useCatalogPrices, type CatalogPricingContext } from '@/hooks/useCatalogPrices'
+import { MetalPurityTable, formatWeightGrams } from './MetalPurityTable'
 
 interface ProductDetailClientProps {
   product: {
@@ -47,6 +49,7 @@ interface ProductDetailClientProps {
     alt_text:    string | null
     sort_order: number
   }[]
+  pricingContext: CatalogPricingContext
 }
 
 const SERVICE_BADGES = [
@@ -170,7 +173,12 @@ function displayMoney(value: number | string): string {
   return value
 }
 
-export function ProductDetailClient({ product, catalog, fallbackImages }: ProductDetailClientProps) {
+export function ProductDetailClient({
+  product,
+  catalog,
+  fallbackImages,
+  pricingContext,
+}: ProductDetailClientProps) {
   const initialVariant = catalog.variants.find((variant) => variant.is_active) ?? catalog.variants[0] ?? null
   const initialColorId = initialVariant?.color_id ?? catalog.colorGroups[0]?.colorId ?? ''
 
@@ -196,8 +204,14 @@ export function ProductDetailClient({ product, catalog, fallbackImages }: Produc
 
   const activeVariant = sel.variant
 
-  const displayPrice =
-    activeVariant && activeVariant.is_active ? Number(activeVariant.price) : 0
+  const { computedPrices, goldPerGram, silverPerGram } = useCatalogPrices(
+    catalog.variants,
+    catalog.purities,
+    pricingContext,
+  )
+
+  const activeBreakdown = activeVariant ? computedPrices[activeVariant.id] : null
+  const displayPrice = activeBreakdown?.finalPrice ?? 0
 
   const handleVariantChange = useCallback(
     (state: SelectedVariantState & { variant: CatalogVariantRow | null }) => {
@@ -224,15 +238,21 @@ export function ProductDetailClient({ product, catalog, fallbackImages }: Produc
       imageUrl:     thumb,
       unitPrice:    displayPrice,
       quantity:     sel.quantity,
+      metalWeightG: activeVariant.metal_weight_g ?? undefined,
+      metalRatePerGram: resolveLiveRate(
+        catalog.purities.find((p) => p.id === activeVariant.purity_id)?.metal,
+        goldPerGram,
+        silverPerGram,
+      ),
     })
     toast.success('Added to cart!', { description: product.name })
   }
 
-  const TABS = ['Description', 'Diamond details', 'Price Breakup', 'Shipping & Returns', 'Care Guide']
-  const priceBreakup = useMemo(
-    () => normalizePriceBreakup(activeVariant?.price_breakup ?? null),
-    [activeVariant?.price_breakup],
-  )
+  const TABS = ['Description', 'Diamond details', 'Metal & Purity', 'Price Breakup', 'Shipping & Returns', 'Care Guide']
+  const liveBreakupRows = useMemo(() => {
+    if (!activeBreakdown) return null
+    return breakdownToDisplayRows(activeBreakdown, product.making_charge_pct)
+  }, [activeBreakdown, product.making_charge_pct])
 
   return (
     <div className="section-x py-10">
@@ -267,12 +287,19 @@ export function ProductDetailClient({ product, catalog, fallbackImages }: Produc
             <StarRating rating={product.avgRating} count={product.reviewCount} size="md" />
           )}
 
-          <div className="flex flex-wrap items-baseline gap-3">
-            <p className="font-display text-3xl text-ink tabular-nums">
-              {displayPrice > 0 ? formatINR(displayPrice) : '—'}
-            </p>
-            {activeVariant && (
-              <span className="text-xs text-ink-muted font-mono">{activeVariant.sku}</span>
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-baseline gap-3">
+              <p className="font-display text-3xl text-ink tabular-nums">
+                {displayPrice > 0 ? formatINR(displayPrice) : '—'}
+              </p>
+              {activeVariant && (
+                <span className="text-xs text-ink-muted font-mono">{activeVariant.sku}</span>
+              )}
+            </div>
+            {activeVariant?.metal_weight_g != null && (
+              <p className="text-sm text-ink-muted">
+                Metal weight: <span className="text-ink tabular-nums">{formatWeightGrams(activeVariant.metal_weight_g)}</span>
+              </p>
             )}
           </div>
 
@@ -382,7 +409,16 @@ export function ProductDetailClient({ product, catalog, fallbackImages }: Produc
                 </table>
               )}
               {activeTab === 2 && (
-                priceBreakup ? (
+                <MetalPurityTable
+                  colorId={sel.colorId}
+                  selectedPurityId={activeVariant?.purity_id ?? null}
+                  purities={catalog.purities}
+                  variants={catalog.variants}
+                  computedPrices={computedPrices}
+                />
+              )}
+              {activeTab === 3 && (
+                liveBreakupRows ? (
                   <div className="space-y-3">
                     <h4 className="font-display text-lg text-ink">Price Breakup</h4>
                     <div className="overflow-x-auto">
@@ -394,16 +430,11 @@ export function ProductDetailClient({ product, catalog, fallbackImages }: Produc
                           </tr>
                         </thead>
                         <tbody>
-                          {priceBreakup.rows.map((row) => (
-                            <tr key={`${row.label}-${String(row.amount)}`} className="bg-white">
-                              <td className="px-3 py-2 border border-divider/80 text-ink">{row.label}</td>
-                              <td className="px-3 py-2 border border-divider/80 text-ink">
-                                <span className="inline-flex items-center gap-2">
-                                  {row.originalAmount != null && (
-                                    <span className="text-ink-faint line-through">{displayMoney(row.originalAmount)}</span>
-                                  )}
-                                  <span>{displayMoney(row.amount)}</span>
-                                </span>
+                          {liveBreakupRows.map((row) => (
+                            <tr key={`${row.label}-${row.amount}`} className="bg-white">
+                              <td className="px-3 py-2 border border-divider/80 text-ink font-medium">{row.label}</td>
+                              <td className="px-3 py-2 border border-divider/80 text-ink tabular-nums">
+                                {formatINR(row.amount)}
                               </td>
                             </tr>
                           ))}
@@ -411,15 +442,15 @@ export function ProductDetailClient({ product, catalog, fallbackImages }: Produc
                       </table>
                     </div>
                     <p className="text-xs text-ink-faint">
-                      {priceBreakup.note ?? 'Final price calculated at checkout based on actual weight.'}
+                      Based on today&apos;s gold/silver rate. Diamond/stone price stays fixed.
                     </p>
                   </div>
                 ) : (
-                  <p>Price breakup will be available soon.</p>
+                  <p>Set metal weight per purity in admin to see price breakup.</p>
                 )
               )}
-              {activeTab === 3 && <p>Free shipping on orders above ₹5,000. Easy 100-day returns.</p>}
-              {activeTab === 4 && (
+              {activeTab === 4 && <p>Free shipping on orders above ₹5,000. Easy 100-day returns.</p>}
+              {activeTab === 5 && (
                 <p>Store in a dry place. Clean with a soft cloth. Avoid contact with chemicals.</p>
               )}
             </div>

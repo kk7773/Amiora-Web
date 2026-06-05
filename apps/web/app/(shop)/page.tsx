@@ -31,7 +31,8 @@ import { StoreLocatorTeaser }   from '@/components/sections/StoreLocatorTeaser'
 import { StoreCitiesSection }   from '@/components/sections/StoreCitiesSection'
 import { FaqSection }           from '@/components/sections/FaqSection'
 import { attachCardPrice } from '@/lib/pricing/attachCardPrice'
-import { getLatestPrices }     from '@/lib/pricing/engine'
+import { fetchPurityMapForProducts } from '@/lib/pricing/fetchPurityMap'
+import { getLatestPrices } from '@/lib/pricing/engine'
 
 export default async function HomePage() {
   const supabase = createServerClient()
@@ -49,9 +50,9 @@ export default async function HomePage() {
     prices,
   ] = await Promise.all([
     supabase.from('collections').select('id,name,slug,banner_url,description').eq('is_active', true).order('sort_order').limit(4),
-    supabase.from('products').select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(*)').eq('status', 'active').eq('is_new_arrival', true).order('created_at', { ascending: false }).limit(10),
-    supabase.from('products').select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(*)').eq('status', 'active').or('is_best_seller.eq.true,is_featured.eq.true').order('created_at', { ascending: false }).limit(10),
-    supabase.from('products').select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(*)').eq('status', 'active').order('created_at', { ascending: false }).limit(40),
+    supabase.from('products').select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,stone_lines,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(*)').eq('status', 'active').eq('is_new_arrival', true).order('created_at', { ascending: false }).limit(10),
+    supabase.from('products').select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,stone_lines,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(*)').eq('status', 'active').or('is_best_seller.eq.true,is_featured.eq.true').order('created_at', { ascending: false }).limit(10),
+    supabase.from('products').select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,stone_lines,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(*)').eq('status', 'active').order('created_at', { ascending: false }).limit(40),
     supabase.from('testimonials').select('id,name,location,quote,rating').eq('is_featured', true).order('sort_order').limit(8),
     supabase.from('blogs').select('id,title,slug,excerpt,cover_url,tags,published_at').eq('is_published', true).order('published_at', { ascending: false }).limit(3),
     supabase.from('stores').select('id, city, image_url').eq('is_active', true).order('city'),
@@ -72,6 +73,13 @@ export default async function HomePage() {
     collection?: { slug?: string } | null
     category?: { slug?: string } | null
   }
+
+  const allHomeProducts = [
+    ...(newArrivalRows ?? []),
+    ...(bestSellerRows ?? []),
+    ...(topPickRows ?? []),
+  ]
+  const purityMap = await fetchPurityMapForProducts(supabase, allHomeProducts)
 
   const attachPrice = (rows: typeof newArrivalRows) =>
     (rows ?? []).map((p) => {
@@ -104,7 +112,8 @@ export default async function HomePage() {
           product_variants: p.product_variants ?? [],
         },
         prices.gold?.pricePerGram ?? 7200,
-        prices.silver?.pricePerGram ?? 90
+        prices.silver?.pricePerGram ?? 90,
+        purityMap,
       )
     })
 
@@ -114,7 +123,7 @@ export default async function HomePage() {
     ? bestSellerRows
     : await supabase
         .from('products')
-        .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(*)')
+        .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,stone_lines,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(*)')
         .eq('status', 'active')
         .order('created_at', { ascending: false })
         .limit(10)

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@amiora/database": "workspace:*",
+    "@amiora/pricing": "workspace:*",
     "@amiora/types": "workspace:*",
     "@amiora/ui": "workspace:*",
     "@hookform/resolvers": "^3.9.1",

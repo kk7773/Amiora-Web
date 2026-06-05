@@ -16,14 +16,23 @@ const schema = z.object({
 })
 type FormData = z.infer<typeof schema>
 
+const URL_ERROR_MESSAGES: Record<string, string> = {
+  confirmation_failed: 'Your confirmation link has expired or is invalid. Please sign up again or contact support.',
+  oauth_failed:        'Google sign-in failed. Please try again.',
+  callback_failed:     'Authentication failed. Please try again.',
+}
+
 export function LoginForm() {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const redirect     = searchParams.get('redirect') ?? '/account'
+  const urlError     = searchParams.get('error')
 
   const [loading,  setLoading]  = useState(false)
   const [showPw,   setShowPw]   = useState(false)
-  const [authError, setAuthError] = useState('')
+  const [authError, setAuthError] = useState(
+    urlError ? (URL_ERROR_MESSAGES[urlError] ?? urlError) : ''
+  )
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),

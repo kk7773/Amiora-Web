@@ -16,7 +16,7 @@
 
 import { unstable_cache } from 'next/cache'
 import { createServerClient } from '@amiora/database'
-import { calculateVariantPrice, type PriceBreakdown } from './calculator'
+import { calculateVariantPrice, type PriceBreakdown } from '@amiora/pricing'
 import type { LivePrice } from '@amiora/types'
 
 const GOLD_API_BASE = 'https://www.goldapi.io/api'

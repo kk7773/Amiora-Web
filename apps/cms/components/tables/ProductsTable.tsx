@@ -17,7 +17,29 @@ interface Product {
   collection?: { name: string } | null
   category?:   { name: string } | null
   images?:  { url: string; is_primary: boolean }[]
+  color_groups?: { images: string[]; display_order: number; is_active: boolean }[]
   variants?: { id: string }[]
+}
+
+function resolveThumbnail(product: Product): string | null {
+  const legacy =
+    product.images?.find((img) => img.is_primary)?.url ??
+    product.images?.[0]?.url
+  if (legacy?.trim()) return legacy.trim()
+
+  const groups = [...(product.color_groups ?? [])].sort(
+    (a, b) => a.display_order - b.display_order,
+  )
+  for (const group of groups) {
+    if (!group.is_active) continue
+    const url = group.images?.find((u) => typeof u === 'string' && u.trim())
+    if (url) return url.trim()
+  }
+  for (const group of groups) {
+    const url = group.images?.find((u) => typeof u === 'string' && u.trim())
+    if (url) return url.trim()
+  }
+  return null
 }
 
 interface Props {
@@ -99,23 +121,24 @@ export function ProductsTable({ products, collections, categories }: Props) {
           </thead>
           <tbody className="divide-y divide-divider">
             {filtered.map(p => {
-              const primary = p.images?.find(img => img.is_primary) ?? p.images?.[0]
+              const thumbnailUrl = resolveThumbnail(p)
               return (
                 <tr key={p.id} className="hover:bg-surface/50 transition-colors">
                   <td className="px-5 py-3">
-                    {primary ? (
+                    {thumbnailUrl ? (
                       <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-surface-2">
                         {!failedThumbnails.includes(p.id) ? (
                           <Image
-                            src={primary.url}
+                            src={thumbnailUrl}
                             alt={p.name}
                             fill
+                            unoptimized
                             className="object-cover"
                             sizes="40px"
                             onError={() => setFailedThumbnails((prev) => [...prev, p.id])}
                           />
                         ) : (
-                          <img src={primary.url} alt={p.name} className="h-full w-full object-cover" />
+                          <img src={thumbnailUrl} alt={p.name} className="h-full w-full object-cover" />
                         )}
                       </div>
                     ) : (

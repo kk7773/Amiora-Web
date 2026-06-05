@@ -5,7 +5,8 @@ import { notFound } from 'next/navigation'
 import { Suspense } from 'react'
 import { createServerClient } from '@amiora/database'
 import { attachCardPrice } from '@/lib/pricing/attachCardPrice'
-import { getLatestPrices }       from '@/lib/pricing/engine'
+import { fetchPurityMapForProducts } from '@/lib/pricing/fetchPurityMap'
+import { getLatestPrices } from '@/lib/pricing/engine'
 import { ProductCard }           from '@/components/product/ProductCard'
 import { FilterSidebar }         from '@/components/shop/FilterSidebar'
 import { SortDropdown }          from '@/components/shop/SortDropdown'
@@ -80,7 +81,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
 
   const { data: rows, count } = await supabase
     .from('products')
-    .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(*)', { count: 'exact' })
+    .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,stone_lines,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(*)', { count: 'exact' })
     .eq('status', 'active')
     .eq('category_id', category.id)
     .order(ord.col, { ascending: ord.asc })
@@ -98,6 +99,8 @@ export default async function CategoryPage({ params, searchParams }: Props) {
       is_active: boolean
     }[]
   }
+
+  const purityMap = await fetchPurityMapForProducts(supabase, rows ?? [])
 
   const products = ((rows ?? []) as unknown as RawProduct[]).map((p) => {
     // If product_images is empty, generate from product_color_groups
@@ -131,7 +134,8 @@ export default async function CategoryPage({ params, searchParams }: Props) {
         product_variants: p.product_variants ?? [],
       },
       prices.gold?.pricePerGram ?? 7200,
-      prices.silver?.pricePerGram ?? 90
+      prices.silver?.pricePerGram ?? 90,
+      purityMap,
     )
   })
 

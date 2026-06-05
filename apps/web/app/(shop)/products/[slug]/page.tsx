@@ -6,6 +6,8 @@ import { ProductCard }         from '@/components/product/ProductCard'
 import { ReviewsSection }      from '@/components/product/ReviewsSection'
 import { ProductFAQ }          from '@/components/product/ProductFAQ'
 import { attachCardPrice } from '@/lib/pricing/attachCardPrice'
+import { fetchPurityMapForProducts } from '@/lib/pricing/fetchPurityMap'
+import { getLatestPrices } from '@/lib/pricing/engine'
 
 interface Props {
   params: Promise<{ slug: string }>
@@ -21,7 +23,7 @@ type CatalogBundle = {
     hex: string | null
     images: string[]
   }[]
-  catalogPurities: { id: string; code: string; label: string; display_order: number }[]
+  catalogPurities: { id: string; code: string; label: string; display_order: number; metal?: string }[]
   catalogVariants: {
     id: string
     color_id: string
@@ -29,6 +31,7 @@ type CatalogBundle = {
     sku: string
     price: number
     stock_qty: number
+    metal_weight_g: number | null
     is_active: boolean
     price_breakup?: unknown
   }[]
@@ -99,6 +102,7 @@ async function legacyVariantCatalog(
       sku:        `${productSku}-${v.id.slice(0, 8)}`,
       price:      Number(v.gem_price_override ?? 0),
       stock_qty:  inStock ? 99 : 0,
+      metal_weight_g: null,
       is_active:  v.is_active !== false,
       price_breakup: null,
     }
@@ -134,6 +138,7 @@ const PDP_PRODUCT_MODERN_SELECT = `
   id, name, slug, short_desc, description, faqs,
   diamond_shape, diamond_count, total_diamond_wt, diamond_color, diamond_clarity, size_range,
   making_charge_pct, making_charge_discount_pct, gem_price_discount_pct,
+  has_stone, stone_lines,
   collection:collections(id, name, slug),
   category:categories(id, name, slug),
   product_images(id, url, alt_text, sort_order, is_primary)
@@ -285,7 +290,7 @@ export default async function ProductPage({ params }: Props) {
         .eq('is_active', true)
         .order('display_order', { ascending: true }),
       purityIdsForLookup.length > 0 && !useLegacyVariants
-        ? supabase.from('metal_purities').select('id, label, code, display_order').in('id', purityIdsForLookup)
+        ? supabase.from('metal_purities').select('id, label, code, display_order, metal').in('id', purityIdsForLookup)
         : emptyPurities,
     ])
 
@@ -336,11 +341,12 @@ export default async function ProductPage({ params }: Props) {
     sku: string
     price: number | string
     stock_qty: number
+    metal_weight_g?: number | string | null
     is_active: boolean
     price_breakup?: unknown
   }
 
-  let catalogPurities: { id: string; code: string; label: string; display_order: number }[] = []
+  let catalogPurities: { id: string; code: string; label: string; display_order: number; metal?: string }[] = []
   let catalogVariants: {
     id: string
     color_id: string
@@ -348,6 +354,7 @@ export default async function ProductPage({ params }: Props) {
     sku: string
     price: number
     stock_qty: number
+    metal_weight_g: number | null
     is_active: boolean
     price_breakup?: unknown
   }[] = []
@@ -378,6 +385,10 @@ export default async function ProductPage({ params }: Props) {
         sku:        v.sku,
         price:      Number(v.price ?? 0),
         stock_qty:  typeof v.stock_qty === 'number' ? v.stock_qty : 0,
+        metal_weight_g:
+          v.metal_weight_g != null && Number.isFinite(Number(v.metal_weight_g))
+            ? Number(v.metal_weight_g)
+            : null,
         is_active:  v.is_active ?? true,
         price_breakup: v.price_breakup ?? null,
       }))
@@ -431,6 +442,7 @@ export default async function ProductPage({ params }: Props) {
     making_charge_pct: number
     making_charge_discount_pct: number | null
     gem_price_discount_pct: number | null
+    stone_lines?: unknown
     product_images: {
       url: string
       is_primary: boolean
@@ -442,6 +454,8 @@ export default async function ProductPage({ params }: Props) {
       sku: string
       price: number
       stock_qty: number
+      metal_weight_g?: number | null
+      purity_id?: string
       is_active: boolean
     }[]
   }
@@ -469,7 +483,7 @@ export default async function ProductPage({ params }: Props) {
         ? supabase
             .from('products')
             .select(
-              'id, name, slug, collection:collections(slug), category:categories(slug), making_charge_pct, making_charge_discount_pct, gem_price_discount_pct, product_images(url, is_primary, is_hover, alt_text), product_variants(id, sku, price, stock_qty, is_active)',
+              'id, name, slug, collection:collections(slug), category:categories(slug), making_charge_pct, making_charge_discount_pct, gem_price_discount_pct, stone_lines, product_images(url, is_primary, is_hover, alt_text), product_variants(id, sku, price, stock_qty, metal_weight_g, purity_id, is_active)',
             )
             .neq('collection_id', currentCollectionId)
             .neq('id', product.id)
@@ -478,7 +492,7 @@ export default async function ProductPage({ params }: Props) {
         : supabase
             .from('products')
             .select(
-              'id, name, slug, collection:collections(slug), category:categories(slug), making_charge_pct, making_charge_discount_pct, gem_price_discount_pct, product_images(url, is_primary, is_hover, alt_text), product_variants(id, sku, price, stock_qty, is_active)',
+              'id, name, slug, collection:collections(slug), category:categories(slug), making_charge_pct, making_charge_discount_pct, gem_price_discount_pct, stone_lines, product_images(url, is_primary, is_hover, alt_text), product_variants(id, sku, price, stock_qty, metal_weight_g, purity_id, is_active)',
             )
             .neq('id', product.id)
             .eq('status', 'active')
@@ -495,15 +509,19 @@ export default async function ProductPage({ params }: Props) {
       supabase
         .from('products')
         .select(
-          'id, name, slug, collection:collections(slug), category:categories(slug), making_charge_pct, making_charge_discount_pct, gem_price_discount_pct, product_images(*), product_variants(id, sku, price, stock_qty, is_active)',
+          'id, name, slug, collection:collections(slug), category:categories(slug), making_charge_pct, making_charge_discount_pct, gem_price_discount_pct, stone_lines, product_images(*), product_variants(id, sku, price, stock_qty, metal_weight_g, purity_id, is_active)',
         )
         .in('id', smartPairProductIds)
         .eq('status', 'active'),
     ).then((r) => (r.data ?? []) as SuggestedProduct[]).catch(() => [])
   }
 
-  const goldPrice = 7200
-  const silverPrice = 90
+  const { gold: liveGold, silver: liveSilver } = await getLatestPrices()
+  const goldPrice = liveGold?.pricePerGram ?? 7200
+  const silverPrice = liveSilver?.pricePerGram ?? 90
+
+  const relatedForPricing = [...pairedProducts, ...suggestedProducts]
+  const purityMap = await fetchPurityMapForProducts(supabase, relatedForPricing)
 
   const smartPairs = pairedProducts.map((p) =>
     attachCardPrice(
@@ -515,6 +533,7 @@ export default async function ProductPage({ params }: Props) {
       },
       goldPrice,
       silverPrice,
+      purityMap,
     ),
   ) as Parameters<typeof ProductCard>[0]['product'][]
 
@@ -528,6 +547,7 @@ export default async function ProductPage({ params }: Props) {
       },
       goldPrice,
       silverPrice,
+      purityMap,
     ),
   ) as Parameters<typeof ProductCard>[0]['product'][]
 
@@ -596,6 +616,14 @@ export default async function ProductPage({ params }: Props) {
           variants:    catalogVariants,
         }}
         fallbackImages={fallbackImages}
+        pricingContext={{
+          makingChargePct: Number(product.making_charge_pct ?? 8),
+          makingChargeDiscountPct: Number(product.making_charge_discount_pct ?? 0),
+          gemPriceDiscountPct: Number(product.gem_price_discount_pct ?? 0),
+          stoneLines: (product as { stone_lines?: unknown }).stone_lines ?? [],
+          initialGoldPerGram: goldPrice,
+          initialSilverPerGram: silverPrice,
+        }}
       />
 
       {smartPairs.length > 0 && (

@@ -15,6 +15,7 @@ export default async function ProductsPage() {
         collection:collections(name),
         category:categories(name, code),
         images:product_images(url, is_primary),
+        color_groups:product_color_groups(images, display_order, is_active),
         variants:product_variants(id)
       `)
       .order('created_at', { ascending: false }),

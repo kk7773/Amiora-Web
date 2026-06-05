@@ -4,7 +4,15 @@ import { createServerClient } from '@amiora/database'
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as {
-      items:            { product_id: string; variant_id: string; quantity: number; unit_price: number; size_label: string }[]
+      items:            {
+        product_id: string
+        variant_id: string
+        quantity: number
+        unit_price: number
+        size_label: string
+        metal_weight_g?: number
+        metal_rate_per_gram?: number
+      }[]
       total_amount:     number
       delivery_method:  string
       payment_method?:  string
@@ -44,6 +52,10 @@ export async function POST(req: NextRequest) {
         quantity:   item.quantity,
         unit_price: item.unit_price,
         size_label: item.size_label,
+        metal_weight_g:
+          item.metal_weight_g != null && Number.isFinite(item.metal_weight_g)
+            ? item.metal_weight_g
+            : null,
       }))
     )
 

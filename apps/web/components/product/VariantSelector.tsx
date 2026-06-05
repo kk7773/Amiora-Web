@@ -16,6 +16,7 @@ export type CatalogPurity = {
   code:           string
   label:          string
   display_order:  number
+  metal?:         string
 }
 
 export type CatalogVariantRow = {
@@ -25,6 +26,7 @@ export type CatalogVariantRow = {
   sku:          string
   price:        number
   stock_qty:    number
+  metal_weight_g?: number | null
   is_active:    boolean
   price_breakup?: unknown
 }

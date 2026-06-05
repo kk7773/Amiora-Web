@@ -24,7 +24,7 @@ export default async function EditProductPage({ params }: Props) {
             id, color_id, images, display_order
           ),
           product_variants(
-            id, color_id, purity_id, sku, price, stock_qty, is_active
+            id, color_id, purity_id, sku, price, stock_qty, metal_weight_g, is_active
           )
         `)
         .eq('id', id)
@@ -67,6 +67,7 @@ export default async function EditProductPage({ params }: Props) {
     sku: string
     price: number | string
     stock_qty: number
+    metal_weight_g: number | null
     is_active: boolean
   }>).map((row) => ({
     id: row.id,
@@ -75,6 +76,10 @@ export default async function EditProductPage({ params }: Props) {
     sku: row.sku,
     price: Number(row.price),
     stock_qty: row.stock_qty,
+    metal_weight_g:
+      row.metal_weight_g != null && Number.isFinite(Number(row.metal_weight_g))
+        ? Number(row.metal_weight_g)
+        : null,
     is_active: row.is_active,
   }))
 

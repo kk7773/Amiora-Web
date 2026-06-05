@@ -328,6 +328,7 @@ export interface Database {
           sku: string
           price: number
           stock_qty: number
+          metal_weight_g: number | null
           is_active: boolean
           created_at: string
         }
@@ -340,6 +341,7 @@ export interface Database {
           sku: string
           price: number
           stock_qty?: number
+          metal_weight_g?: number | null
           is_active?: boolean
           created_at?: string
         }

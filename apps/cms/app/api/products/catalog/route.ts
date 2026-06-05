@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@amiora/database'
+import { computeCatalogVariantPrice } from '@amiora/pricing'
 import { generateAmioraSKU } from '@/lib/sku'
 import { requireCmsAccess, writeAuditLog } from '@/lib/rbac'
 
@@ -57,9 +58,10 @@ type MatrixCell = {
   id?:          string
   color_id:    string
   purity_id:   string
-  price:      number
+  price?:       number
   stock_qty?: number
   is_active?:  boolean
+  metal_weight_g: number
 }
 
 type Body = {
@@ -121,13 +123,32 @@ export async function POST(req: NextRequest) {
     }
     const catCode = String(catRow.code)
 
-    const { data: purityRows } = await supabase
-      .from('metal_purities')
-      .select('id, code')
-      .in(
-        'id',
-        [...new Set(body.matrix.map((m) => m.purity_id))],
-      )
+    const [{ data: purityRows }, { data: goldRow }, { data: silverRow }] = await Promise.all([
+      supabase
+        .from('metal_purities')
+        .select('id, code, metal')
+        .in('id', [...new Set(body.matrix.map((m) => m.purity_id))]),
+      supabase
+        .from('live_prices')
+        .select('price_per_gram')
+        .eq('metal', 'gold_999')
+        .order('fetched_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from('live_prices')
+        .select('price_per_gram')
+        .eq('metal', 'silver_999')
+        .order('fetched_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ])
+
+    const goldPerGram = goldRow?.price_per_gram != null ? Number(goldRow.price_per_gram) : null
+    const silverPerGram = silverRow?.price_per_gram != null ? Number(silverRow.price_per_gram) : null
+    const purityMeta = Object.fromEntries(
+      (purityRows ?? []).map((r) => [r.id, { code: r.code, metal: r.metal }]),
+    )
 
     const { data: colorRows } = await supabase
       .from('metal_colors')
@@ -139,6 +160,7 @@ export async function POST(req: NextRequest) {
 
     const purityCode = Object.fromEntries((purityRows ?? []).map((r) => [r.id, r.code]))
     const colorCodeMap = Object.fromEntries((colorRows ?? []).map((r) => [r.id, r.code]))
+    const stoneLines = body.product.has_stone ? normalizeStoneLines(body.product.stone_lines) : []
 
     const prodInsert = {
       name:               body.product.name.trim(),
@@ -204,8 +226,20 @@ export async function POST(req: NextRequest) {
       const pCode = purityCode[cell.purity_id]
       const cCode = colorCodeMap[cell.color_id]
       if (!pCode || !cCode) continue
-      const price = Number(cell.price)
-      if (!Number.isFinite(price) || price <= 0) continue
+      const metalWeight = parseOptionalGrams(cell.metal_weight_g)
+      if (metalWeight == null || metalWeight <= 0) continue
+
+      const meta = purityMeta[cell.purity_id]
+      const breakdown = computeCatalogVariantPrice({
+        metalWeightG: metalWeight,
+        purityCode: String(meta?.code ?? pCode),
+        metalType: meta?.metal,
+        makingChargePct: prodInsert.making_charge_pct,
+        stoneLines,
+        goldPerGram,
+        silverPerGram,
+      })
+      const snapshotPrice = breakdown?.finalPrice ?? 0
 
       variantRows.push({
         product_id:     productId,
@@ -213,15 +247,16 @@ export async function POST(req: NextRequest) {
         color_id:       cell.color_id,
         purity_id:      cell.purity_id,
         sku:            generateAmioraSKU(catCode, prodInsert.product_number, String(pCode), String(cCode)),
-        price,
+        price:          snapshotPrice,
         stock_qty:      Math.max(0, Math.floor(cell.stock_qty ?? 1)),
+        metal_weight_g: metalWeight,
         is_active:      cell.is_active ?? true,
       })
     }
 
     if (variantRows.length === 0) {
       await supabase.from('products').delete().eq('id', productId)
-      return NextResponse.json({ error: 'No valid variant rows — check prices' }, { status: 400 })
+      return NextResponse.json({ error: 'No valid variant rows — check metal weights' }, { status: 400 })
     }
 
     const { error: vErr } = await supabase.from('product_variants').insert(variantRows)

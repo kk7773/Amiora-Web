@@ -33,6 +33,7 @@ import { FaqSection }           from '@/components/sections/FaqSection'
 import { attachCardPrice } from '@/lib/pricing/attachCardPrice'
 import { fetchPurityMapForProducts } from '@/lib/pricing/fetchPurityMap'
 import { getLatestPrices } from '@/lib/pricing/engine'
+import { resolveProductCardImages } from '@/lib/shop/resolveProductCardImages'
 
 export default async function HomePage() {
   const supabase = createServerClient()
@@ -83,23 +84,12 @@ export default async function HomePage() {
 
   const attachPrice = (rows: typeof newArrivalRows) =>
     (rows ?? []).map((p) => {
-      let images = (p as RawProduct).product_images ?? []
-      if (images.length === 0 && Array.isArray((p as RawProduct).product_color_groups)) {
-        const colorGroupImages: { url: string; alt_text: string | null; is_primary: boolean; is_hover: boolean }[] = []
-        for (const cg of (p as RawProduct).product_color_groups ?? []) {
-          if (!cg || !Array.isArray(cg.images)) continue
-          for (const imgUrl of cg.images) {
-            if (typeof imgUrl !== 'string' || imgUrl.trim() === '') continue
-            colorGroupImages.push({
-              url: imgUrl,
-              alt_text: `${(p as RawProduct).name} — image ${colorGroupImages.length + 1}`,
-              is_primary: colorGroupImages.length === 0,
-              is_hover: colorGroupImages.length === 1,
-            })
-          }
-        }
-        images = colorGroupImages
-      }
+      const raw = p as RawProduct
+      const images = resolveProductCardImages(
+        raw.name,
+        raw.product_images,
+        raw.product_color_groups,
+      )
 
       return attachCardPrice(
         {

@@ -66,13 +66,17 @@ export function ProductCard({ product, badgeLabel, className }: ProductCardProps
   const images = Array.isArray(product.product_images) ? product.product_images : []
   const validImages = images.filter((img) => typeof img?.url === 'string' && img.url.trim() !== '')
   const primaryImage = validImages.find((i) => i.is_primary && i.url) ?? validImages[0] ?? null
-  const hoverImage = validImages.find((i) => i.is_hover && i.url) ?? validImages.find((i) => i.url && i !== primaryImage) ?? primaryImage
+  const hoverImage =
+    validImages.find((i) => i.is_hover && i.url && i.url !== primaryImage?.url) ??
+    validImages.find((i) => i.url && i.url !== primaryImage?.url) ??
+    null
 
-  const displayImg = showHoverImage && hoverImage ? hoverImage : primaryImage
-  const hasImage = Boolean(displayImg?.url)
+  const hasAlternateImage = Boolean(hoverImage?.url && hoverImage.url !== primaryImage?.url)
+  const hasImage = Boolean(primaryImage?.url)
 
   const handleCardMouseEnter = () => {
     setHovered(true)
+    if (!hasAlternateImage) return
     if (hoverImageTimerRef.current) clearTimeout(hoverImageTimerRef.current)
     hoverImageTimerRef.current = setTimeout(() => {
       setShowHoverImage(true)
@@ -136,18 +140,35 @@ export function ProductCard({ product, badgeLabel, className }: ProductCardProps
       <div className="relative aspect-square overflow-hidden rounded-lg bg-surface">
         {hasImage ? (
           !imageFailed ? (
-            <Image
-              src={displayImg!.url!}
-              alt={displayImg?.alt_text ?? product.name}
-              fill
-              className="object-cover transition-transform duration-500 group-hover:scale-105"
-              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-              onError={() => setImageFailed(true)}
-            />
+            <>
+              <Image
+                src={primaryImage!.url!}
+                alt={primaryImage?.alt_text ?? product.name}
+                fill
+                className={cn(
+                  'object-cover transition-all duration-500 group-hover:scale-105',
+                  showHoverImage && hasAlternateImage ? 'opacity-0' : 'opacity-100',
+                )}
+                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                onError={() => setImageFailed(true)}
+              />
+              {hasAlternateImage && (
+                <Image
+                  src={hoverImage!.url!}
+                  alt={hoverImage?.alt_text ?? `${product.name} — alternate view`}
+                  fill
+                  className={cn(
+                    'object-cover transition-all duration-500 group-hover:scale-105',
+                    showHoverImage ? 'opacity-100' : 'opacity-0',
+                  )}
+                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                />
+              )}
+            </>
           ) : (
             <img
-              src={displayImg!.url!}
-              alt={displayImg?.alt_text ?? product.name}
+              src={(showHoverImage && hasAlternateImage ? hoverImage : primaryImage)!.url!}
+              alt={product.name}
               className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
             />
           )

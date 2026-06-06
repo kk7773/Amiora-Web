@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { StoresPageClient } from '@/components/stores/StoresPageClient'
 import { createServerClient } from '@amiora/database'
+import { JsonLd } from '@/components/seo/JsonLd'
+import { buildJewelryStoreJsonLd, buildWebPageJsonLd } from '@/lib/seo/jsonLd'
 
 export const metadata: Metadata = {
   title: 'Our Stores',
@@ -17,35 +19,18 @@ export default async function StoresPage() {
     .eq('is_active', true)
     .order('name')
 
-  const localBusinessLd = {
-    '@context': 'https://schema.org',
-    '@type': 'JewelryStore',
-    name: 'AMIORA Jewellery',
-    url: process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.amioradiamonds.in',
-    image: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.amioradiamonds.in'}/logo.png`,
-    priceRange: '₹₹₹',
-    telephone: '+91-XXXXXXXXXX',
-    '@graph': (stores ?? []).map(s => ({
-      '@type': 'LocalBusiness',
-      name: `AMIORA — ${s.name}`,
-      address: {
-        '@type': 'PostalAddress',
-        streetAddress: s.address ?? '',
-        addressLocality: s.city ?? '',
-        addressRegion: s.state ?? '',
-        postalCode: s.pincode ?? '',
-        addressCountry: 'IN',
-      },
-      ...(s.lat && s.lng && {
-        geo: { '@type': 'GeoCoordinates', latitude: s.lat, longitude: s.lng }
-      }),
-      telephone: s.phone ?? '',
-    })),
-  }
-
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(localBusinessLd) }} />
+      <JsonLd
+        data={[
+          buildWebPageJsonLd({
+            name: 'AMIORA Stores',
+            description: 'Find an Amiora Diamonds store near you.',
+            path: '/stores',
+          }),
+          buildJewelryStoreJsonLd(stores ?? []),
+        ]}
+      />
       <StoresPageClient stores={stores ?? []} />
     </>
   )

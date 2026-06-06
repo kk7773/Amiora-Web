@@ -1,6 +1,10 @@
 import type { Metadata } from 'next'
+import { headers } from 'next/headers'
 import { Cormorant_Garamond, Jost } from 'next/font/google'
 import { Toaster } from 'sonner'
+import { JsonLd } from '@/components/seo/JsonLd'
+import { buildOrganizationJsonLd, buildWebSiteJsonLd } from '@/lib/seo/jsonLd'
+import { canonicalFromPath, getSiteUrl } from '@/lib/seo/site'
 import '@/styles/globals.css'
 
 const cormorant = Cormorant_Garamond({
@@ -17,40 +21,32 @@ const jost = Jost({
   display: 'swap',
 })
 
-export const metadata: Metadata = {
-  title: {
-    default: 'Amiora Diamonds | Premium Jewellery',
-    template: '%s | Amiora Diamonds',
-  },
-  description:
-    'Handcrafted gold, diamond and silver jewellery. BIS hallmarked, live pricing, free shipping on orders ₹5000+.',
-  keywords: ['diamond jewellery', 'gold jewellery', 'silver jewellery', 'hallmarked jewellery India'],
-  openGraph: {
-    type: 'website',
-    locale: 'en_IN',
-    siteName: 'Amiora Diamonds',
-  },
-}
+const SITE_URL = getSiteUrl()
 
-const BASE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.amioradiamonds.in'
+export async function generateMetadata(): Promise<Metadata> {
+  const headersList = await headers()
+  const path = headersList.get('x-canonical-path') ?? '/'
+  const canonical = canonicalFromPath(path)
 
-const orgJsonLd = {
-  '@context': 'https://schema.org',
-  '@type': 'Organization',
-  name: 'AMIORA Jewellery',
-  url: BASE,
-  logo: `${BASE}/logo.png`,
-  sameAs: [
-    'https://www.instagram.com/amiorajewellery',
-    'https://www.facebook.com/amiorajewellery',
-  ],
-  contactPoint: {
-    '@type': 'ContactPoint',
-    telephone: '+91-XXXXXXXXXX',
-    contactType: 'customer service',
-    areaServed: 'IN',
-    availableLanguage: ['English', 'Hindi'],
-  },
+  return {
+    metadataBase: new URL(SITE_URL),
+    title: {
+      default: 'Amiora Diamonds | Premium Jewellery',
+      template: '%s | Amiora Diamonds',
+    },
+    description:
+      'Handcrafted gold, diamond and silver jewellery. BIS hallmarked, live pricing, free shipping on orders ₹5000+.',
+    keywords: ['diamond jewellery', 'gold jewellery', 'silver jewellery', 'hallmarked jewellery India'],
+    openGraph: {
+      type: 'website',
+      locale: 'en_IN',
+      siteName: 'Amiora Diamonds',
+      url: canonical,
+    },
+    alternates: {
+      canonical,
+    },
+  }
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -60,7 +56,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         className={`${cormorant.variable} ${jost.variable} font-body bg-bg text-ink antialiased`}
         suppressHydrationWarning
       >
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(orgJsonLd) }} />
+        <JsonLd data={[buildOrganizationJsonLd(), buildWebSiteJsonLd()]} />
         {children}
         <Toaster richColors position="top-right" />
       </body>

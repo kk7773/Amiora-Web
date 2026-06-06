@@ -1,13 +1,23 @@
-import { notFound } from 'next/navigation'
+import type { Metadata } from 'next'
+import { notFound, redirect } from 'next/navigation'
 import { createServerClient } from '@amiora/database'
 import ShopPage from '../page'
 import CollectionPage from '../../collections/[slug]/page'
 import CategoryPage from '../../categories/[slug]/page'
 import ProductPage from '../../products/[slug]/page'
 import { parseShopSegments } from '@/lib/shop/paths'
+import { resolveShopCanonicalPath } from '@/lib/shop/resolveShopCanonical'
+import { canonicalFromPath } from '@/lib/seo/site'
 
 interface Props {
   params: Promise<{ slug: string[] }>
+  searchParams: Promise<Record<string, string | undefined>>
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug: segments } = await params
+  const path = await resolveShopCanonicalPath(segments)
+  return { alternates: { canonical: canonicalFromPath(path) } }
 }
 
 const FILTER_MAP: Record<string, Record<string, string>> = {
@@ -22,6 +32,11 @@ const FILTER_MAP: Record<string, Record<string, string>> = {
 
 export default async function ShopCatchAllPage({ params }: Props) {
   const { slug: segments } = await params
+
+  if (segments[0] === 'collections') {
+    if (segments.length === 1) redirect('/collections')
+    if (segments.length === 2) redirect(`/shop/${segments[1]}`)
+  }
 
   if (segments.length === 2 && !['page', 'sort'].includes(segments[0]!)) {
     const [parentSlug, productSlug] = segments
@@ -47,12 +62,14 @@ export default async function ShopCatchAllPage({ params }: Props) {
 
   const { scopeSlug, sort, page } = listing
 
+  const shopSearchParams = {
+    sort,
+    page: String(page),
+  }
+
   if (!scopeSlug || scopeSlug === 'all') {
     return ShopPage({
-      searchParams: Promise.resolve({
-        sort,
-        page: String(page),
-      }),
+      searchParams: Promise.resolve(shopSearchParams),
     })
   }
 
@@ -60,8 +77,7 @@ export default async function ShopCatchAllPage({ params }: Props) {
     return ShopPage({
       searchParams: Promise.resolve({
         ...FILTER_MAP[scopeSlug]!,
-        sort,
-        page: String(page),
+        ...shopSearchParams,
       }),
     })
   }
@@ -75,20 +91,14 @@ export default async function ShopCatchAllPage({ params }: Props) {
   if (collection?.slug) {
     return CollectionPage({
       params: Promise.resolve({ slug: scopeSlug }),
-      searchParams: Promise.resolve({
-        sort,
-        page: String(page),
-      }),
+      searchParams: Promise.resolve(shopSearchParams),
     })
   }
 
   if (category?.slug) {
     return CategoryPage({
       params: Promise.resolve({ slug: scopeSlug }),
-      searchParams: Promise.resolve({
-        sort,
-        page: String(page),
-      }),
+      searchParams: Promise.resolve(shopSearchParams),
     })
   }
 

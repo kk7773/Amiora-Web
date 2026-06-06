@@ -7,6 +7,8 @@ import { getLatestPrices } from '@/lib/pricing/engine'
 import { ProductCard }           from '@/components/product/ProductCard'
 import { SearchInput }           from './SearchInput'
 import { SearchX, Sparkles }     from 'lucide-react'
+import { JsonLd } from '@/components/seo/JsonLd'
+import { buildSearchResultsJsonLd, buildWebPageJsonLd, toSchemaProductItem } from '@/lib/seo/jsonLd'
 
 export const metadata: Metadata = {
   title: 'Search | Amiora Diamonds',
@@ -68,8 +70,22 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     )
   )
 
+  const schemaProducts = products.map((p) =>
+    toSchemaProductItem(p as { name: string; slug: string; basePrice?: number; product_images?: { url: string; is_primary?: boolean }[] }),
+  )
+
   return (
     <div className="section-x py-14">
+      <JsonLd
+        data={[
+          buildWebPageJsonLd({
+            name: 'Search',
+            description: 'Search AMIORA jewellery collection.',
+            path: `/search?q=${encodeURIComponent(query)}`,
+          }),
+          buildSearchResultsJsonLd({ query, items: schemaProducts }),
+        ]}
+      />
       {/* Header row */}
       <div className="max-w-2xl mx-auto mb-10">
         <h1 className="font-display text-display-xl text-ink mb-6 text-center">Search</h1>

@@ -1,10 +1,13 @@
 import type { Metadata } from 'next'
 import { PolicyLayout } from '@/components/layout/PolicyLayout'
+import { StaticPageSchema } from '@/components/seo/StaticPageSchema'
 
 export const metadata: Metadata = { title: 'Terms & Conditions' }
 
 export default function TermsPage() {
   return (
+    <>
+      <StaticPageSchema title="Terms & Conditions" path="/terms" />
     <PolicyLayout
       title="Terms & Conditions"
       lastUpdated="April 2025"
@@ -20,5 +23,6 @@ export default function TermsPage() {
         { heading: 'Contact', body: 'For any questions, contact legal@amioradiamonds.com or call +91 98765-43210.' },
       ]}
     />
+    </>
   )
 }

@@ -8,6 +8,9 @@ import { createServerClient } from '@amiora/database'
 import { attachCardPrice } from '@/lib/pricing/attachCardPrice'
 import { fetchPurityMapForProducts } from '@/lib/pricing/fetchPurityMap'
 import { getLatestPrices } from '@/lib/pricing/engine'
+import { JsonLd } from '@/components/seo/JsonLd'
+import { buildListingPageSchemas, toSchemaProductItem } from '@/lib/seo/jsonLd'
+import { canonicalFromPath } from '@/lib/seo/site'
 import { ProductCard }           from '@/components/product/ProductCard'
 import { FilterSidebar }         from '@/components/shop/FilterSidebar'
 import { SortDropdown }          from '@/components/shop/SortDropdown'
@@ -39,7 +42,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params
   const data = await getCollection(slug)
   if (!data) return {}
-  return { title: data.name, description: data.description ?? undefined }
+  return {
+    title: data.name,
+    description: data.description ?? undefined,
+    alternates: { canonical: canonicalFromPath(`/collections/${slug}`) },
+  }
 }
 
 export default async function CollectionPage({ params, searchParams }: Props) {
@@ -111,8 +118,28 @@ export default async function CollectionPage({ params, searchParams }: Props) {
     )
   })
 
+  const schemaProducts = products.map((p) =>
+    toSchemaProductItem(p as { name: string; slug: string; basePrice?: number; product_images?: { url: string; is_primary?: boolean }[] }),
+  )
+
   return (
     <div>
+      <JsonLd
+        data={buildListingPageSchemas({
+          pageType: 'CollectionPage',
+          name: collection.name,
+          description: collection.description ?? undefined,
+          path: `/collections/${slug}`,
+          image: collection.banner_url,
+          breadcrumb: [
+            { name: 'Home', href: '/' },
+            { name: 'Collections', href: '/collections' },
+            { name: collection.name, href: `/collections/${slug}` },
+          ],
+          products: schemaProducts,
+          total: count ?? products.length,
+        })}
+      />
       {/* Collection banner */}
       <div className="relative h-64 md:h-96 overflow-hidden bg-surface">
         {collection.banner_url && (
@@ -125,7 +152,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
             <nav className="flex items-center gap-1 text-xs text-cream/60">
               <Link href="/" className="hover:text-cream transition-colors">Home</Link>
               <span>/</span>
-              <Link href="/shop/collections" className="hover:text-cream transition-colors">Collections</Link>
+              <Link href="/collections" className="hover:text-cream transition-colors">Collections</Link>
               <span>/</span>
               <span className="text-cream">{collection.name}</span>
             </nav>

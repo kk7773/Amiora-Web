@@ -100,7 +100,7 @@ export function MegaMenu({ onClose }: MegaMenuProps) {
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-deep-teal/40 to-transparent" />
           <Link
-            href="/shop/collections"
+            href="/collections"
             onClick={onClose}
             className="absolute bottom-4 left-4 text-xs uppercase tracking-widest text-white hover:text-cream transition-colors"
           >

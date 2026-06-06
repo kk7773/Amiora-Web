@@ -1,5 +1,7 @@
 import type { MetadataRoute } from 'next'
 import { createServerClient } from '@amiora/database'
+import { buildPriceListingSlug, PRICE_LISTING_SCOPES, PRODUCT_PRICE_BASE } from '@/lib/shop/priceListingSlugs'
+import { PRICE_RANGE_BUCKETS } from '@/lib/shop/priceRanges'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -52,11 +54,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }))
 
   const categoryRoutes: MetadataRoute.Sitemap = (categories ?? []).map(c => ({
-    url:             `${BASE}/shop?category=${c.slug}`,
+    url:             `${BASE}/shop/${c.slug}`,
     lastModified:    c.updated_at ? new Date(c.updated_at) : new Date(),
     changeFrequency: 'weekly',
     priority:        0.65,
   }))
 
-  return [...staticRoutes, ...productRoutes, ...collectionRoutes, ...blogRoutes, ...categoryRoutes]
+  const priceListingRoutes: MetadataRoute.Sitemap = PRICE_LISTING_SCOPES.flatMap((scope) =>
+    PRICE_RANGE_BUCKETS.map((range) => ({
+      url:             `${BASE}${PRODUCT_PRICE_BASE}/${buildPriceListingSlug(scope, range.id)}`,
+      lastModified:    new Date(),
+      changeFrequency: 'daily' as const,
+      priority:        0.75,
+    })),
+  )
+
+  return [...staticRoutes, ...priceListingRoutes, ...productRoutes, ...collectionRoutes, ...blogRoutes, ...categoryRoutes]
 }

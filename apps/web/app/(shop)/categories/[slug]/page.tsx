@@ -7,6 +7,9 @@ import { createServerClient } from '@amiora/database'
 import { attachCardPrice } from '@/lib/pricing/attachCardPrice'
 import { fetchPurityMapForProducts } from '@/lib/pricing/fetchPurityMap'
 import { getLatestPrices } from '@/lib/pricing/engine'
+import { JsonLd } from '@/components/seo/JsonLd'
+import { buildListingPageSchemas, toSchemaProductItem } from '@/lib/seo/jsonLd'
+import { canonicalFromPath } from '@/lib/seo/site'
 import { ProductCard }           from '@/components/product/ProductCard'
 import { FilterSidebar }         from '@/components/shop/FilterSidebar'
 import { SortDropdown }          from '@/components/shop/SortDropdown'
@@ -48,6 +51,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: data.name,
     description: data.description ?? `Shop ${data.name} — handcrafted gold, silver & diamond jewellery by AMIORA.`,
+    alternates: { canonical: canonicalFromPath(`/categories/${slug}`) },
   }
 }
 
@@ -144,8 +148,26 @@ export default async function CategoryPage({ params, searchParams }: Props) {
     tagline:  `Handcrafted ${category.name.toLowerCase()} jewellery made to cherish.`,
   }
 
+  const schemaProducts = products.map((p) =>
+    toSchemaProductItem(p as { name: string; slug: string; basePrice?: number; product_images?: { url: string; is_primary?: boolean }[] }),
+  )
+
   return (
     <div>
+      <JsonLd
+        data={buildListingPageSchemas({
+          name: category.name,
+          description: category.description ?? meta.tagline,
+          path: `/categories/${slug}`,
+          breadcrumb: [
+            { name: 'Home', href: '/' },
+            { name: 'Shop', href: '/shop' },
+            { name: category.name, href: `/categories/${slug}` },
+          ],
+          products: schemaProducts,
+          total: count ?? products.length,
+        })}
+      />
       {/* ── Category banner ─────────────────────────────────── */}
       <div className={`relative h-56 md:h-80 overflow-hidden bg-gradient-to-br ${meta.gradient} bg-surface`}>
         {category.image_url && (

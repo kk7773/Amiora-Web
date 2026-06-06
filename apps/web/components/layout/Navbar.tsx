@@ -8,9 +8,10 @@ import { Button } from '@amiora/ui'
 import { useCartStore, useCartHydrated } from '@/stores/cartStore'
 import { MobileMenu } from './MobileMenu'
 import { cn } from '@amiora/ui'
+import { getCollectionsIndexHref } from '@/lib/shop/paths'
 
 const NAV_LINKS = [
-  { label: 'Collections', href: '/shop/collections' },
+  { label: 'Collections', href: getCollectionsIndexHref() },
   { label: 'Rings', href: '/products?category=rings' },
   { label: 'Necklaces', href: '/products?category=necklaces' },
   { label: 'Earrings', href: '/products?category=earrings' },

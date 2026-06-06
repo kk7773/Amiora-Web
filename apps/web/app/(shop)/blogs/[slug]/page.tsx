@@ -3,10 +3,11 @@ import Image from 'next/image'
 import Link  from 'next/link'
 import { notFound } from 'next/navigation'
 import { createServerClient } from '@amiora/database'
+import { JsonLd } from '@/components/seo/JsonLd'
+import { buildBlogPostingJsonLd, buildBreadcrumbJsonLd } from '@/lib/seo/jsonLd'
+import { canonicalFromPath } from '@/lib/seo/site'
 
 interface Props { params: Promise<{ slug: string }> }
-
-const BASE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.amioradiamonds.in'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,12 +24,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     description,
     openGraph: {
       title, description,
-      url: `${BASE}/blogs/${slug}`,
+      url: canonicalFromPath(`/blogs/${slug}`),
       type: 'article',
       images: data.cover_url ? [{ url: data.cover_url }] : [],
     },
     twitter: { card: 'summary_large_image', title, description },
-    alternates: { canonical: `${BASE}/blogs/${slug}` },
+    alternates: { canonical: canonicalFromPath(`/blogs/${slug}`) },
   }
 }
 
@@ -63,6 +64,24 @@ export default async function BlogPostPage({ params }: Props) {
 
   return (
     <article className="max-w-3xl mx-auto section-x py-14">
+      <JsonLd
+        data={[
+          buildBlogPostingJsonLd({
+            title: post.title,
+            description: post.excerpt,
+            slug: post.slug,
+            image: post.cover_url,
+            author: post.author,
+            publishedAt: post.published_at,
+            tags: post.tags,
+          }),
+          buildBreadcrumbJsonLd([
+            { name: 'Home', href: '/' },
+            { name: 'Journal', href: '/blogs' },
+            { name: post.title, href: `/blogs/${post.slug}` },
+          ]),
+        ]}
+      />
       {/* Breadcrumb */}
       <nav className="text-xs text-ink-muted mb-8">
         <Link href="/" className="hover:text-teal transition-colors">Home</Link>

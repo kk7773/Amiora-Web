@@ -71,7 +71,7 @@ export function HeroSection() {
             <Link href="/products">Explore Collection</Link>
           </Button>
           <Button variant="premium" size="xl" asChild>
-            <Link href="/shop/collections">View Collections</Link>
+            <Link href="/collections">View Collections</Link>
           </Button>
         </div>
       </div>

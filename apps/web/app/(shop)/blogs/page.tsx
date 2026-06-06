@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link  from 'next/link'
 import { createServerClient } from '@amiora/database'
+import { JsonLd } from '@/components/seo/JsonLd'
+import { buildBlogListJsonLd, buildWebPageJsonLd } from '@/lib/seo/jsonLd'
 
 export const metadata: Metadata = {
   title: 'Journal',
@@ -22,6 +24,16 @@ export default async function BlogsPage() {
 
   return (
     <div>
+      <JsonLd
+        data={[
+          buildWebPageJsonLd({
+            name: 'AMIORA Journal',
+            description: 'Jewellery stories, styling guides, and care tips from AMIORA.',
+            path: '/blogs',
+          }),
+          buildBlogListJsonLd(posts),
+        ]}
+      />
       {/* Header */}
       <div className="bg-surface section-x py-16 text-center">
         <p className="text-2xs uppercase tracking-widest2 text-teal mb-3">From Our Desk</p>

@@ -1,10 +1,13 @@
 import type { Metadata } from 'next'
 import { PolicyLayout } from '@/components/layout/PolicyLayout'
+import { StaticPageSchema } from '@/components/seo/StaticPageSchema'
 
 export const metadata: Metadata = { title: 'Shipping Policy' }
 
 export default function ShippingPolicyPage() {
   return (
+    <>
+      <StaticPageSchema title="Shipping Policy" path="/shipping-policy" />
     <PolicyLayout
       title="Shipping Policy"
       lastUpdated="April 2025"
@@ -23,5 +26,6 @@ export default function ShippingPolicyPage() {
         { heading: 'Insurance', body: 'All shipments are fully insured. In case of damage or loss in transit, we will replace the item at no cost to you — no questions asked.' },
       ]}
     />
+    </>
   )
 }

@@ -2,7 +2,17 @@
 
 import { useRouter, usePathname } from 'next/navigation'
 import { X, SlidersHorizontal } from 'lucide-react'
-import { buildShopListingHref, parseShopSegments } from '@/lib/shop/paths'
+import {
+  buildListingHref,
+  pathnameToListingSegments,
+  parseShopSegments,
+} from '@/lib/shop/paths'
+import { PRICE_RANGE_BUCKETS, type PriceRangeId } from '@/lib/shop/priceRanges'
+import {
+  buildPriceListingHref,
+  parsePriceListingPath,
+  resolvePriceListingScopeFromShop,
+} from '@/lib/shop/priceListingSlugs'
 
 const PURITIES   = ['22k', '18k', '14k', '9k', '92.5']
 const CATEGORIES = ['rings', 'necklaces', 'earrings', 'bangles', 'bracelets', 'pendants', 'chains', 'sets']
@@ -14,20 +24,39 @@ interface FilterSidebarProps {
 }
 
 export function FilterSidebar({ className = '', onClose }: FilterSidebarProps) {
-  const router   = useRouter()
+  const router = useRouter()
   const pathname = usePathname()
-  const segments = pathname.replace(/^\/shop\/?/, '').split('/').filter(Boolean)
-  const listing  = parseShopSegments(segments)
+  const priceListing = parsePriceListingPath(pathname)
+  const segments = pathnameToListingSegments(pathname)
+  const listing = parseShopSegments(segments)
   const scopeSlug = listing?.scopeSlug ?? null
-  const sort      = listing?.sort
+  const sort = priceListing?.sort ?? listing?.sort
+  const isCollectionsPath = pathname.startsWith('/collections/')
+  const priceScope = priceListing?.scope ?? resolvePriceListingScopeFromShop(scopeSlug)
+  const activeRangeId = priceListing?.rangeId ?? null
 
   const navigateToScope = (nextScope: string | null) => {
-    router.push(buildShopListingHref({ scopeSlug: nextScope, sort, page: 1 }), { scroll: false })
+    const href = isCollectionsPath && scopeSlug
+      ? buildListingHref({ scopeSlug, sort, page: 1 }, {}, '/collections')
+      : buildListingHref({ scopeSlug: nextScope, sort, page: 1 })
+    router.push(href, { scroll: false })
+    onClose?.()
+  }
+
+  const navigateToPrice = (rangeId: PriceRangeId) => {
+    const href = buildPriceListingHref(priceScope, rangeId, { sort, page: 1 })
+    router.push(href, { scroll: false })
     onClose?.()
   }
 
   const clearAll = () => {
-    router.push('/shop', { scroll: false })
+    if (priceListing) {
+      router.push('/shop', { scroll: false })
+    } else if (isCollectionsPath && scopeSlug) {
+      router.push(`/collections/${scopeSlug}`, { scroll: false })
+    } else {
+      router.push('/shop', { scroll: false })
+    }
     onClose?.()
   }
 
@@ -36,11 +65,10 @@ export function FilterSidebar({ className = '', onClose }: FilterSidebarProps) {
   const diamond = scopeSlug === 'diamond'
   const cuts: string[] = []
   const catArr = CATEGORIES.filter((entry) => entry === scopeSlug)
-  const hasFilters = !!scopeSlug
+  const hasFilters = !!scopeSlug || !!priceListing
 
   return (
     <aside className={`space-y-6 ${className}`}>
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 font-medium text-ink">
           <SlidersHorizontal className="h-4 w-4 text-teal" />
@@ -63,7 +91,17 @@ export function FilterSidebar({ className = '', onClose }: FilterSidebarProps) {
         </div>
       </div>
 
-      {/* Metal Type */}
+      <FilterGroup label="Price Range">
+        {PRICE_RANGE_BUCKETS.map((bucket) => (
+          <CheckOption
+            key={bucket.id}
+            label={bucket.label}
+            checked={activeRangeId === bucket.id}
+            onChange={() => navigateToPrice(bucket.id)}
+          />
+        ))}
+      </FilterGroup>
+
       <FilterGroup label="Metal Type">
         {[{ value: 'gold', label: 'Gold' }, { value: 'silver', label: 'Silver' }].map((opt) => (
           <CheckOption
@@ -75,7 +113,6 @@ export function FilterSidebar({ className = '', onClose }: FilterSidebarProps) {
         ))}
       </FilterGroup>
 
-      {/* Purity */}
       <FilterGroup label="Purity">
         {PURITIES.map((p) => (
           <CheckOption
@@ -87,7 +124,6 @@ export function FilterSidebar({ className = '', onClose }: FilterSidebarProps) {
         ))}
       </FilterGroup>
 
-      {/* Diamond */}
       <FilterGroup label="Gemstone">
         <CheckOption
           label="With Diamond"
@@ -108,7 +144,6 @@ export function FilterSidebar({ className = '', onClose }: FilterSidebarProps) {
         )}
       </FilterGroup>
 
-      {/* Category */}
       <FilterGroup label="Category">
         {CATEGORIES.map((cat) => (
           <CheckOption

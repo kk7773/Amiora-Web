@@ -10,7 +10,7 @@ import {
 import { useCartStore, useCartHydrated } from '@/stores/cartStore'
 
 const STORE_LINKS = [
-  { label: 'All Collections',  href: '/shop/collections' },
+  { label: 'All Collections',  href: '/collections' },
   { label: 'Shop All',         href: '/shop' },
   { label: 'Rings',            href: '/shop/rings' },
   { label: 'Necklaces',        href: '/shop/necklaces' },

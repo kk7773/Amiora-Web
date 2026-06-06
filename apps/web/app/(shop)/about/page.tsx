@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Image from 'next/image'
 import { motion } from 'framer-motion'
+import { StaticPageSchema } from '@/components/seo/StaticPageSchema'
 
 export const metadata: Metadata = {
   title: 'About Amiora',
@@ -23,6 +24,12 @@ const AWARDS = [
 
 export default function AboutPage() {
   return (
+    <>
+      <StaticPageSchema
+        title="About AMIORA"
+        description="The story behind Amiora Diamonds — craftsmanship, values, and heritage."
+        path="/about"
+      />
     <div>
       {/* Hero */}
       <div className="relative h-[60vh] min-h-[400px] overflow-hidden bg-surface">
@@ -100,5 +107,6 @@ export default function AboutPage() {
         </div>
       </section>
     </div>
+    </>
   )
 }

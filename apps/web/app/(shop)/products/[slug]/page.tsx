@@ -8,12 +8,13 @@ import { ProductFAQ }          from '@/components/product/ProductFAQ'
 import { attachCardPrice } from '@/lib/pricing/attachCardPrice'
 import { fetchPurityMapForProducts } from '@/lib/pricing/fetchPurityMap'
 import { getLatestPrices } from '@/lib/pricing/engine'
+import { JsonLd } from '@/components/seo/JsonLd'
+import { buildProductPageSchemas } from '@/lib/seo/jsonLd'
+import { canonicalFromPath } from '@/lib/seo/site'
 
 interface Props {
   params: Promise<{ slug: string }>
 }
-
-const BASE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.amioradiamonds.in'
 
 type CatalogBundle = {
   catalogColorGroups: {
@@ -128,6 +129,7 @@ type PdpProductRow = {
   making_charge_pct: number | null
   making_charge_discount_pct: number | null
   gem_price_discount_pct: number | null
+  stone_lines?: unknown
   collection: unknown
   category: unknown
   product_images: unknown
@@ -226,7 +228,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       openGraph: {
         title,
         description,
-        url: `${BASE}/products/${slug}`,
+        url: canonicalFromPath(`/products/${slug}`),
         images: primaryImage ? [{ url: primaryImage }] : [],
         type: 'website',
       },
@@ -236,7 +238,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         description,
         images: primaryImage ? [primaryImage] : [],
       },
-      alternates: { canonical: `${BASE}/products/${slug}` },
+      alternates: { canonical: canonicalFromPath(`/products/${slug}`) },
     }
   } catch {
     return {}
@@ -568,28 +570,54 @@ export default async function ProductPage({ params }: Props) {
   }))
   const primaryImg = imgs.find((i) => i.id && fallbackImages.find((f) => f.id === i.id)?.is_primary)?.url ?? imgs[0]?.url
 
-  const jsonLd = {
-    '@context':     'https://schema.org',
-    '@type':        'Product',
-    name:           product.name,
-    description:    product.short_desc ?? '',
-    image:          primaryImg ?? '',
-    url:            `${BASE}/products/${slug}`,
-    brand:          { '@type': 'Brand', name: 'AMIORA' },
-    ...(safeReviews.length > 0 && {
-      aggregateRating: {
-        '@type':       'AggregateRating',
-        ratingValue:   avgRating.toFixed(1),
-        reviewCount:   safeReviews.length,
-        bestRating:    5,
-        worstRating:   1,
-      },
-    }),
-  }
+  const purityMapForSchema = Object.fromEntries(
+    catalogPurities.map((p) => [p.id, { code: p.code, metal: p.metal }]),
+  )
+  const schemaPrice = attachCardPrice(
+    {
+      making_charge_pct: Number(product.making_charge_pct ?? 0),
+      making_charge_discount_pct: product.making_charge_discount_pct,
+      gem_price_discount_pct: product.gem_price_discount_pct,
+      stone_lines: product.stone_lines,
+      product_variants: catalogVariants,
+    },
+    goldPrice,
+    silverPrice,
+    purityMapForSchema,
+  ).basePrice
+
+  const collectionMeta = product.collection as { name: string; slug: string } | null
+  const categoryMeta = product.category as { name: string; slug: string } | null
+  const productFaqs = (product.faqs as { question: string; answer: string }[] | null) ?? []
+
+  const productSchemas = buildProductPageSchemas({
+    product: {
+      name: product.name,
+      description: product.short_desc ?? `Explore ${product.name} — crafted in gold & diamonds by AMIORA.`,
+      image: primaryImg,
+      slug,
+      price: schemaPrice,
+      sku: catalogVariants[0]?.sku ?? null,
+      reviewCount: safeReviews.length || undefined,
+      avgRating: safeReviews.length ? avgRating : undefined,
+      categoryName: categoryMeta?.name ?? null,
+      collectionName: collectionMeta?.name ?? null,
+    },
+    breadcrumb: [
+      { name: 'Home', href: '/' },
+      ...(collectionMeta
+        ? [{ name: collectionMeta.name, href: `/collections/${collectionMeta.slug}` }]
+        : categoryMeta
+          ? [{ name: categoryMeta.name, href: `/categories/${categoryMeta.slug}` }]
+          : [{ name: 'Shop', href: '/shop' }]),
+      { name: product.name, href: `/products/${slug}` },
+    ],
+    faqs: productFaqs,
+  })
 
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <JsonLd data={productSchemas} />
 
       <ProductDetailClient
         product={{

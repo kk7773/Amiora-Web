@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
 import { createServerClient } from '@amiora/database'
+import { canonicalFromPath, getSiteUrl } from '@/lib/seo/site'
 
-const BASE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.amioradiamonds.in'
+const SITE_URL = getSiteUrl()
 
 export const metadata: Metadata = {
   title: 'AMIORA Jewellery — Premium Gold, Silver & Diamond Jewelry',
@@ -9,12 +10,12 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'AMIORA Jewellery — Premium Gold, Silver & Diamond Jewelry',
     description: 'Explore exquisite handcrafted jewellery with live pricing and personalised service.',
-    url: BASE,
+    url: SITE_URL,
     type: 'website',
-    images: [{ url: `${BASE}/og-home.jpg`, width: 1200, height: 630 }],
+    images: [{ url: `${SITE_URL}/og-home.jpg`, width: 1200, height: 630 }],
   },
   twitter: { card: 'summary_large_image' },
-  alternates: { canonical: BASE },
+  alternates: { canonical: canonicalFromPath('/') },
 }
 
 export const revalidate = 300
@@ -34,6 +35,14 @@ import { attachCardPrice } from '@/lib/pricing/attachCardPrice'
 import { fetchPurityMapForProducts } from '@/lib/pricing/fetchPurityMap'
 import { getLatestPrices } from '@/lib/pricing/engine'
 import { resolveProductCardImages } from '@/lib/shop/resolveProductCardImages'
+import { JsonLd } from '@/components/seo/JsonLd'
+import {
+  buildCollectionListJsonLd,
+  buildFaqPageJsonLd,
+  buildItemListJsonLd,
+  buildWebPageJsonLd,
+  toSchemaProductItem,
+} from '@/lib/seo/jsonLd'
 
 export default async function HomePage() {
   const supabase = createServerClient()
@@ -147,8 +156,45 @@ export default async function HomePage() {
     image_url: v.image_url,
   }))
 
+  const featuredProducts = [...newArrivals, ...bestSellers]
+    .filter((product, index, list) => list.findIndex((item) => item.slug === product.slug) === index)
+    .slice(0, 20)
+    .map((product) =>
+      toSchemaProductItem(product as { name: string; slug: string; basePrice?: number; product_images?: { url: string; is_primary?: boolean }[] }),
+    )
+
+  const homeSchemas: Record<string, unknown>[] = [
+    buildWebPageJsonLd({
+      name: 'AMIORA Jewellery — Premium Gold, Silver & Diamond Jewelry',
+      description:
+        'Discover AMIORA\'s exclusive collection of handcrafted gold, silver and diamond jewellery. Live pricing, custom orders, and free shipping across India.',
+      path: '/',
+    }),
+    buildItemListJsonLd({
+      name: 'Featured Jewellery',
+      path: '/',
+      items: featuredProducts,
+    }),
+    buildCollectionListJsonLd({
+      name: 'Featured Collections',
+      path: '/',
+      items: (collections ?? []).map((col) => ({
+        name: col.name,
+        slug: col.slug,
+        description: col.description,
+        image: col.banner_url,
+      })),
+    }),
+  ]
+
+  const faqRows = (siteFaqs ?? []) as { question: string; answer: string }[]
+  if (faqRows.length > 0) {
+    homeSchemas.push(buildFaqPageJsonLd(faqRows))
+  }
+
   return (
     <>
+      <JsonLd data={homeSchemas} />
       <HeroBanner />
       <MarqueeStrip />
       {/* <PriceTicker /> */}

@@ -1,8 +1,13 @@
 'use client'
 
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { buildShopListingHref, parseShopSegments } from '@/lib/shop/paths'
+import {
+  buildListingHref,
+  pathnameToListingSegments,
+  parseShopSegments,
+} from '@/lib/shop/paths'
+import { buildPriceListingHref, parsePriceListingPath } from '@/lib/shop/priceListingSlugs'
 
 interface PaginationProps {
   total:    number
@@ -13,21 +18,36 @@ interface PaginationProps {
 export function Pagination({ total, pageSize, page }: PaginationProps) {
   const router = useRouter()
   const pathname = usePathname()
-  const segments = pathname.replace(/^\/shop\/?/, '').split('/').filter(Boolean)
+  const searchParams = useSearchParams()
+  const priceListing = parsePriceListingPath(pathname)
+  const segments = pathnameToListingSegments(pathname)
   const listing = parseShopSegments(segments)
-  const totalPages  = Math.ceil(total / pageSize)
+  const isCollectionsPath = pathname.startsWith('/collections/')
+  const collectionSort = searchParams.get('sort') ?? 'newest'
+  const totalPages = Math.ceil(total / pageSize)
 
   if (totalPages <= 1) return null
 
   const goTo = (p: number) => {
-    router.push(
-      buildShopListingHref({
-        scopeSlug: listing?.scopeSlug ?? null,
-        sort: listing?.sort ?? 'newest',
+    let href: string
+    if (priceListing) {
+      href = buildPriceListingHref(priceListing.scope, priceListing.rangeId, {
+        sort: priceListing.sort,
         page: p,
-      }),
-      { scroll: true },
-    )
+      })
+    } else if (isCollectionsPath && listing?.scopeSlug) {
+      href = buildListingHref(
+        { scopeSlug: listing.scopeSlug, sort: collectionSort, page: p },
+        {},
+        '/collections',
+      )
+    } else {
+      href = buildListingHref(
+        { scopeSlug: listing?.scopeSlug ?? null, sort: listing?.sort ?? 'newest', page: p },
+        {},
+      )
+    }
+    router.push(href, { scroll: true })
   }
 
   const pages = Array.from({ length: totalPages }, (_, i) => i + 1).filter(
@@ -39,7 +59,8 @@ export function Pagination({ total, pageSize, page }: PaginationProps) {
       <button
         onClick={() => goTo(page - 1)}
         disabled={page <= 1}
-        className="p-2 text-ink-muted hover:text-deep-teal disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        className="p-2 rounded-md border border-divider text-ink-muted hover:text-ink hover:border-teal disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        aria-label="Previous page"
       >
         <ChevronLeft className="h-4 w-4" />
       </button>
@@ -49,13 +70,13 @@ export function Pagination({ total, pageSize, page }: PaginationProps) {
         const showEllipsis = prev != null && p - prev > 1
         return (
           <span key={p} className="flex items-center gap-1">
-            {showEllipsis && <span className="px-1 text-ink-faint text-sm">…</span>}
+            {showEllipsis && <span className="px-1 text-ink-faint">…</span>}
             <button
               onClick={() => goTo(p)}
-              className={`min-w-[2rem] h-8 px-2 text-sm rounded-md transition-colors ${
+              className={`min-w-[2rem] h-8 rounded-md text-sm transition-colors ${
                 p === page
                   ? 'bg-deep-teal text-cream font-medium'
-                  : 'text-ink-muted hover:bg-surface hover:text-ink'
+                  : 'border border-divider text-ink-muted hover:border-teal hover:text-ink'
               }`}
             >
               {p}
@@ -67,7 +88,8 @@ export function Pagination({ total, pageSize, page }: PaginationProps) {
       <button
         onClick={() => goTo(page + 1)}
         disabled={page >= totalPages}
-        className="p-2 text-ink-muted hover:text-deep-teal disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        className="p-2 rounded-md border border-divider text-ink-muted hover:text-ink hover:border-teal disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        aria-label="Next page"
       >
         <ChevronRight className="h-4 w-4" />
       </button>

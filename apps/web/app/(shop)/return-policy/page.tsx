@@ -1,10 +1,13 @@
 import type { Metadata } from 'next'
 import { PolicyLayout } from '@/components/layout/PolicyLayout'
+import { StaticPageSchema } from '@/components/seo/StaticPageSchema'
 
 export const metadata: Metadata = { title: 'Return & Refund Policy' }
 
 export default function ReturnPolicyPage() {
   return (
+    <>
+      <StaticPageSchema title="Return & Refund Policy" path="/return-policy" />
     <PolicyLayout
       title="Return & Refund Policy"
       lastUpdated="April 2025"
@@ -32,5 +35,6 @@ export default function ReturnPolicyPage() {
         { heading: 'Exchange Policy', body: 'Exchanges are free of charge. Choose a different size, metal variant, or product of equal or higher value (pay the difference).' },
       ]}
     />
+    </>
   )
 }

@@ -5,6 +5,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { fadeUp, stagger } from '@/lib/animations'
+import { getCollectionHref } from '@/lib/shop/paths'
 
 interface CollectionCard {
   id: string
@@ -62,7 +63,7 @@ export function FeaturedCollections({ collections }: FeaturedCollectionsProps) {
             return (
             <motion.div key={col.slug} variants={fadeUp}>
               <Link
-                href={`/shop/collections/${col.slug}`}
+                href={getCollectionHref(col.slug)}
                 className="group relative block aspect-[3/4] rounded-lg overflow-hidden bg-surface"
               >
                 {imageUrl ? (

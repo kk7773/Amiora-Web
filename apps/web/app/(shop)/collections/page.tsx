@@ -2,6 +2,9 @@ import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
 import { createServerClient } from '@amiora/database'
+import { JsonLd } from '@/components/seo/JsonLd'
+import { buildCollectionListJsonLd, buildWebPageJsonLd } from '@/lib/seo/jsonLd'
+import { getCollectionHref } from '@/lib/shop/paths'
 
 export const metadata: Metadata = {
   title: 'Collections',
@@ -20,8 +23,29 @@ export default async function CollectionsPage() {
     .order('sort_order')
   const collections = (rawCollections ?? []) as CollRow[]
 
+  const collectionItems = collections.map((col) => ({
+    name: col.name,
+    slug: col.slug,
+    description: col.description,
+    image: col.banner_url,
+  }))
+
   return (
     <div className="section-x py-14">
+      <JsonLd
+        data={[
+          buildWebPageJsonLd({
+            name: 'AMIORA Collections',
+            description: 'Explore all AMIORA jewellery collections.',
+            path: '/collections',
+          }),
+          buildCollectionListJsonLd({
+            name: 'AMIORA Collections',
+            path: '/collections',
+            items: collectionItems,
+          }),
+        ]}
+      />
       <div className="text-center mb-12">
         <p className="text-2xs uppercase tracking-widest2 text-teal mb-3">Explore</p>
         <h1 className="font-display text-display-2xl text-ink">Our Collections</h1>
@@ -30,7 +54,7 @@ export default async function CollectionsPage() {
         <div className="grid gap-6 md:grid-cols-[1.75fr_1fr] md:grid-rows-[repeat(2,minmax(260px,1fr))]">
           {collections[0] && (
             <Link
-              href={`/shop/collections/${collections[0].slug}`}
+              href={getCollectionHref(collections[0].slug)}
               className="group relative rounded-2xl overflow-hidden bg-surface md:row-span-2 md:min-h-[560px]"
             >
               {collections[0].banner_url && (
@@ -56,7 +80,7 @@ export default async function CollectionsPage() {
             {collections.slice(1).map((col) => (
               <Link
                 key={col.slug}
-                href={`/shop/collections/${col.slug}`}
+                href={getCollectionHref(col.slug)}
                 className="group relative rounded-2xl overflow-hidden bg-surface min-h-[240px]"
               >
                 {col.banner_url && (

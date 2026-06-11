@@ -4,8 +4,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   buildListingHref,
-  pathnameToListingSegments,
-  parseShopSegments,
+  resolveShopListingState,
 } from '@/lib/shop/paths'
 import { buildPriceListingHref, parsePriceListingPath } from '@/lib/shop/priceListingSlugs'
 
@@ -20,33 +19,15 @@ export function Pagination({ total, pageSize, page }: PaginationProps) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const priceListing = parsePriceListingPath(pathname)
-  const segments = pathnameToListingSegments(pathname)
-  const listing = parseShopSegments(segments)
-  const isCollectionsPath = pathname.startsWith('/collections/')
-  const collectionSort = searchParams.get('sort') ?? 'newest'
+  const listing = resolveShopListingState(pathname, searchParams)
   const totalPages = Math.ceil(total / pageSize)
 
   if (totalPages <= 1) return null
 
   const goTo = (p: number) => {
-    let href: string
-    if (priceListing) {
-      href = buildPriceListingHref(priceListing.scope, priceListing.rangeId, {
-        sort: priceListing.sort,
-        page: p,
-      })
-    } else if (isCollectionsPath && listing?.scopeSlug) {
-      href = buildListingHref(
-        { scopeSlug: listing.scopeSlug, sort: collectionSort, page: p },
-        {},
-        '/collections',
-      )
-    } else {
-      href = buildListingHref(
-        { scopeSlug: listing?.scopeSlug ?? null, sort: listing?.sort ?? 'newest', page: p },
-        {},
-      )
-    }
+    const href = priceListing
+      ? buildPriceListingHref(priceListing.scope, priceListing.rangeId)
+      : buildListingHref({ scopeSlug: listing.scopeSlug })
     router.push(href, { scroll: true })
   }
 

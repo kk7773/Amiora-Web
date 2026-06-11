@@ -183,7 +183,7 @@ export function buildCollectionListJsonLd({
       item: {
         '@type': 'CollectionPage',
         name: item.name,
-        url: canonicalFromPath(`/collections/${item.slug}`),
+        url: canonicalFromPath(`/shop/${item.slug}`),
         ...(item.description ? { description: item.description } : {}),
         ...(item.image ? { image: item.image } : {}),
       },

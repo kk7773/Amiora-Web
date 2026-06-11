@@ -1,8 +1,10 @@
 import { DEFAULT_SHOP_SORT } from '@/lib/shop/paths'
 import { PRICE_RANGE_BUCKETS, type PriceRangeBucket, type PriceRangeId } from '@/lib/shop/priceRanges'
 
-/** URL prefix for all price-based listing pages. */
-export const PRODUCT_PRICE_BASE = '/product'
+/** URL prefix for all price-based listing pages (under /shop). */
+export const SHOP_PRICE_BASE = '/shop'
+/** @deprecated Use SHOP_PRICE_BASE — kept for legacy redirects */
+export const PRODUCT_PRICE_BASE = SHOP_PRICE_BASE
 
 /** Virtual "all jewellery" scope — not a DB category slug. */
 export const JEWELLERY_SCOPE = 'jewellery'
@@ -96,9 +98,21 @@ export function parsePriceListingPath(pathname: string): PriceListingPath | null
   const segments = pathname.replace(/\/$/, '').split('/').filter(Boolean)
   if (segments.length === 0) return null
 
-  const isProductPrefixed = segments[0] === 'product'
-  const slugSegment = isProductPrefixed ? segments[1] : segments[0]
-  const tail = isProductPrefixed ? segments.slice(2) : segments.slice(1)
+  let slugSegment: string | undefined
+  let tail: string[] = []
+
+  if (segments[0] === 'shop' && segments.length >= 2) {
+    slugSegment = segments[1]
+    tail = segments.slice(2)
+  } else if (segments[0] === 'product' && segments.length >= 2) {
+    slugSegment = segments[1]
+    tail = segments.slice(2)
+  } else if (segments.length === 1) {
+    slugSegment = segments[0]
+    tail = []
+  } else {
+    return null
+  }
 
   if (!slugSegment) return null
 
@@ -111,17 +125,35 @@ export function parsePriceListingPath(pathname: string): PriceListingPath | null
   return { ...parsed, ...tailState }
 }
 
+/** Clean shop URL for a price listing (pagination/sort are client-side). */
 export function buildPriceListingHref(
   scope: PriceListingScope,
   rangeId: PriceRangeId,
-  state: { sort?: string; page?: number } = {},
+  _state: { sort?: string; page?: number } = {},
 ) {
-  const sort = state.sort ?? DEFAULT_SHOP_SORT
-  const page = state.page ?? 1
-  const parts = [`${PRODUCT_PRICE_BASE}/${buildPriceListingSlug(scope, rangeId)}`]
-  if (sort !== DEFAULT_SHOP_SORT) parts.push('sort', sort)
-  if (page > 1) parts.push('page', String(page))
-  return parts.join('/')
+  return `${SHOP_PRICE_BASE}/${buildPriceListingSlug(scope, rangeId)}`
+}
+
+/** Redirect legacy price paths with /page or /sort segments to clean /shop/{slug}. */
+export function shopPriceListingPathRedirect(pathname: string): string | null {
+  const listing = parsePriceListingPath(pathname)
+  if (!listing) return null
+  const segments = pathname.replace(/\/$/, '').split('/').filter(Boolean)
+  const hasLegacyTail =
+    segments.includes('page') ||
+    segments.includes('sort') ||
+    (segments.length >= 3 && segments[2] === 'sort')
+  if (!hasLegacyTail) return null
+  return buildPriceListingHref(listing.scope, listing.rangeId)
+}
+
+/** Redirect legacy /product/{slug} to /shop/{slug}. */
+export function legacyProductPriceRedirect(pathname: string): string | null {
+  const segments = pathname.replace(/\/$/, '').split('/').filter(Boolean)
+  if (segments[0] !== 'product' || !segments[1]) return null
+  const parsed = parsePriceListingSlug(segments[1])
+  if (!parsed) return null
+  return buildPriceListingHref(parsed.scope, parsed.rangeId)
 }
 
 export function getScopeLabel(scope: PriceListingScope): string {

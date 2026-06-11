@@ -1,16 +1,17 @@
 import { notFound, redirect } from 'next/navigation'
 import {
+  buildPriceListingHref,
   parsePriceListingSlug,
-  PRODUCT_PRICE_BASE,
 } from '@/lib/shop/priceListingSlugs'
 
 interface Props {
   params: Promise<{ pricingSlug: string }>
 }
 
-/** Legacy root-level price URLs → /product/{slug} */
+/** Legacy root-level price URLs → /shop/{slug} */
 export default async function LegacyPricingRedirect({ params }: Props) {
   const { pricingSlug } = await params
-  if (!parsePriceListingSlug(pricingSlug)) notFound()
-  redirect(`${PRODUCT_PRICE_BASE}/${pricingSlug}`)
+  const parsed = parsePriceListingSlug(pricingSlug)
+  if (!parsed) notFound()
+  redirect(buildPriceListingHref(parsed.scope, parsed.rangeId))
 }

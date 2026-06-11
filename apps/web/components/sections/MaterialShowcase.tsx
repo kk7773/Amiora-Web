@@ -16,23 +16,14 @@ const MATERIALS = [
     accent:'text-gold',
   },
   {
-    key:   'silver',
-    emoji: '◆',
-    title: 'Silver Jewellery',
-    sub:   '92.5 Sterling',
-    body:  'Pure 925 sterling silver jewellery that complements everyday wear with understated elegance and lasting shine.',
-    href:  '/shop/silver',
-    bgImage:'https://images.unsplash.com/photo-1605100804763-247f67b3557e?auto=format&fit=crop&w=1200&q=80',
-    accent:'text-ink-muted',
-  },
-  {
     key:   'diamond',
     emoji: '💎',
     title: 'Diamond Jewellery',
     sub:   'Certified · Multiple Cuts',
     body:  'Round Brilliant, Princess, Emerald, Oval and more. Every diamond independently certified with full traceability.',
     href:  '/shop/diamond',
-    bgImage:'https://images.unsplash.com/photo-1615655114865-4ccf6df15995?auto=format&fit=crop&w=1200&q=80',
+    bgImage:
+      'https://images.unsplash.com/photo-1603561591411-07134e71a2a9?auto=format&fit=crop&w=1200&q=80',
     accent:'text-ink',
   },
 ]
@@ -52,7 +43,7 @@ export function MaterialShowcase() {
           <h2 className="font-display text-display-2xl text-ink">Crafted from the Finest</h2>
         </motion.div>
 
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-2 max-w-4xl mx-auto">
           {MATERIALS.map((mat) => (
             <motion.div
               key={mat.key}

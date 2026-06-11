@@ -1,11 +1,10 @@
 'use client'
 
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { X, SlidersHorizontal } from 'lucide-react'
 import {
-  buildListingHref,
-  pathnameToListingSegments,
-  parseShopSegments,
+  buildShopListingHref,
+  resolveShopListingState,
 } from '@/lib/shop/paths'
 import { PRICE_RANGE_BUCKETS, type PriceRangeId } from '@/lib/shop/priceRanges'
 import {
@@ -26,37 +25,25 @@ interface FilterSidebarProps {
 export function FilterSidebar({ className = '', onClose }: FilterSidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const priceListing = parsePriceListingPath(pathname)
-  const segments = pathnameToListingSegments(pathname)
-  const listing = parseShopSegments(segments)
-  const scopeSlug = listing?.scopeSlug ?? null
-  const sort = priceListing?.sort ?? listing?.sort
-  const isCollectionsPath = pathname.startsWith('/collections/')
+  const listing = resolveShopListingState(pathname, searchParams)
+  const scopeSlug = listing.scopeSlug
   const priceScope = priceListing?.scope ?? resolvePriceListingScopeFromShop(scopeSlug)
   const activeRangeId = priceListing?.rangeId ?? null
 
   const navigateToScope = (nextScope: string | null) => {
-    const href = isCollectionsPath && scopeSlug
-      ? buildListingHref({ scopeSlug, sort, page: 1 }, {}, '/collections')
-      : buildListingHref({ scopeSlug: nextScope, sort, page: 1 })
-    router.push(href, { scroll: false })
+    router.push(buildShopListingHref({ scopeSlug: nextScope }), { scroll: false })
     onClose?.()
   }
 
   const navigateToPrice = (rangeId: PriceRangeId) => {
-    const href = buildPriceListingHref(priceScope, rangeId, { sort, page: 1 })
-    router.push(href, { scroll: false })
+    router.push(buildPriceListingHref(priceScope, rangeId), { scroll: false })
     onClose?.()
   }
 
   const clearAll = () => {
-    if (priceListing) {
-      router.push('/shop', { scroll: false })
-    } else if (isCollectionsPath && scopeSlug) {
-      router.push(`/collections/${scopeSlug}`, { scroll: false })
-    } else {
-      router.push('/shop', { scroll: false })
-    }
+    router.push('/shop', { scroll: false })
     onClose?.()
   }
 

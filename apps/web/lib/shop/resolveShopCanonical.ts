@@ -1,14 +1,10 @@
 import { createServerClient } from '@amiora/database'
-import { DEFAULT_SHOP_SORT, parseShopSegments } from '@/lib/shop/paths'
+import { parseShopSegments } from '@/lib/shop/paths'
 
 const FILTER_SCOPES = new Set(['all', 'gold', 'silver', 'diamond', '18k', '14k', '9k'])
 
-function buildShopPath(scopeSlug: string | null, sort: string, page: number) {
-  const parts = ['/shop']
-  if (scopeSlug && scopeSlug !== 'all') parts.push(scopeSlug)
-  if (sort !== DEFAULT_SHOP_SORT) parts.push('sort', sort)
-  if (page > 1) parts.push('page', String(page))
-  return parts.join('/')
+function shopScopePath(scopeSlug: string | null) {
+  return scopeSlug && scopeSlug !== 'all' ? `/shop/${scopeSlug}` : '/shop'
 }
 
 /** Preferred canonical pathname for `/shop/[...slug]` routes. */
@@ -40,10 +36,10 @@ export async function resolveShopCanonicalPath(segments: string[]): Promise<stri
   const listing = parseShopSegments(segments)
   if (!listing) return `/shop/${segments.join('/')}`
 
-  const { scopeSlug, sort, page } = listing
+  const { scopeSlug } = listing
 
   if (!scopeSlug || FILTER_SCOPES.has(scopeSlug)) {
-    return buildShopPath(scopeSlug, sort, page)
+    return shopScopePath(scopeSlug)
   }
 
   const supabase = createServerClient()
@@ -53,12 +49,12 @@ export async function resolveShopCanonicalPath(segments: string[]): Promise<stri
   ])
 
   if (collection?.slug) {
-    return page <= 1 && sort === DEFAULT_SHOP_SORT ? `/collections/${scopeSlug}` : buildShopPath(scopeSlug, sort, page)
+    return shopScopePath(scopeSlug)
   }
 
   if (category?.slug) {
-    return buildShopPath(scopeSlug, sort, page)
+    return shopScopePath(scopeSlug)
   }
 
-  return buildShopPath(scopeSlug, sort, page)
+  return shopScopePath(scopeSlug)
 }

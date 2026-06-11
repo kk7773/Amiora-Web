@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { Heart, Phone, MapPin, User, RefreshCw, Truck, Award, Gift } from 'lucide-react'
+import { Heart, MapPin, User, RefreshCw, Truck, Award, Gift } from 'lucide-react'
 import {
   VariantSelector,
   type CatalogColorGroup,
@@ -248,7 +248,7 @@ export function ProductDetailClient({
     toast.success('Added to cart!', { description: product.name })
   }
 
-  const TABS = ['Description', 'Diamond details', 'Metal & Purity', 'Price Breakup', 'Shipping & Returns', 'Care Guide']
+  const TABS = ['Description', 'Diamond details', 'Metal & Purity', 'Price Breakup', 'Care Guide']
   const liveBreakupRows = useMemo(() => {
     if (!activeBreakdown) return null
     return breakdownToDisplayRows(activeBreakdown, product.making_charge_pct)
@@ -258,7 +258,11 @@ export function ProductDetailClient({
     <div className="section-x py-10">
       <div className="grid gap-10 lg:grid-cols-2">
         <div className="lg:sticky lg:top-20 lg:self-start">
-          <ImageGallery images={galleryImages} productName={product.name} />
+          <ImageGallery
+            key={sel.colorId}
+            images={galleryImages}
+            productName={product.name}
+          />
         </div>
 
         <div className="space-y-6">
@@ -360,12 +364,6 @@ export function ProductDetailClient({
             >
               <User className="h-4 w-4" /> Request Demo
             </Link>
-            <a
-              href="tel:+919876543210"
-              className="flex items-center gap-1.5 px-4 py-2 text-sm border border-divider rounded-lg text-ink-muted hover:border-teal hover:text-teal transition-colors"
-            >
-              <Phone className="h-4 w-4" /> Callback
-            </a>
           </div>
 
           <div>
@@ -449,8 +447,7 @@ export function ProductDetailClient({
                   <p>Set metal weight per purity in admin to see price breakup.</p>
                 )
               )}
-              {activeTab === 4 && <p>Free shipping on orders above ₹5,000. Easy 100-day returns.</p>}
-              {activeTab === 5 && (
+              {activeTab === 4 && (
                 <p>Store in a dry place. Clean with a soft cloth. Avoid contact with chemicals.</p>
               )}
             </div>

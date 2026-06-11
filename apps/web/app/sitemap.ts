@@ -40,7 +40,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }))
 
   const collectionRoutes: MetadataRoute.Sitemap = (collections ?? []).map(c => ({
-    url:             `${BASE}/collections/${c.slug}`,
+    url:             `${BASE}/shop/${c.slug}`,
     lastModified:    c.updated_at ? new Date(c.updated_at) : new Date(),
     changeFrequency: 'weekly',
     priority:        0.7,

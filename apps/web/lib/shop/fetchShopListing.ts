@@ -26,6 +26,7 @@ export type ShopListingFilters = {
   purity?: string[]
   diamond?: boolean
   category?: string[]
+  collection?: string
   price?: string | null
 }
 
@@ -64,6 +65,7 @@ export async function fetchShopListing(
   const purity = filters.purity ?? []
   const diamond = filters.diamond ?? false
   const catArr = filters.category ?? []
+  const collectionSlug = filters.collection
   const priceBucket = parsePriceRangeParam(filters.price ?? null)
 
   const prices = await getLatestPrices()
@@ -135,6 +137,20 @@ export async function fetchShopListing(
 
   if (validIds !== null) {
     query = query.in('id', validIds)
+  }
+
+  if (collectionSlug) {
+    const { data: coll } = await supabase
+      .from('collections')
+      .select('id')
+      .eq('slug', collectionSlug)
+      .eq('is_active', true)
+      .maybeSingle()
+    if (coll?.id) {
+      query = query.eq('collection_id', coll.id)
+    } else {
+      return { products: [] as ShopListingProduct[], total: 0, page, pageSize }
+    }
   }
 
   if (catArr.length > 0) {

@@ -41,19 +41,9 @@ export function appendListingQuery(href: string, query: ListingQueryParams = {})
   return qs ? `${href}?${qs}` : href
 }
 
-export function buildListingHref(
-  state: Partial<ShopListingState> = {},
-  query: ListingQueryParams = {},
-  basePath: '/shop' | '/collections' = '/shop',
-) {
-  if (basePath === '/collections' && state.scopeSlug) {
-    return appendListingQuery(`/collections/${state.scopeSlug}`, {
-      page: state.page,
-      sort: state.sort,
-    })
-  }
-  const href = buildShopListingHref(state)
-  return appendListingQuery(href, query)
+/** @deprecated Use buildShopListingHref — pagination/sort are client-side. */
+export function buildListingHref(state: Partial<ShopListingState> = {}) {
+  return buildShopListingHref({ scopeSlug: state.scopeSlug })
 }
 
 function normalizePage(value: string | undefined) {
@@ -93,16 +83,74 @@ export function parseShopSegments(segments: string[] = []): ShopListingState | n
   return null
 }
 
+/** Shop scope href — fixed path only; pagination/sort are client-side. */
 export function buildShopListingHref(state: Partial<ShopListingState> = {}) {
   const scopeSlug = state.scopeSlug ?? null
-  const sort = state.sort ?? DEFAULT_SHOP_SORT
-  const page = state.page ?? 1
+  if (!scopeSlug || scopeSlug === 'all') return '/shop'
+  return `/shop/${scopeSlug}`
+}
 
-  const parts = ['/shop']
-  if (scopeSlug) parts.push(scopeSlug)
-  if (sort !== DEFAULT_SHOP_SORT) parts.push('sort', sort)
-  if (page > 1) parts.push('page', String(page))
-  return parts.join('/')
+function segmentsUseLegacyPagination(segments: string[]) {
+  return (
+    segments[0] === 'page' ||
+    segments[0] === 'sort' ||
+    segments.includes('page') ||
+    (segments.length >= 2 && segments[1] === 'sort')
+  )
+}
+
+type SearchParamsLike =
+  | { get(key: string): string | null }
+  | Record<string, string | undefined>
+  | null
+  | undefined
+
+function readSearchParam(sp: SearchParamsLike, key: string): string | null {
+  if (!sp) return null
+  if (typeof (sp as { get?: (k: string) => string | null }).get === 'function') {
+    return (sp as { get(key: string): string | null }).get(key)
+  }
+  return (sp as Record<string, string | undefined>)[key] ?? null
+}
+
+/** Current listing state from pathname + search params (query wins over clean paths). */
+export function resolveShopListingState(
+  pathname: string,
+  searchParams?: SearchParamsLike,
+): ShopListingState {
+  const segments = pathnameToListingSegments(pathname)
+  const fromPath = parseShopSegments(segments)
+  if (!fromPath) {
+    return { scopeSlug: null, sort: DEFAULT_SHOP_SORT, page: 1 }
+  }
+
+  if (segmentsUseLegacyPagination(segments)) {
+    return fromPath
+  }
+
+  const sortParam = readSearchParam(searchParams, 'sort')
+  const pageParam = readSearchParam(searchParams, 'page')
+
+  return {
+    scopeSlug: fromPath.scopeSlug,
+    sort: sortParam ?? fromPath.sort,
+    page: pageParam ? normalizePage(pageParam) : fromPath.page,
+  }
+}
+
+/** Redirect legacy `/shop/.../page/N` paths to clean scope URLs (pagination is client-side). */
+export function shopListingPathRedirect(pathname: string): string | null {
+  const normalized = pathname.replace(/\/$/, '')
+  if (!normalized.startsWith('/shop/')) return null
+
+  const segments = normalized.replace(/^\/shop\/?/, '').split('/').filter(Boolean)
+  if (!segmentsUseLegacyPagination(segments)) return null
+
+  const listing = parseShopSegments(segments)
+  if (!listing) return null
+
+  const scope = listing.scopeSlug && listing.scopeSlug !== 'all' ? listing.scopeSlug : null
+  return scope ? `/shop/${scope}` : '/shop'
 }
 
 export function getProductHref(product: {

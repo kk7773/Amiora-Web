@@ -4,8 +4,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { ChevronDown } from 'lucide-react'
 import {
   buildListingHref,
-  pathnameToListingSegments,
-  parseShopSegments,
+  resolveShopListingState,
 } from '@/lib/shop/paths'
 import { buildPriceListingHref, parsePriceListingPath } from '@/lib/shop/priceListingSlugs'
 
@@ -22,34 +21,13 @@ export function SortDropdown() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const priceListing = parsePriceListingPath(pathname)
-  const segments = pathnameToListingSegments(pathname)
-  const listing = parseShopSegments(segments)
-  const isCollectionsPath = pathname.startsWith('/collections/')
-  const current = priceListing
-    ? priceListing.sort
-    : isCollectionsPath
-      ? (searchParams.get('sort') ?? 'newest')
-      : (listing?.sort ?? 'newest')
+  const listing = resolveShopListingState(pathname, searchParams)
+  const current = priceListing ? priceListing.sort : listing.sort
 
   const handleChange = (value: string) => {
-    let href: string
-    if (priceListing) {
-      href = buildPriceListingHref(priceListing.scope, priceListing.rangeId, {
-        sort: value,
-        page: 1,
-      })
-    } else if (isCollectionsPath && listing?.scopeSlug) {
-      href = buildListingHref(
-        { scopeSlug: listing.scopeSlug, sort: value, page: 1 },
-        {},
-        '/collections',
-      )
-    } else {
-      href = buildListingHref(
-        { scopeSlug: listing?.scopeSlug ?? null, sort: value, page: 1 },
-        {},
-      )
-    }
+    const href = priceListing
+      ? buildPriceListingHref(priceListing.scope, priceListing.rangeId)
+      : buildListingHref({ scopeSlug: listing.scopeSlug })
     router.push(href, { scroll: false })
   }
 

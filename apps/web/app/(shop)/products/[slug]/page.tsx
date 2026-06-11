@@ -11,6 +11,7 @@ import { getLatestPrices } from '@/lib/pricing/engine'
 import { JsonLd } from '@/components/seo/JsonLd'
 import { buildProductPageSchemas } from '@/lib/seo/jsonLd'
 import { canonicalFromPath } from '@/lib/seo/site'
+import { mapProductForCard, PRODUCT_CARD_SELECT, type ProductCardRaw } from '@/lib/shop/mapProductForCard'
 
 interface Props {
   params: Promise<{ slug: string }>
@@ -435,32 +436,7 @@ export default async function ProductPage({ params }: Props) {
     is_verified_purchase: boolean
   }
 
-  type SuggestedProduct = {
-    id: string
-    name: string
-    slug: string
-    collection?: { slug?: string } | null
-    category?: { slug?: string } | null
-    making_charge_pct: number
-    making_charge_discount_pct: number | null
-    gem_price_discount_pct: number | null
-    stone_lines?: unknown
-    product_images: {
-      url: string
-      is_primary: boolean
-      is_hover: boolean
-      alt_text: string | null
-    }[]
-    product_variants: {
-      id: string
-      sku: string
-      price: number
-      stock_qty: number
-      metal_weight_g?: number | null
-      purity_id?: string
-      is_active: boolean
-    }[]
-  }
+  type SuggestedProduct = ProductCardRaw
 
   const currentCollectionId = (product.collection as unknown as { id: string } | null)?.id ?? null
 
@@ -484,18 +460,14 @@ export default async function ProductPage({ params }: Props) {
       currentCollectionId
         ? supabase
             .from('products')
-            .select(
-              'id, name, slug, collection:collections(slug), category:categories(slug), making_charge_pct, making_charge_discount_pct, gem_price_discount_pct, stone_lines, product_images(url, is_primary, is_hover, alt_text), product_variants(id, sku, price, stock_qty, metal_weight_g, purity_id, is_active)',
-            )
+            .select(PRODUCT_CARD_SELECT)
             .neq('collection_id', currentCollectionId)
             .neq('id', product.id)
             .eq('status', 'active')
             .limit(8)
         : supabase
             .from('products')
-            .select(
-              'id, name, slug, collection:collections(slug), category:categories(slug), making_charge_pct, making_charge_discount_pct, gem_price_discount_pct, stone_lines, product_images(url, is_primary, is_hover, alt_text), product_variants(id, sku, price, stock_qty, metal_weight_g, purity_id, is_active)',
-            )
+            .select(PRODUCT_CARD_SELECT)
             .neq('id', product.id)
             .eq('status', 'active')
             .limit(8),
@@ -510,9 +482,7 @@ export default async function ProductPage({ params }: Props) {
     pairedProducts = await Promise.resolve(
       supabase
         .from('products')
-        .select(
-          'id, name, slug, collection:collections(slug), category:categories(slug), making_charge_pct, making_charge_discount_pct, gem_price_discount_pct, stone_lines, product_images(*), product_variants(id, sku, price, stock_qty, metal_weight_g, purity_id, is_active)',
-        )
+        .select(PRODUCT_CARD_SELECT)
         .in('id', smartPairProductIds)
         .eq('status', 'active'),
     ).then((r) => (r.data ?? []) as SuggestedProduct[]).catch(() => [])
@@ -526,31 +496,11 @@ export default async function ProductPage({ params }: Props) {
   const purityMap = await fetchPurityMapForProducts(supabase, relatedForPricing)
 
   const smartPairs = pairedProducts.map((p) =>
-    attachCardPrice(
-      {
-        ...p,
-        collectionSlug: p.collection?.slug ?? null,
-        categorySlug: p.category?.slug ?? null,
-        product_variants: p.product_variants ?? [],
-      },
-      goldPrice,
-      silverPrice,
-      purityMap,
-    ),
+    mapProductForCard(p, goldPrice, silverPrice, purityMap),
   ) as Parameters<typeof ProductCard>[0]['product'][]
 
   const youMayAlsoLike = suggestedProducts.map((p) =>
-    attachCardPrice(
-      {
-        ...p,
-        collectionSlug: p.collection?.slug ?? null,
-        categorySlug: p.category?.slug ?? null,
-        product_variants: p.product_variants ?? [],
-      },
-      goldPrice,
-      silverPrice,
-      purityMap,
-    ),
+    mapProductForCard(p, goldPrice, silverPrice, purityMap),
   ) as Parameters<typeof ProductCard>[0]['product'][]
 
   const safeReviews = (reviewsRes ?? []).map((r) => ({
@@ -606,9 +556,9 @@ export default async function ProductPage({ params }: Props) {
     breadcrumb: [
       { name: 'Home', href: '/' },
       ...(collectionMeta
-        ? [{ name: collectionMeta.name, href: `/collections/${collectionMeta.slug}` }]
+        ? [{ name: collectionMeta.name, href: `/shop/${collectionMeta.slug}` }]
         : categoryMeta
-          ? [{ name: categoryMeta.name, href: `/categories/${categoryMeta.slug}` }]
+          ? [{ name: categoryMeta.name, href: `/shop/${categoryMeta.slug}` }]
           : [{ name: 'Shop', href: '/shop' }]),
       { name: product.name, href: `/products/${slug}` },
     ],
@@ -669,7 +619,13 @@ export default async function ProductPage({ params }: Props) {
 
       <ProductFAQ faqs={(product.faqs as { question: string; answer: string }[] | null) ?? []} />
 
-      <ReviewsSection reviews={safeReviews} total={safeReviews.length} avgRating={avgRating} />
+      <ReviewsSection
+        productId={product.id}
+        productName={product.name}
+        reviews={safeReviews}
+        total={safeReviews.length}
+        avgRating={avgRating}
+      />
 
       {youMayAlsoLike.length > 0 && (
         <section className="section-x py-14 border-t border-divider">

@@ -1,24 +1,19 @@
 import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { headers } from 'next/headers'
+import { notFound, redirect } from 'next/navigation'
 import { Suspense } from 'react'
 import { createServerClient } from '@amiora/database'
-import { attachCardPrice } from '@/lib/pricing/attachCardPrice'
-import { fetchPurityMapForProducts } from '@/lib/pricing/fetchPurityMap'
-import { getLatestPrices } from '@/lib/pricing/engine'
+import { fetchShopListing, SHOP_PAGE_SIZE } from '@/lib/shop/fetchShopListing'
+import { ShopListingClient } from '@/components/shop/ShopListingClient'
 import { JsonLd } from '@/components/seo/JsonLd'
 import { buildListingPageSchemas, toSchemaProductItem } from '@/lib/seo/jsonLd'
 import { canonicalFromPath } from '@/lib/seo/site'
-import { ProductCard }           from '@/components/product/ProductCard'
 import { FilterSidebar }         from '@/components/shop/FilterSidebar'
-import { SortDropdown }          from '@/components/shop/SortDropdown'
-import { Pagination }            from '@/components/shop/Pagination'
 import { MobileFilterDrawer }    from '@/components/shop/MobileFilterDrawer'
 
 export const revalidate = 300
-
-const PAGE_SIZE = 12
 
 // ── Per-category visual accent colours (Tailwind safe-list friendly) ──────────
 const CATEGORY_META: Record<string, { gradient: string; tagline: string }> = {
@@ -51,7 +46,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: data.name,
     description: data.description ?? `Shop ${data.name} — handcrafted gold, silver & diamond jewellery by AMIORA.`,
-    alternates: { canonical: canonicalFromPath(`/categories/${slug}`) },
+    alternates: { canonical: canonicalFromPath(`/shop/${slug}`) },
   }
 }
 
@@ -61,86 +56,27 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   const page     = parseInt(sp['page'] ?? '1', 10)
   const sort     = sp['sort'] ?? 'newest'
 
+  const headersList = await headers()
+  const canonicalPath = headersList.get('x-canonical-path') ?? ''
+  if (canonicalPath.startsWith('/categories/')) {
+    redirect(`/shop/${slug}`)
+  }
+
   const supabase = createServerClient()
 
-  const [{ data: category }, prices] = await Promise.all([
-    supabase
-      .from('categories')
-      .select('id, name, slug, description, image_url')
-      .eq('slug', slug)
-      .eq('is_active', true)
-      .single(),
-    getLatestPrices(),
-  ])
+  const { data: category } = await supabase
+    .from('categories')
+    .select('id, name, slug, description, image_url')
+    .eq('slug', slug)
+    .eq('is_active', true)
+    .single()
 
   if (!category) notFound()
 
-  const orderMap: Record<string, { col: string; asc: boolean }> = {
-    newest:     { col: 'created_at', asc: false },
-    price_asc:  { col: 'created_at', asc: true  },
-    price_desc: { col: 'created_at', asc: false },
-    popular:    { col: 'created_at', asc: false },
-  }
-  const ord = orderMap[sort] ?? orderMap['newest']!
-
-  const { data: rows, count } = await supabase
-    .from('products')
-    .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,stone_lines,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(*)', { count: 'exact' })
-    .eq('status', 'active')
-    .eq('category_id', category.id)
-    .order(ord.col, { ascending: ord.asc })
-    .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
-
-  type RawProduct = {
-    id: string; name: string; slug: string; making_charge_pct: number
-    product_images:   { url: string; alt_text: string | null; is_primary: boolean; is_hover: boolean }[]
-    product_color_groups?: Array<{ id: string; color_id: string; images: string[] | null; display_order: number; is_active: boolean }>
-    product_variants: {
-      id: string
-      sku: string
-      price: number
-      stock_qty: number
-      is_active: boolean
-    }[]
-  }
-
-  const purityMap = await fetchPurityMapForProducts(supabase, rows ?? [])
-
-  const products = ((rows ?? []) as unknown as RawProduct[]).map((p) => {
-    // If product_images is empty, generate from product_color_groups
-    let images = p.product_images ?? []
-    if (images.length === 0 && p.product_color_groups && p.product_color_groups.length > 0) {
-      // Collect all images from color groups
-      const colorGroupImages: { url: string; alt_text: string | null; is_primary: boolean; is_hover: boolean }[] = []
-      for (let i = 0; i < p.product_color_groups.length; i++) {
-        const cg = p.product_color_groups[i]
-        if (cg && Array.isArray(cg.images)) {
-          for (let j = 0; j < cg.images.length; j++) {
-            const imgUrl = cg.images[j]
-            colorGroupImages.push({
-              url: imgUrl,
-              alt_text: `${p.name} — image ${colorGroupImages.length + 1}`,
-              is_primary: colorGroupImages.length === 0, // First image is primary
-              is_hover: colorGroupImages.length === 1,   // Second image is hover
-            })
-          }
-        }
-      }
-      images = colorGroupImages
-    }
-    
-    return attachCardPrice(
-      {
-        ...p,
-        product_images: images,
-        collectionSlug: (p as RawProduct & { collection?: { slug?: string } | null }).collection?.slug ?? null,
-        categorySlug: (p as RawProduct & { category?: { slug?: string } | null }).category?.slug ?? null,
-        product_variants: p.product_variants ?? [],
-      },
-      prices.gold?.pricePerGram ?? 7200,
-      prices.silver?.pricePerGram ?? 90,
-      purityMap,
-    )
+  const { products, total } = await fetchShopListing(supabase, {
+    page,
+    sort,
+    category: [slug],
   })
 
   const meta = CATEGORY_META[slug] ?? {
@@ -158,14 +94,14 @@ export default async function CategoryPage({ params, searchParams }: Props) {
         data={buildListingPageSchemas({
           name: category.name,
           description: category.description ?? meta.tagline,
-          path: `/categories/${slug}`,
+          path: `/shop/${slug}`,
           breadcrumb: [
             { name: 'Home', href: '/' },
             { name: 'Shop', href: '/shop' },
-            { name: category.name, href: `/categories/${slug}` },
+            { name: category.name, href: `/shop/${slug}` },
           ],
           products: schemaProducts,
-          total: count ?? products.length,
+          total,
         })}
       />
       {/* ── Category banner ─────────────────────────────────── */}
@@ -209,21 +145,16 @@ export default async function CategoryPage({ params, searchParams }: Props) {
             <Suspense><FilterSidebar /></Suspense>
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between mb-6 gap-4">
-              <Suspense><MobileFilterDrawer /></Suspense>
-              <p className="text-sm text-ink-muted">{count ?? 0} pieces</p>
-              <Suspense><SortDropdown /></Suspense>
-            </div>
-            <div className="grid gap-5 grid-cols-2 lg:grid-cols-3">
-              {products.map((p) => (
-                <ProductCard
-                  key={p.id}
-                  product={p as Parameters<typeof ProductCard>[0]['product']}
-                />
-              ))}
-            </div>
+            <Suspense><MobileFilterDrawer /></Suspense>
             <Suspense>
-              <Pagination total={count ?? 0} pageSize={PAGE_SIZE} page={page} />
+              <ShopListingClient
+                initialProducts={products as Parameters<typeof ShopListingClient>[0]['initialProducts']}
+                total={total}
+                pageSize={SHOP_PAGE_SIZE}
+                initialPage={page}
+                initialSort={sort}
+                filters={{ category: [slug] }}
+              />
             </Suspense>
           </div>
         </div>

@@ -1,9 +1,9 @@
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { createServerClient } from '@amiora/database'
-import { attachCardPrice } from '@/lib/pricing/attachCardPrice'
 import { fetchPurityMapForProducts } from '@/lib/pricing/fetchPurityMap'
 import { getLatestPrices } from '@/lib/pricing/engine'
+import { mapProductForCard, PRODUCT_CARD_SELECT, type ProductCardRaw } from '@/lib/shop/mapProductForCard'
 import { ProductCard }           from '@/components/product/ProductCard'
 import { SearchInput }           from './SearchInput'
 import { SearchX, Sparkles }     from 'lucide-react'
@@ -48,26 +48,18 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   const { data: rows } = await supabase
     .from('products')
-    .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,stone_lines,collection:collections(slug),category:categories(slug),product_images(*),product_variants(*)')
+    .select(PRODUCT_CARD_SELECT)
     .eq('status', 'active')
     .ilike('name', `%${query}%`)
     .order('created_at', { ascending: false })
     .limit(48)
 
   const purityMap = await fetchPurityMapForProducts(supabase, rows ?? [])
+  const goldPrice = prices.gold?.pricePerGram ?? 7200
+  const silverPrice = prices.silver?.pricePerGram ?? 90
 
   const products = (rows ?? []).map((p) =>
-    attachCardPrice(
-      {
-        ...p,
-        collectionSlug: (p.collection as { slug?: string } | null)?.slug ?? null,
-        categorySlug: (p.category as { slug?: string } | null)?.slug ?? null,
-        product_variants: p.product_variants ?? [],
-      },
-      prices.gold?.pricePerGram ?? 7200,
-      prices.silver?.pricePerGram ?? 90,
-      purityMap,
-    )
+    mapProductForCard(p as ProductCardRaw, goldPrice, silverPrice, purityMap),
   )
 
   const schemaProducts = products.map((p) =>

@@ -1,25 +1,20 @@
 import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { headers } from 'next/headers'
+import { notFound, redirect } from 'next/navigation'
 import { Suspense } from 'react'
 import { unstable_cache } from 'next/cache'
 import { createServerClient } from '@amiora/database'
-import { attachCardPrice } from '@/lib/pricing/attachCardPrice'
-import { fetchPurityMapForProducts } from '@/lib/pricing/fetchPurityMap'
-import { getLatestPrices } from '@/lib/pricing/engine'
+import { fetchShopListing, SHOP_PAGE_SIZE } from '@/lib/shop/fetchShopListing'
+import { ShopListingClient } from '@/components/shop/ShopListingClient'
 import { JsonLd } from '@/components/seo/JsonLd'
 import { buildListingPageSchemas, toSchemaProductItem } from '@/lib/seo/jsonLd'
 import { canonicalFromPath } from '@/lib/seo/site'
-import { ProductCard }           from '@/components/product/ProductCard'
 import { FilterSidebar }         from '@/components/shop/FilterSidebar'
-import { SortDropdown }          from '@/components/shop/SortDropdown'
-import { Pagination }            from '@/components/shop/Pagination'
 import { MobileFilterDrawer }    from '@/components/shop/MobileFilterDrawer'
 
 export const revalidate = 300
-
-const PAGE_SIZE = 12
 
 interface Props {
   params:       Promise<{ slug: string }>
@@ -45,7 +40,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: data.name,
     description: data.description ?? undefined,
-    alternates: { canonical: canonicalFromPath(`/collections/${slug}`) },
+    alternates: { canonical: canonicalFromPath(`/shop/${slug}`) },
   }
 }
 
@@ -53,69 +48,22 @@ export default async function CollectionPage({ params, searchParams }: Props) {
   const { slug } = await params
   const sp       = await searchParams
   const page     = parseInt(sp['page'] ?? '1', 10)
+  const sort     = sp['sort'] ?? 'newest'
 
-  // getCollection is cached — no extra DB hit if generateMetadata already called it
-  const [collection, prices] = await Promise.all([
-    getCollection(slug),
-    getLatestPrices(),
-  ])
+  const headersList = await headers()
+  const canonicalPath = headersList.get('x-canonical-path') ?? ''
+  if (canonicalPath.startsWith('/collections/')) {
+    redirect(`/shop/${slug}`)
+  }
 
+  const collection = await getCollection(slug)
   if (!collection) notFound()
 
   const supabase = createServerClient()
-
-  const { data: rows, count } = await supabase
-    .from('products')
-    .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,stone_lines,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(*)', { count: 'exact' })
-    .eq('status', 'active')
-    .eq('collection_id', collection.id)
-    .order('created_at', { ascending: false })
-    .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
-
-  type RawProduct = {
-    id: string; name: string; slug: string; making_charge_pct: number
-    product_images: { url: string; is_primary: boolean }[]
-    product_color_groups?: Array<{ id: string; color_id: string; images: string[] | null; display_order: number; is_active: boolean }>
-    product_variants: { id: string; sku: string; price: number; stock_qty: number; is_active: boolean }[]
-  }
-
-  const purityMap = await fetchPurityMapForProducts(supabase, rows ?? [])
-
-  const products = (((rows ?? []) as unknown as RawProduct[]) ?? []).map((p) => {
-    // If product_images is empty, generate from product_color_groups
-    let images = p.product_images ?? []
-    if (images.length === 0 && p.product_color_groups && p.product_color_groups.length > 0) {
-      // Collect all images from color groups
-      const colorGroupImages: { url: string; alt_text: string | null; is_primary: boolean; is_hover: boolean }[] = []
-      for (let i = 0; i < p.product_color_groups.length; i++) {
-        const cg = p.product_color_groups[i]
-        if (cg && Array.isArray(cg.images)) {
-          for (let j = 0; j < cg.images.length; j++) {
-            const imgUrl = cg.images[j]
-            colorGroupImages.push({
-              url: imgUrl,
-              alt_text: `${p.name} — image ${colorGroupImages.length + 1}`,
-              is_primary: colorGroupImages.length === 0, // First image is primary
-              is_hover: colorGroupImages.length === 1,   // Second image is hover
-            })
-          }
-        }
-      }
-      images = colorGroupImages
-    }
-    
-    return attachCardPrice(
-      {
-        ...p,
-        product_images: images,
-        collectionSlug: (p as RawProduct & { collection?: { slug?: string } | null }).collection?.slug ?? null,
-        categorySlug: (p as RawProduct & { category?: { slug?: string } | null }).category?.slug ?? null,
-        product_variants: p.product_variants ?? [],
-      },
-      prices.gold?.pricePerGram ?? 7200,
-      prices.silver?.pricePerGram ?? 90,
-      purityMap,
-    )
+  const { products, total } = await fetchShopListing(supabase, {
+    page,
+    sort,
+    collection: slug,
   })
 
   const schemaProducts = products.map((p) =>
@@ -129,15 +77,15 @@ export default async function CollectionPage({ params, searchParams }: Props) {
           pageType: 'CollectionPage',
           name: collection.name,
           description: collection.description ?? undefined,
-          path: `/collections/${slug}`,
+          path: `/shop/${slug}`,
           image: collection.banner_url,
           breadcrumb: [
             { name: 'Home', href: '/' },
-            { name: 'Collections', href: '/collections' },
-            { name: collection.name, href: `/collections/${slug}` },
+            { name: 'Shop', href: '/shop' },
+            { name: collection.name, href: `/shop/${slug}` },
           ],
           products: schemaProducts,
-          total: count ?? products.length,
+          total,
         })}
       />
       {/* Collection banner */}
@@ -152,7 +100,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
             <nav className="flex items-center gap-1 text-xs text-cream/60">
               <Link href="/" className="hover:text-cream transition-colors">Home</Link>
               <span>/</span>
-              <Link href="/collections" className="hover:text-cream transition-colors">Collections</Link>
+              <Link href="/shop" className="hover:text-cream transition-colors">Shop</Link>
               <span>/</span>
               <span className="text-cream">{collection.name}</span>
             </nav>
@@ -170,11 +118,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
           <Suspense><FilterSidebar /></Suspense>
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between mb-6">
-            <Suspense><MobileFilterDrawer /></Suspense>
-            <p className="text-sm text-ink-muted">{count ?? 0} pieces</p>
-            <Suspense><SortDropdown /></Suspense>
-          </div>
+          <Suspense><MobileFilterDrawer /></Suspense>
           {products.length === 0 ? (
             <div className="py-24 text-center space-y-4">
               <p className="text-2xs uppercase tracking-widest2 text-teal">Coming Soon</p>
@@ -192,13 +136,17 @@ export default async function CollectionPage({ params, searchParams }: Props) {
               </div>
             </div>
           ) : (
-            <div className="grid gap-5 grid-cols-2 lg:grid-cols-3">
-              {products.map((p) => (
-                <ProductCard key={p.id} product={p as Parameters<typeof ProductCard>[0]['product']} />
-              ))}
-            </div>
+            <Suspense>
+              <ShopListingClient
+                initialProducts={products as Parameters<typeof ShopListingClient>[0]['initialProducts']}
+                total={total}
+                pageSize={SHOP_PAGE_SIZE}
+                initialPage={page}
+                initialSort={sort}
+                filters={{ collection: slug }}
+              />
+            </Suspense>
           )}
-          <Suspense><Pagination total={count ?? 0} pageSize={PAGE_SIZE} page={page} /></Suspense>
         </div>
       </div>
     </div>

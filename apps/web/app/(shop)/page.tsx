@@ -31,6 +31,7 @@ import { BlogPreview }         from '@/components/sections/BlogPreview'
 import { StoreLocatorTeaser }   from '@/components/sections/StoreLocatorTeaser'
 import { StoreCitiesSection }   from '@/components/sections/StoreCitiesSection'
 import { FaqSection }           from '@/components/sections/FaqSection'
+import { HOME_FAQS }              from '@/lib/content/homeFaqs'
 import { attachCardPrice } from '@/lib/pricing/attachCardPrice'
 import { fetchPurityMapForProducts } from '@/lib/pricing/fetchPurityMap'
 import { getLatestPrices } from '@/lib/pricing/engine'
@@ -187,9 +188,14 @@ export default async function HomePage() {
     }),
   ]
 
-  const faqRows = (siteFaqs ?? []) as { question: string; answer: string }[]
-  if (faqRows.length > 0) {
-    homeSchemas.push(buildFaqPageJsonLd(faqRows))
+  const dbFaqs = (siteFaqs ?? []) as { id: string; question: string; answer: string }[]
+  const displayFaqs =
+    dbFaqs.length > 0
+      ? dbFaqs.slice(0, 5)
+      : HOME_FAQS.map((f) => ({ id: f.id, question: f.question, answer: f.answer }))
+
+  if (displayFaqs.length > 0) {
+    homeSchemas.push(buildFaqPageJsonLd(displayFaqs))
   }
 
   return (
@@ -208,7 +214,7 @@ export default async function HomePage() {
       <MaterialShowcase />
       <ProductGridSection
         heading="Best Sellers"
-        viewAllHref="/shop/sort/popular"
+        viewAllHref="/shop?sort=popular"
         products={bestSellers as Parameters<typeof ProductGridSection>[0]['products']}
         columns={5}
       />
@@ -221,8 +227,8 @@ export default async function HomePage() {
       <CustomizationCTA />
       <Testimonials testimonials={testimonials ?? []} />
       <BlogPreview posts={blogs ?? []} />
+      <FaqSection faqs={displayFaqs} />
       <StoreCitiesSection cities={citiesData} />
-      <FaqSection faqs={(siteFaqs ?? []) as { id: string; question: string; answer: string }[]} />
       <StoreLocatorTeaser storeCount={storeCount} />
     </>
   )

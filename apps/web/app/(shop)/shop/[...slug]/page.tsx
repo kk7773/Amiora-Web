@@ -5,7 +5,13 @@ import ShopPage from '../page'
 import CollectionPage from '../../collections/[slug]/page'
 import CategoryPage from '../../categories/[slug]/page'
 import ProductPage from '../../products/[slug]/page'
-import { parseShopSegments } from '@/lib/shop/paths'
+import { PriceListingPage } from '@/components/shop/PriceListingPage'
+import { parseShopSegments, shopListingPathRedirect } from '@/lib/shop/paths'
+import {
+  parsePriceListingPath,
+  parsePriceListingSlug,
+  shopPriceListingPathRedirect,
+} from '@/lib/shop/priceListingSlugs'
 import { resolveShopCanonicalPath } from '@/lib/shop/resolveShopCanonical'
 import { canonicalFromPath } from '@/lib/seo/site'
 
@@ -30,8 +36,44 @@ const FILTER_MAP: Record<string, Record<string, string>> = {
   '9k': { purity: '9k' },
 }
 
-export default async function ShopCatchAllPage({ params }: Props) {
+function mergeListingSearchParams(
+  listing: { sort: string; page: number },
+  segments: string[],
+  sp: Record<string, string | undefined>,
+) {
+  const legacy =
+    segments[0] === 'page' ||
+    segments[0] === 'sort' ||
+    segments.includes('page') ||
+    (segments.length >= 2 && segments[1] === 'sort')
+
+  if (legacy) {
+    return { ...sp, sort: listing.sort, page: String(listing.page) }
+  }
+
+  return {
+    ...sp,
+    sort: sp.sort ?? listing.sort,
+    page: sp.page ?? String(listing.page),
+  }
+}
+
+export default async function ShopCatchAllPage({ params, searchParams }: Props) {
   const { slug: segments } = await params
+  const sp = await searchParams
+
+  const shopPath = `/shop/${segments.join('/')}`
+
+  const legacyPriceRedirect = shopPriceListingPathRedirect(shopPath)
+  if (legacyPriceRedirect) redirect(legacyPriceRedirect)
+
+  const legacyRedirect = shopListingPathRedirect(shopPath)
+  if (legacyRedirect) redirect(legacyRedirect)
+
+  if (segments.length === 1 && parsePriceListingSlug(segments[0]!)) {
+    const listing = parsePriceListingPath(shopPath)
+    if (listing) return <PriceListingPage listing={listing} />
+  }
 
   if (segments[0] === 'collections') {
     if (segments.length === 1) redirect('/collections')
@@ -62,10 +104,7 @@ export default async function ShopCatchAllPage({ params }: Props) {
 
   const { scopeSlug, sort, page } = listing
 
-  const shopSearchParams = {
-    sort,
-    page: String(page),
-  }
+  const shopSearchParams = mergeListingSearchParams({ sort, page }, segments, sp)
 
   if (!scopeSlug || scopeSlug === 'all') {
     return ShopPage({

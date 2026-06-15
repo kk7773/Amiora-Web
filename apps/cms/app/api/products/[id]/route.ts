@@ -3,6 +3,7 @@ import { createServerClient } from '@amiora/database'
 import { computeCatalogVariantPrice } from '@amiora/pricing'
 import { generateAmioraSKU } from '@/lib/sku'
 import { requireCmsAccess, writeAuditLog } from '@/lib/rbac'
+import { insertProductColorGroup, updateProductColorGroup } from '@/lib/productColorGroupsDb'
 
 function parseOptionalGrams(v: unknown): number | null {
   if (v === null || v === undefined || v === '') return null
@@ -52,6 +53,7 @@ type ColorVariantIn = {
   id?: string
   color_id: string
   images: string[]
+  videos?: string[]
   display_order?: number
   is_active?: boolean
 }
@@ -73,6 +75,7 @@ type Body = {
     category_id: string
     collection_id?: string | null
     product_number: number
+    design_number?: string | null
     short_desc?: string | null
     description?: string | null
     diamond_shape?: string | null
@@ -93,6 +96,8 @@ type Body = {
     has_stone?: boolean
     stone_lines?: unknown
   }
+  collection_ids?: string[]
+  tag_ids?: string[]
   color_variants: ColorVariantIn[]
   matrix: MatrixCell[]
 }
@@ -108,7 +113,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       return NextResponse.json({ error: 'Missing name, slug, or category' }, { status: 400 })
     }
     if (!Array.isArray(body.color_variants) || body.color_variants.length === 0) {
-      return NextResponse.json({ error: 'Add at least one colour variant with images' }, { status: 400 })
+      return NextResponse.json({ error: 'Add at least one colour variant with images or videos' }, { status: 400 })
     }
     if (!Array.isArray(body.matrix) || body.matrix.length === 0) {
       return NextResponse.json({ error: 'Pricing matrix empty' }, { status: 400 })
@@ -183,6 +188,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       category_id: body.product.category_id,
       collection_id: body.product.collection_id ?? null,
       product_number: Math.max(1, Math.floor(body.product.product_number)),
+      design_number: body.product.design_number?.trim() || null,
       short_desc: body.product.short_desc ?? null,
       description: body.product.description ?? null,
       diamond_shape: body.product.diamond_shape ?? null,
@@ -244,16 +250,15 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     for (let index = 0; index < body.color_variants.length; index++) {
       const colorVariant = body.color_variants[index]!
       if (colorVariant.id) {
-        const { error } = await supabase
-          .from('product_color_groups')
-          .update({
-            color_id: colorVariant.color_id,
-            images: colorVariant.images ?? [],
-            display_order: colorVariant.display_order ?? index,
-            is_active: colorVariant.is_active ?? true,
-          })
-          .eq('id', colorVariant.id)
-          .eq('product_id', id)
+        const { error } = await updateProductColorGroup(supabase, {
+          id: colorVariant.id,
+          product_id: id,
+          color_id: colorVariant.color_id,
+          images: colorVariant.images ?? [],
+          videos: colorVariant.videos ?? [],
+          display_order: colorVariant.display_order ?? index,
+          is_active: colorVariant.is_active ?? true,
+        })
         if (error) {
           console.error('[PATCH /api/products/:id] update group', error)
           return NextResponse.json({ error: error.message }, { status: 500 })
@@ -262,17 +267,14 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         continue
       }
 
-      const { data, error } = await supabase
-        .from('product_color_groups')
-        .insert({
-          product_id: id,
-          color_id: colorVariant.color_id,
-          images: colorVariant.images ?? [],
-          display_order: colorVariant.display_order ?? index,
-          is_active: colorVariant.is_active ?? true,
-        })
-        .select('id')
-        .single()
+      const { data, error } = await insertProductColorGroup(supabase, {
+        product_id: id,
+        color_id: colorVariant.color_id,
+        images: colorVariant.images ?? [],
+        videos: colorVariant.videos ?? [],
+        display_order: colorVariant.display_order ?? index,
+        is_active: colorVariant.is_active ?? true,
+      })
 
       if (error || !data) {
         console.error('[PATCH /api/products/:id] insert group', error)
@@ -350,6 +352,26 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
           return NextResponse.json({ error: error.message }, { status: 500 })
         }
       }
+    }
+
+    const { syncCollectionProducts } = await import('@/lib/syncCollectionProducts')
+    const collectionIds = body.collection_ids ?? (
+      body.product.collection_id ? [body.product.collection_id] : []
+    )
+    const collSync = await syncCollectionProducts(
+      supabase,
+      id,
+      collectionIds,
+      body.product.collection_id ?? collectionIds[0] ?? null,
+    )
+    if (collSync.error) {
+      console.error('[PATCH /api/products/:id] collection sync', collSync.error)
+    }
+
+    const { syncProductTags } = await import('@/lib/syncProductTags')
+    const tagSync = await syncProductTags(supabase, id, body.tag_ids ?? [])
+    if (tagSync.error) {
+      console.error('[PATCH /api/products/:id] tag sync', tagSync.error)
     }
 
     await writeAuditLog({ adminId: perm.adminId, action: 'update_product', resource: 'products', resourceId: id })

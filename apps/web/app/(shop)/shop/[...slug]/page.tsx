@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 import { createServerClient } from '@amiora/database'
+import { PRODUCT_CATEGORY_EMBED, PRODUCT_COLLECTION_EMBED } from '@/lib/shop/mapProductForCard'
 import ShopPage from '../page'
 import CollectionPage from '../../collections/[slug]/page'
 import CategoryPage from '../../categories/[slug]/page'
@@ -85,7 +86,7 @@ export default async function ShopCatchAllPage({ params, searchParams }: Props) 
     const supabase = createServerClient()
     const { data: product } = await supabase
       .from('products')
-      .select('slug, collection:collections(slug), category:categories(slug)')
+      .select(`slug, collection:${PRODUCT_COLLECTION_EMBED}(slug), category:${PRODUCT_CATEGORY_EMBED}(slug)`)
       .eq('slug', productSlug)
       .eq('status', 'active')
       .single()

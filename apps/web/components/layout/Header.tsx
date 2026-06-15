@@ -9,6 +9,9 @@ import { useCartStore, useCartHydrated } from '@/stores/cartStore'
 import { MegaMenu } from './MegaMenu'
 import { MobileMenu } from './MobileMenu'
 import { createBrowserClient } from '@/lib/supabase/client'
+import { useSearchSuggest } from '@/hooks/useSearchSuggest'
+import { SearchCombobox, useSearchKeyboardNav } from '@/components/search/SearchCombobox'
+import type { SearchSuggestion } from '@/app/api/search/suggest/route'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 
 const NAV_LINKS = [
@@ -23,6 +26,7 @@ export function Header() {
   const [megaOpen,     setMegaOpen]     = useState(false)
   const [mobileOpen,   setMobileOpen]   = useState(false)
   const [searchOpen,   setSearchOpen]   = useState(false)
+  const [searchQuery,  setSearchQuery]  = useState('')
   const [user,         setUser]         = useState<SupabaseUser | null>(null)
   const megaLeaveTimer                  = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchInputRef                  = useRef<HTMLInputElement>(null)
@@ -31,6 +35,7 @@ export function Header() {
   const cartBadge                       = cartHydrated ? itemCount : 0
   const router                          = useRouter()
   const [pending, startSearch]          = useTransition()
+  const { suggestions, loading, show: suggestOpen } = useSearchSuggest(searchOpen ? searchQuery : '')
 
   // Live auth state
   useEffect(() => {
@@ -52,8 +57,35 @@ export function Header() {
   useEffect(() => {
     if (searchOpen) {
       setTimeout(() => searchInputRef.current?.focus(), 80)
+    } else {
+      setSearchQuery('')
     }
   }, [searchOpen])
+
+  function navigateToSearch(q: string) {
+    const trimmed = q.trim()
+    if (!trimmed) return
+    setSearchOpen(false)
+    setSearchQuery('')
+    startSearch(() => {
+      router.push(`/search?q=${encodeURIComponent(trimmed)}`)
+    })
+  }
+
+  function navigateToProduct(suggestion: SearchSuggestion) {
+    setSearchOpen(false)
+    setSearchQuery('')
+    startSearch(() => {
+      router.push(suggestion.href)
+    })
+  }
+
+  const { activeIndex, setActiveIndex, handleKeyDown } = useSearchKeyboardNav(
+    suggestions,
+    suggestOpen && searchOpen,
+    () => navigateToSearch(searchQuery),
+    navigateToProduct,
+  )
 
   // Close on Escape key
   useEffect(() => {
@@ -74,12 +106,7 @@ export function Header() {
 
   function handleSearchSubmit(e: React.FormEvent) {
     e.preventDefault()
-    const q = searchInputRef.current?.value.trim() ?? ''
-    if (!q) return
-    setSearchOpen(false)
-    startSearch(() => {
-      router.push(`/search?q=${encodeURIComponent(q)}`)
-    })
+    navigateToSearch(searchQuery)
   }
 
   return (
@@ -200,32 +227,28 @@ export function Header() {
 
         {/* Inline search bar — slides down below header */}
         <div
-          className={`overflow-hidden transition-all duration-300 border-b border-divider ${
-            searchOpen ? 'max-h-20 opacity-100' : 'max-h-0 opacity-0 pointer-events-none'
+          className={`transition-all duration-300 border-b border-divider ${
+            searchOpen ? 'py-4 opacity-100' : 'max-h-0 py-0 opacity-0 pointer-events-none overflow-hidden'
           }`}
         >
-          <form onSubmit={handleSearchSubmit} className="section-x flex items-center gap-3 py-3">
-            <Search className="h-4 w-4 text-ink-faint shrink-0" />
-            <input
-              ref={searchInputRef}
-              type="search"
-              placeholder="Search jewellery — rings, necklaces, gold, silver…"
-              className="flex-1 bg-transparent text-sm text-ink placeholder:text-ink-faint outline-none"
+          <form onSubmit={handleSearchSubmit} className="section-x">
+            <SearchCombobox
+              value={searchQuery}
+              onChange={setSearchQuery}
+              onSubmit={() => navigateToSearch(searchQuery)}
+              onSelect={navigateToProduct}
+              onClose={() => setSearchOpen(false)}
+              suggestions={suggestions}
+              loading={loading}
+              suggestOpen={suggestOpen}
+              activeIndex={activeIndex}
+              onActiveIndexChange={setActiveIndex}
+              onKeyDown={handleKeyDown}
+              inputRef={searchInputRef}
+              variant="header"
+              placeholder="Search rings, necklaces, gold…"
+              pending={pending}
             />
-            <button
-              type="submit"
-              className="shrink-0 text-xs font-medium text-deep-teal hover:text-teal transition-colors"
-            >
-              Search →
-            </button>
-            <button
-              type="button"
-              onClick={() => setSearchOpen(false)}
-              className="shrink-0 text-ink-faint hover:text-ink transition-colors"
-              aria-label="Close search"
-            >
-              <X className="h-4 w-4" />
-            </button>
           </form>
         </div>
 

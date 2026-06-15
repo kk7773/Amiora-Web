@@ -1,5 +1,6 @@
 import { createServerClient } from '@amiora/database'
 import { parseShopSegments } from '@/lib/shop/paths'
+import { PRODUCT_CATEGORY_EMBED, PRODUCT_COLLECTION_EMBED } from '@/lib/shop/mapProductForCard'
 
 const FILTER_SCOPES = new Set(['all', 'gold', 'silver', 'diamond', '18k', '14k', '9k'])
 
@@ -19,7 +20,7 @@ export async function resolveShopCanonicalPath(segments: string[]): Promise<stri
     const supabase = createServerClient()
     const { data: product } = await supabase
       .from('products')
-      .select('slug, collection:collections(slug), category:categories(slug)')
+      .select(`slug, collection:${PRODUCT_COLLECTION_EMBED}(slug), category:${PRODUCT_CATEGORY_EMBED}(slug)`)
       .eq('slug', productSlug)
       .eq('status', 'active')
       .single()

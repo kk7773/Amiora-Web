@@ -36,6 +36,7 @@ import { attachCardPrice } from '@/lib/pricing/attachCardPrice'
 import { fetchPurityMapForProducts } from '@/lib/pricing/fetchPurityMap'
 import { getLatestPrices } from '@/lib/pricing/engine'
 import { resolveProductCardImages } from '@/lib/shop/resolveProductCardImages'
+import { fetchActiveProductCards } from '@/lib/shop/fetchProductCards'
 import { JsonLd } from '@/components/seo/JsonLd'
 import {
   buildCollectionListJsonLd,
@@ -51,9 +52,9 @@ export default async function HomePage() {
   // Fetch all homepage data in parallel
   const [
     { data: collections },
-    { data: newArrivalRows },
-    { data: bestSellerRows },
-    { data: topPickRows },
+    newArrivalsResult,
+    bestSellersResult,
+    topPicksResult,
     { data: testimonials },
     { data: blogs },
     { data: stores },
@@ -61,15 +62,40 @@ export default async function HomePage() {
     prices,
   ] = await Promise.all([
     supabase.from('collections').select('id,name,slug,banner_url,description').eq('is_active', true).order('sort_order').limit(4),
-    supabase.from('products').select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,stone_lines,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(*)').eq('status', 'active').eq('is_new_arrival', true).order('created_at', { ascending: false }).limit(10),
-    supabase.from('products').select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,stone_lines,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(*)').eq('status', 'active').or('is_best_seller.eq.true,is_featured.eq.true').order('created_at', { ascending: false }).limit(10),
-    supabase.from('products').select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,stone_lines,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(*)').eq('status', 'active').order('created_at', { ascending: false }).limit(40),
+    fetchActiveProductCards(supabase, {
+      apply: (q) => q.eq('is_new_arrival', true),
+      order: { column: 'created_at', ascending: false },
+      limit: 10,
+    }),
+    fetchActiveProductCards(supabase, {
+      apply: (q) => q.or('is_best_seller.eq.true,is_featured.eq.true'),
+      order: { column: 'created_at', ascending: false },
+      limit: 10,
+    }),
+    fetchActiveProductCards(supabase, {
+      order: { column: 'created_at', ascending: false },
+      limit: 40,
+    }),
     supabase.from('testimonials').select('id,name,location,quote,rating').eq('is_featured', true).order('sort_order').limit(8),
     supabase.from('blogs').select('id,title,slug,excerpt,cover_url,tags,published_at').eq('is_published', true).order('published_at', { ascending: false }).limit(3),
     supabase.from('stores').select('id, city, image_url').eq('is_active', true).order('city'),
     supabase.from('site_faqs').select('id, question, answer').eq('is_active', true).order('sort_order').order('created_at'),
     getLatestPrices(),
   ])
+
+  const newArrivalRows = newArrivalsResult.products
+  const bestSellerRows = bestSellersResult.products
+  const topPickRows = topPicksResult.products
+
+  if (newArrivalsResult.error) {
+    console.error('[HomePage] new arrivals:', newArrivalsResult.error)
+  }
+  if (bestSellersResult.error) {
+    console.error('[HomePage] best sellers:', bestSellersResult.error)
+  }
+  if (topPicksResult.error) {
+    console.error('[HomePage] top picks:', topPicksResult.error)
+  }
 
   type RawProduct = {
     id: string
@@ -119,15 +145,15 @@ export default async function HomePage() {
 
   const newArrivals = attachPrice(newArrivalRows)
 
-  const featuredBestSellerRows = Array.isArray(bestSellerRows) && bestSellerRows.length > 0
-    ? bestSellerRows
-    : await supabase
-        .from('products')
-        .select('id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,stone_lines,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(*)')
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(10)
-        .then((res) => res.data ?? [])
+  const featuredBestSellerRows =
+    bestSellerRows.length > 0
+      ? bestSellerRows
+      : (
+          await fetchActiveProductCards(supabase, {
+            order: { column: 'created_at', ascending: false },
+            limit: 10,
+          })
+        ).products
 
   const bestSellers = attachPrice(featuredBestSellerRows)
   const monthlyTopPicks = attachPrice(

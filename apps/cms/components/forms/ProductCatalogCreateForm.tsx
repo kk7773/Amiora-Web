@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Plus, Trash2, ChevronUp, ChevronDown } from 'lucide-react'
+import { Plus, Trash2, ChevronUp, ChevronDown, X, Film } from 'lucide-react'
 import { useCloudinaryUpload } from '@/hooks/useCloudinaryUpload'
 import { generateAmioraSKU, slugifyName } from '@/lib/sku'
+import { isBulkImportPlaceholder } from '@/lib/bulkImportConstants'
 
 type Category = { id: string; name: string; code: string | null }
 type Collection = { id: string; name: string }
+type TagOption = { id: string; name: string; color?: string | null }
 type MetalColor = { id: string; label: string; code: string; hex: string | null; display_order: number }
 type MetalPurity = {
   id: string
@@ -44,6 +46,7 @@ type ColorRow = {
   id?: string
   color_id: string
   images: string[]
+  videos: string[]
   display_order: number
 }
 
@@ -65,7 +68,10 @@ type InitialData = {
     slug: string
     category_id: string
     collection_id: string | null
+    collection_ids?: string[]
+    tag_ids?: string[]
     product_number: number
+    design_number: string | null
     short_desc: string | null
     description: string | null
     diamond_shape: string | null
@@ -90,6 +96,7 @@ type InitialData = {
     id: string
     color_id: string
     images: string[]
+    videos?: string[]
     display_order: number
   }>
   matrix: MatrixSeedCell[]
@@ -98,6 +105,7 @@ type InitialData = {
 export type ProductCatalogCreateFormProps = {
   categories: Category[]
   collections: Collection[]
+  tags?: TagOption[]
   metalColors: MetalColor[]
   metalPurities: MetalPurity[]
   initialData?: InitialData
@@ -112,6 +120,105 @@ type CellState = {
 
 function buildCellKey(colorId: string, purityId: string) {
   return `${colorId}:${purityId}`
+}
+
+type VariantColorMediaProps = {
+  rowKey: string
+  images: string[]
+  videos: string[]
+  uploading: boolean
+  onPickImages: (rowKey: string, files: FileList | null) => void
+  onPickVideos: (rowKey: string, files: FileList | null) => void
+  onRemoveImage: (rowKey: string, index: number) => void
+  onRemoveVideo: (rowKey: string, index: number) => void
+  onReorderImage: (rowKey: string, index: number, dir: -1 | 1) => void
+}
+
+function VariantColorMedia({
+  rowKey,
+  images,
+  videos,
+  uploading,
+  onPickImages,
+  onPickVideos,
+  onRemoveImage,
+  onRemoveVideo,
+  onReorderImage,
+}: VariantColorMediaProps) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="text-xs font-medium text-ink-muted block mb-1.5">Images</label>
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={(e) => {
+            onPickImages(rowKey, e.target.files)
+            e.target.value = ''
+          }}
+          disabled={uploading}
+          className="text-sm"
+        />
+        {images.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-2">
+            {images.map((url, imageIndex) => (
+              <div key={`${url}-${imageIndex}`} className="relative w-20 h-20 rounded border overflow-hidden group">
+                <img src={url} alt="" className="w-full h-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => onRemoveImage(rowKey, imageIndex)}
+                  className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-red-600 text-white shadow-sm hover:bg-red-700"
+                  aria-label="Remove image"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+                <div className="absolute bottom-0.5 left-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100">
+                  <button type="button" className="bg-white/90 text-xs px-1 rounded" onClick={() => onReorderImage(rowKey, imageIndex, -1)}>↑</button>
+                  <button type="button" className="bg-white/90 text-xs px-1 rounded" onClick={() => onReorderImage(rowKey, imageIndex, 1)}>↓</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <label className="text-xs font-medium text-ink-muted block mb-1.5">Videos</label>
+        <input
+          type="file"
+          accept="video/mp4,video/webm,video/quicktime"
+          multiple
+          onChange={(e) => {
+            onPickVideos(rowKey, e.target.files)
+            e.target.value = ''
+          }}
+          disabled={uploading}
+          className="text-sm"
+        />
+        {videos.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-2">
+            {videos.map((url, videoIndex) => (
+              <div key={`${url}-${videoIndex}`} className="relative w-28 h-20 rounded border overflow-hidden bg-ink/5">
+                <video src={url} className="w-full h-full object-cover" muted playsInline preload="metadata" />
+                <span className="absolute bottom-1 left-1 inline-flex items-center gap-0.5 rounded bg-black/60 px-1 py-0.5 text-[10px] text-white">
+                  <Film className="w-2.5 h-2.5" /> Video
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onRemoveVideo(rowKey, videoIndex)}
+                  className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-red-600 text-white shadow-sm hover:bg-red-700"
+                  aria-label="Remove video"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 function buildCellState(matrix: MatrixSeedCell[], fallbackWeightG?: number | null) {
@@ -181,6 +288,7 @@ function newStoneRow(): StoneLineUi {
 export function ProductCatalogCreateForm({
   categories,
   collections,
+  tags = [],
   metalColors,
   metalPurities,
   initialData,
@@ -220,8 +328,18 @@ export function ProductCatalogCreateForm({
   const [slug, setSlug] = useState(initialData?.product.slug ?? '')
   const [slugManual, setSlugManual] = useState(!!initialData?.product.slug)
   const [categoryId, setCategoryId] = useState(initialData?.product.category_id ?? categories[0]?.id ?? '')
-  const [collectionId, setCollectionId] = useState<string>(initialData?.product.collection_id ?? '')
+  const initCollectionIds = initialData?.product.collection_ids?.length
+    ? initialData.product.collection_ids
+    : initialData?.product.collection_id
+      ? [initialData.product.collection_id]
+      : []
+  const [selectedCollectionIds, setSelectedCollectionIds] = useState<string[]>(initCollectionIds)
+  const [primaryCollectionId, setPrimaryCollectionId] = useState<string>(
+    initialData?.product.collection_id ?? initCollectionIds[0] ?? '',
+  )
+  const [tagIds, setTagIds] = useState<string[]>(initialData?.product.tag_ids ?? [])
   const [productNumber, setProductNumber] = useState(initialData?.product.product_number ?? 1)
+  const [designNumber, setDesignNumber] = useState(initialData?.product.design_number ?? '')
 
   const [shortDesc, setShortDesc] = useState(initialData?.product.short_desc ?? '')
   const [description, setDescription] = useState(initialData?.product.description ?? '')
@@ -265,6 +383,7 @@ export function ProductCatalogCreateForm({
       id: row.id,
       color_id: row.color_id,
       images: row.images,
+      videos: row.videos ?? [],
       display_order: row.display_order,
     })) ?? [],
   )
@@ -277,6 +396,22 @@ export function ProductCatalogCreateForm({
   const [justPublished, setJustPublished] = useState(false)
 
   const categoryCode = categories.find((c) => c.id === categoryId)?.code ?? 'XX'
+
+  function toggleCollection(colId: string) {
+    setSelectedCollectionIds((prev) => {
+      const next = prev.includes(colId) ? prev.filter((id) => id !== colId) : [...prev, colId]
+      if (!next.includes(primaryCollectionId)) {
+        setPrimaryCollectionId(next[0] ?? '')
+      }
+      return next
+    })
+  }
+
+  function toggleTag(tagId: string) {
+    setTagIds((prev) =>
+      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId],
+    )
+  }
 
   const fetchNextNumber = useCallback(async (cat: string) => {
     if (!cat || isEdit) return
@@ -305,12 +440,14 @@ export function ProductCatalogCreateForm({
       const silverId = pickSilverColorId(metalColors)
       setColorRows((prev) => {
         const imgs = prev[0]?.images ?? []
+        const vids = prev[0]?.videos ?? []
         return [
           {
             key: prev[0]?.key ?? `silver-${silverId}`,
             id: prev[0]?.id,
             color_id: silverId,
             images: imgs,
+            videos: vids,
             display_order: 0,
           },
         ]
@@ -323,6 +460,7 @@ export function ProductCatalogCreateForm({
             key: `seed-${color.id}-${index}`,
             color_id: color.id,
             images: index === 0 ? prev[0]?.images ?? [] : [],
+            videos: index === 0 ? prev[0]?.videos ?? [] : [],
             display_order: index,
           }))
         }
@@ -331,6 +469,7 @@ export function ProductCatalogCreateForm({
             key: `seed-${color.id}`,
             color_id: color.id,
             images: [],
+            videos: [],
             display_order: index,
           }))
         }
@@ -358,6 +497,7 @@ export function ProductCatalogCreateForm({
         key: `k-${Date.now()}`,
         color_id: available.id,
         images: [],
+        videos: [],
         display_order: prev.length,
       },
     ])
@@ -392,11 +532,45 @@ export function ProductCatalogCreateForm({
 
   async function onPickFiles(rowKey: string, files: FileList | null) {
     if (!files?.length) return
-    const list = await uploadFiles(Array.from(files))
+    const list = await uploadFiles(Array.from(files), { resourceType: 'image' })
     if (!list.length) return
     setColorRows((prev) =>
       prev.map((row) =>
         row.key === rowKey ? { ...row, images: [...row.images, ...list.map((item) => item.url)] } : row,
+      ),
+    )
+  }
+
+  async function onPickVideos(rowKey: string, files: FileList | null) {
+    if (!files?.length) return
+    const list = await uploadFiles(Array.from(files), {
+      resourceType: 'video',
+      folder: 'amiora/products/videos',
+    })
+    if (!list.length) return
+    setColorRows((prev) =>
+      prev.map((row) =>
+        row.key === rowKey ? { ...row, videos: [...row.videos, ...list.map((item) => item.url)] } : row,
+      ),
+    )
+  }
+
+  function removeImage(rowKey: string, imageIndex: number) {
+    setColorRows((prev) =>
+      prev.map((row) =>
+        row.key === rowKey
+          ? { ...row, images: row.images.filter((_, idx) => idx !== imageIndex) }
+          : row,
+      ),
+    )
+  }
+
+  function removeVideo(rowKey: string, videoIndex: number) {
+    setColorRows((prev) =>
+      prev.map((row) =>
+        row.key === rowKey
+          ? { ...row, videos: row.videos.filter((_, idx) => idx !== videoIndex) }
+          : row,
       ),
     )
   }
@@ -450,12 +624,13 @@ export function ProductCatalogCreateForm({
       id: row.id,
       color_id: row.color_id,
       images: row.images,
+      videos: row.videos,
       display_order: index,
     }))
 
     for (const row of colorVariants) {
-      if (row.images.length === 0) {
-        toast.error('Each colour needs at least one image')
+      if (row.images.length === 0 && (row.videos?.length ?? 0) === 0) {
+        toast.error('Each colour needs at least one image or video')
         return
       }
     }
@@ -499,8 +674,9 @@ export function ProductCatalogCreateForm({
         name: name.trim(),
         slug: slug.trim(),
         category_id: categoryId,
-        collection_id: collectionId || null,
+        collection_id: primaryCollectionId || null,
         product_number: productNumber,
+        design_number: designNumber.trim() || null,
         short_desc: shortDesc.trim() || null,
         description: description.trim() || null,
         diamond_shape: diamondShape.trim() || null,
@@ -542,6 +718,8 @@ export function ProductCatalogCreateForm({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           product: productPayload,
+          collection_ids: selectedCollectionIds,
+          tag_ids: tagIds,
           color_variants: colorVariants,
           matrix,
         }),
@@ -572,8 +750,19 @@ export function ProductCatalogCreateForm({
     }
   }
 
+  const showBulkImportHint = isEdit && isBulkImportPlaceholder(shortDesc)
+
   return (
     <div className="space-y-10 pb-24">
+      {showBulkImportHint && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 text-sm text-amber-900">
+          <p className="font-medium">Bulk import — incomplete listing</p>
+          <p className="mt-1 text-amber-800">
+            This product was imported from Excel with placeholder fields. Add a short description, images per colour,
+            stock, and other details before publishing.
+          </p>
+        </div>
+      )}
       <section className="bg-white rounded-xl border border-divider p-6 space-y-4">
         <h3 className="font-display text-lg text-deep-teal">Basic info</h3>
         <div className="grid sm:grid-cols-2 gap-4">
@@ -600,15 +789,81 @@ export function ProductCatalogCreateForm({
               ))}
             </select>
           </label>
-          <label className="block space-y-1">
-            <span className="text-xs text-ink-muted">Collection (optional)</span>
-            <select value={collectionId} onChange={(e) => setCollectionId(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm">
-              <option value="">—</option>
-              {collections.map((collection) => (
-                <option key={collection.id} value={collection.id}>{collection.name}</option>
-              ))}
-            </select>
-          </label>
+          <div className="sm:col-span-2 space-y-2">
+            <span className="text-xs text-ink-muted block">Collections (optional)</span>
+            {collections.length === 0 ? (
+              <p className="text-xs text-ink-faint">No collections — create in Taxonomy Manager</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {collections.map((collection) => {
+                  const active = selectedCollectionIds.includes(collection.id)
+                  return (
+                    <button
+                      key={collection.id}
+                      type="button"
+                      onClick={() => toggleCollection(collection.id)}
+                      className={`px-3 py-1.5 rounded-full text-sm border-2 transition-all ${
+                        active
+                          ? 'border-deep-teal bg-deep-teal/10 text-deep-teal font-medium'
+                          : 'border-divider text-ink-muted hover:border-teal/40'
+                      }`}
+                    >
+                      {collection.name}
+                      {active && <span className="ml-1 opacity-70">✓</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+            {selectedCollectionIds.length > 0 && (
+              <label className="block space-y-1 mt-2">
+                <span className="text-xs text-ink-muted">Primary collection (URL)</span>
+                <select
+                  value={primaryCollectionId}
+                  onChange={(e) => setPrimaryCollectionId(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm max-w-xs"
+                >
+                  {selectedCollectionIds.map((id) => {
+                    const col = collections.find((c) => c.id === id)
+                    return (
+                      <option key={id} value={id}>{col?.name ?? id}</option>
+                    )
+                  })}
+                </select>
+              </label>
+            )}
+          </div>
+          {tags.length > 0 && (
+            <div className="sm:col-span-2 space-y-2">
+              <span className="text-xs text-ink-muted block">Tags</span>
+              <div className="flex flex-wrap gap-2">
+                {tags.map((tag) => {
+                  const active = tagIds.includes(tag.id)
+                  return (
+                    <button
+                      key={tag.id}
+                      type="button"
+                      onClick={() => toggleTag(tag.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm border-2 transition-all ${
+                        active ? 'text-white shadow-sm' : 'text-ink-muted'
+                      }`}
+                      style={
+                        active
+                          ? { backgroundColor: tag.color ?? '#94A3B8', borderColor: tag.color ?? '#94A3B8' }
+                          : { borderColor: tag.color ?? '#e2e8f0' }
+                      }
+                    >
+                      <span
+                        className="w-2 h-2 rounded-full shrink-0"
+                        style={{ background: tag.color ?? '#94a3b8', opacity: active ? 0.6 : 1 }}
+                      />
+                      {tag.name}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
           <label className="block space-y-1">
             <span className="text-xs text-ink-muted">Base metal</span>
             <select
@@ -634,13 +889,22 @@ export function ProductCatalogCreateForm({
             )}
           </label>
           <label className="block space-y-1">
-            <span className="text-xs text-ink-muted">Product #</span>
+            <span className="text-xs text-ink-muted">Design Number</span>
             <input
               type="number"
               min={1}
               value={productNumber}
               onChange={(e) => setProductNumber(parseInt(e.target.value, 10) || 1)}
               className="w-full border rounded-lg px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-xs text-ink-muted">Design number</span>
+            <input
+              value={designNumber}
+              onChange={(e) => setDesignNumber(e.target.value)}
+              placeholder="e.g. AMI-2041"
+              className="w-full border rounded-lg px-3 py-2 text-sm font-mono uppercase"
             />
           </label>
           <label className="block space-y-1">
@@ -853,7 +1117,7 @@ export function ProductCatalogCreateForm({
           </div>
         )}
         {colorRows.length === 0 && hasMetalColors && (
-          <p className="text-sm text-ink-muted">Add one row per jewellery colour. Har colour row me images upload hongi.</p>
+          <p className="text-sm text-ink-muted">Add one row per jewellery colour. Har colour row me images aur videos upload ho sakte hain.</p>
         )}
         <div className="space-y-6">
           {colorRows.map((row) => {
@@ -885,20 +1149,17 @@ export function ProductCatalogCreateForm({
                     <button type="button" className="p-1 rounded border text-red-600" onClick={() => removeColorRow(row.key)} aria-label="Remove"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </div>
-                <div>
-                  <input type="file" accept="image/*" multiple onChange={(e) => void onPickFiles(row.key, e.target.files)} disabled={uploading} className="text-sm" />
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {row.images.map((url, imageIndex) => (
-                      <div key={url} className="relative group w-20 h-20 rounded border overflow-hidden">
-                        <img src={url} alt="" className="w-full h-full object-cover" />
-                        <div className="absolute bottom-1 right-1 flex gap-0.5 opacity-0 group-hover:opacity-100">
-                          <button type="button" className="bg-white/90 text-xs px-1 rounded" onClick={() => reorderImage(row.key, imageIndex, -1)}>↑</button>
-                          <button type="button" className="bg-white/90 text-xs px-1 rounded" onClick={() => reorderImage(row.key, imageIndex, 1)}>↓</button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <VariantColorMedia
+                  rowKey={row.key}
+                  images={row.images}
+                  videos={row.videos}
+                  uploading={uploading}
+                  onPickImages={onPickFiles}
+                  onPickVideos={onPickVideos}
+                  onRemoveImage={removeImage}
+                  onRemoveVideo={removeVideo}
+                  onReorderImage={reorderImage}
+                />
               </div>
             )
           })}
@@ -910,7 +1171,7 @@ export function ProductCatalogCreateForm({
         <section className="bg-white rounded-xl border border-divider p-6 space-y-4">
           <h3 className="font-display text-lg text-deep-teal">Product images</h3>
           <p className="text-sm text-ink-muted">
-            Silver items use one gallery — no gold colour rows. Har product ke liye kam se kam ek photo zaroori hai.
+            Silver items use one gallery — no gold colour rows. Kam se kam ek image ya video zaroori hai.
           </p>
           {!hasMetalColors && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -919,37 +1180,17 @@ export function ProductCatalogCreateForm({
           )}
           {colorRows[0] && (
             <div className="border border-divider rounded-lg p-4 space-y-3">
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={(e) => void onPickFiles(colorRows[0]!.key, e.target.files)}
-                disabled={uploading}
-                className="text-sm"
+              <VariantColorMedia
+                rowKey={colorRows[0]!.key}
+                images={colorRows[0]!.images}
+                videos={colorRows[0]!.videos}
+                uploading={uploading}
+                onPickImages={onPickFiles}
+                onPickVideos={onPickVideos}
+                onRemoveImage={removeImage}
+                onRemoveVideo={removeVideo}
+                onReorderImage={reorderImage}
               />
-              <div className="flex flex-wrap gap-2 mt-2">
-                {colorRows[0]!.images.map((url, imageIndex) => (
-                  <div key={url} className="relative group w-20 h-20 rounded border overflow-hidden">
-                    <img src={url} alt="" className="w-full h-full object-cover" />
-                    <div className="absolute bottom-1 right-1 flex gap-0.5 opacity-0 group-hover:opacity-100">
-                      <button
-                        type="button"
-                        className="bg-white/90 text-xs px-1 rounded"
-                        onClick={() => reorderImage(colorRows[0]!.key, imageIndex, -1)}
-                      >
-                        ↑
-                      </button>
-                      <button
-                        type="button"
-                        className="bg-white/90 text-xs px-1 rounded"
-                        onClick={() => reorderImage(colorRows[0]!.key, imageIndex, 1)}
-                      >
-                        ↓
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
             </div>
           )}
         </section>

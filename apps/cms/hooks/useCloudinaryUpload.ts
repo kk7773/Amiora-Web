@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+type UploadResource = 'image' | 'video'
+
 interface UploadResult {
   url:       string
   public_id: string
@@ -10,27 +12,36 @@ interface UploadResult {
   height:    number
 }
 
+function inferResourceType(file: File): UploadResource {
+  if (file.type.startsWith('video/')) return 'video'
+  return 'image'
+}
+
 export function useCloudinaryUpload(folder = 'amiora/products') {
   const [uploading, setUploading] = useState(false)
 
-  async function uploadFile(file: File): Promise<UploadResult | null> {
+  async function uploadFile(
+    file: File,
+    options?: { resourceType?: UploadResource; folder?: string },
+  ): Promise<UploadResult | null> {
     setUploading(true)
     try {
-      // Step 1: Get signed params from our server
-      const sigRes = await fetch(`/api/upload?folder=${encodeURIComponent(folder)}`)
+      const resourceType = options?.resourceType ?? inferResourceType(file)
+      const targetFolder = options?.folder ?? folder
+
+      const sigRes = await fetch(`/api/upload?folder=${encodeURIComponent(targetFolder)}`)
       if (!sigRes.ok) throw new Error('Failed to get upload signature')
       const { signature, timestamp, api_key, cloud_name } = await sigRes.json()
 
-      // Step 2: Upload directly from browser → Cloudinary (no body size limit)
       const fd = new FormData()
       fd.append('file',      file)
       fd.append('api_key',   api_key)
       fd.append('timestamp', String(timestamp))
       fd.append('signature', signature)
-      fd.append('folder',    folder)
+      fd.append('folder',    targetFolder)
 
       const uploadRes = await fetch(
-        `https://api.cloudinary.com/v1_1/${cloud_name}/image/upload`,
+        `https://api.cloudinary.com/v1_1/${cloud_name}/${resourceType}/upload`,
         { method: 'POST', body: fd },
       )
       const data = await uploadRes.json()
@@ -39,8 +50,8 @@ export function useCloudinaryUpload(folder = 'amiora/products') {
       return {
         url:       data.secure_url,
         public_id: data.public_id,
-        width:     data.width,
-        height:    data.height,
+        width:     data.width ?? 0,
+        height:    data.height ?? 0,
       }
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Upload failed')
@@ -50,10 +61,13 @@ export function useCloudinaryUpload(folder = 'amiora/products') {
     }
   }
 
-  async function uploadFiles(files: File[]): Promise<UploadResult[]> {
+  async function uploadFiles(
+    files: File[],
+    options?: { resourceType?: UploadResource; folder?: string },
+  ): Promise<UploadResult[]> {
     const results: UploadResult[] = []
     for (const file of files) {
-      const result = await uploadFile(file)
+      const result = await uploadFile(file, options)
       if (result) results.push(result)
     }
     return results

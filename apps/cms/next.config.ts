@@ -15,6 +15,8 @@ const nextConfig: NextConfig = {
 
   experimental: {
     serverActions: { allowedOrigins: ['localhost:3001', '*.netlify.app', '*.hostinger.com', process.env.NEXT_PUBLIC_CMS_URL ?? ''] },
+    // Bulk upload passes through middleware — default 10MB truncates large .xlsx
+    middlewareClientMaxBodySize: '25mb',
     // Reduce bundle size for heavy UI/icon packages
     optimizePackageImports: ['@amiora/ui', 'lucide-react', 'recharts', 'framer-motion'],
   },

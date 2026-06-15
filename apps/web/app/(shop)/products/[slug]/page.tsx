@@ -11,7 +11,7 @@ import { getLatestPrices } from '@/lib/pricing/engine'
 import { JsonLd } from '@/components/seo/JsonLd'
 import { buildProductPageSchemas } from '@/lib/seo/jsonLd'
 import { canonicalFromPath } from '@/lib/seo/site'
-import { mapProductForCard, PRODUCT_CARD_SELECT, type ProductCardRaw } from '@/lib/shop/mapProductForCard'
+import { mapProductForCard, PRODUCT_CARD_SELECT, PRODUCT_CATEGORY_EMBED, PRODUCT_COLLECTION_EMBED, type ProductCardRaw } from '@/lib/shop/mapProductForCard'
 
 interface Props {
   params: Promise<{ slug: string }>
@@ -24,6 +24,7 @@ type CatalogBundle = {
     label: string
     hex: string | null
     images: string[]
+    videos: string[]
   }[]
   catalogPurities: { id: string; code: string; label: string; display_order: number; metal?: string }[]
   catalogVariants: {
@@ -91,7 +92,7 @@ async function legacyVariantCatalog(
   const catalogColorGroups = colorKeys.map((cid) => {
     const label = mvMeta.get(cid) ?? (cid === 'legacy-default' ? 'Default' : 'Metal')
     const code  = label.replace(/\s+/g, '-').toLowerCase().slice(0, 24) || 'metal'
-    return { colorId: cid, code, label, hex: null as string | null, images: fallbackImageUrls }
+    return { colorId: cid, code, label, hex: null as string | null, images: fallbackImageUrls, videos: [] as string[] }
   })
 
   const catalogVariants = legacy.map((v) => {
@@ -127,6 +128,7 @@ type PdpProductRow = {
   diamond_color: string | null
   diamond_clarity: string | null
   size_range: string | null
+  design_number: string | null
   making_charge_pct: number | null
   making_charge_discount_pct: number | null
   gem_price_discount_pct: number | null
@@ -138,20 +140,20 @@ type PdpProductRow = {
 }
 
 const PDP_PRODUCT_MODERN_SELECT = `
-  id, name, slug, short_desc, description, faqs,
+  id, name, slug, design_number, short_desc, description, faqs,
   diamond_shape, diamond_count, total_diamond_wt, diamond_color, diamond_clarity, size_range,
   making_charge_pct, making_charge_discount_pct, gem_price_discount_pct,
   has_stone, stone_lines,
-  collection:collections(id, name, slug),
-  category:categories(id, name, slug),
+  collection:${PRODUCT_COLLECTION_EMBED}(id, name, slug),
+  category:${PRODUCT_CATEGORY_EMBED}(id, name, slug),
   product_images(id, url, alt_text, sort_order, is_primary)
 `
 
 const PDP_PRODUCT_LEGACY_SELECT = `
   id, name, slug, description, short_description, sku,
   making_charge_pct,
-  collection:collections(id, name, slug),
-  category:categories(id, name, slug),
+  collection:${PRODUCT_COLLECTION_EMBED}(id, name, slug),
+  category:${PRODUCT_CATEGORY_EMBED}(id, name, slug),
   product_images(id, url, alt_text, sort_order, is_primary)
 `
 
@@ -191,6 +193,7 @@ async function fetchPdpProduct(
     id:                         r.id as string,
     name:                       r.name as string,
     slug:                       r.slug as string,
+    design_number:              null,
     short_desc:                 (r.short_description as string | null) ?? null,
     description:                (r.description as string | null) ?? null,
     faqs:                       null,
@@ -286,7 +289,7 @@ export default async function ProductPage({ params }: Props) {
       supabase
         .from('product_color_groups')
         .select(`
-      id, color_id, images, display_order, is_active,
+      id, color_id, images, videos, display_order, is_active,
       color:metal_colors(id, label, code, hex, display_order)
     `)
         .eq('product_id', product.id)
@@ -314,6 +317,7 @@ export default async function ProductPage({ params }: Props) {
     id: string
     color_id: string
     images: string[] | null
+    videos?: string[] | null
     display_order: number
     is_active?: boolean
     color:
@@ -334,6 +338,7 @@ export default async function ProductPage({ params }: Props) {
       label:   mc?.label ?? '',
       hex:     mc?.hex ?? null,
       images:  row.images ?? [],
+      videos:  row.videos ?? [],
     }
   })
 
@@ -416,6 +421,7 @@ export default async function ProductPage({ params }: Props) {
           label:   r.label,
           hex:     r.hex,
           images:  urls.length > 0 ? urls : [],
+          videos:  [],
         })
       }
     }
@@ -440,6 +446,45 @@ export default async function ProductPage({ params }: Props) {
 
   const currentCollectionId = (product.collection as unknown as { id: string } | null)?.id ?? null
 
+  const { data: myCollectionLinks } = await supabase
+    .from('collection_products')
+    .select('collection_id')
+    .eq('product_id', product.id)
+
+  const myCollectionIds = (myCollectionLinks ?? []).map((r) => r.collection_id)
+
+  let suggestedProductIds: string[] = []
+  if (myCollectionIds.length > 0) {
+    const { data: siblingLinks } = await supabase
+      .from('collection_products')
+      .select('product_id')
+      .in('collection_id', myCollectionIds)
+      .neq('product_id', product.id)
+    suggestedProductIds = [...new Set((siblingLinks ?? []).map((r) => r.product_id))].slice(0, 8)
+  }
+
+  const suggestedFetch =
+    suggestedProductIds.length > 0
+      ? supabase
+          .from('products')
+          .select(PRODUCT_CARD_SELECT)
+          .in('id', suggestedProductIds)
+          .eq('status', 'active')
+      : currentCollectionId
+        ? supabase
+            .from('products')
+            .select(PRODUCT_CARD_SELECT)
+            .neq('collection_id', currentCollectionId)
+            .neq('id', product.id)
+            .eq('status', 'active')
+            .limit(8)
+        : supabase
+            .from('products')
+            .select(PRODUCT_CARD_SELECT)
+            .neq('id', product.id)
+            .eq('status', 'active')
+            .limit(8)
+
   const [reviewsRes, smartPairsRes, suggestedRes] = await Promise.all([
     Promise.resolve(
       supabase
@@ -456,22 +501,8 @@ export default async function ProductPage({ params }: Props) {
       .then((r) => ((r.data ?? []) as SmartPairRow[]).map((x) => x.paired_product_id).filter(Boolean))
       .catch(() => [] as string[]),
 
-    Promise.resolve(
-      currentCollectionId
-        ? supabase
-            .from('products')
-            .select(PRODUCT_CARD_SELECT)
-            .neq('collection_id', currentCollectionId)
-            .neq('id', product.id)
-            .eq('status', 'active')
-            .limit(8)
-        : supabase
-            .from('products')
-            .select(PRODUCT_CARD_SELECT)
-            .neq('id', product.id)
-            .eq('status', 'active')
-            .limit(8),
-    ).then((r) => (r.data ?? []) as SuggestedProduct[]).catch(() => []),
+    Promise.resolve(suggestedFetch)
+      .then((r) => (r.data ?? []) as SuggestedProduct[]).catch(() => []),
   ])
 
   const smartPairProductIds = smartPairsRes
@@ -573,6 +604,7 @@ export default async function ProductPage({ params }: Props) {
         product={{
           id:               product.id,
           name:             product.name,
+          design_number:    product.design_number ?? null,
           short_desc:       product.short_desc,
           description:      product.description,
           diamond_shape:    product.diamond_shape,

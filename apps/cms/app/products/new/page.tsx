@@ -4,7 +4,7 @@ import { ProductCatalogCreateForm } from '@/components/forms/ProductCatalogCreat
 export default async function NewProductPage() {
   const supabase = createServerClient()
 
-  const [{ data: collections }, { data: categories }, { data: metalColors }, { data: metalPurities }] =
+  const [{ data: collections }, { data: categories }, { data: tags }, { data: metalColors }, { data: metalPurities }] =
     await Promise.all([
       supabase.from('collections').select('id, name').eq('is_active', true).order('sort_order'),
       supabase
@@ -12,6 +12,7 @@ export default async function NewProductPage() {
         .select('id, name, code')
         .eq('is_active', true)
         .order('sort_order'),
+      supabase.from('tags').select('id, name, color').eq('is_active', true).order('sort_order'),
       supabase
         .from('metal_colors')
         .select('id, label, code, hex, display_order')
@@ -32,6 +33,7 @@ export default async function NewProductPage() {
       </div>
       <ProductCatalogCreateForm
         collections={collections ?? []}
+        tags={tags ?? []}
         categories={(categories ?? []) as Parameters<typeof ProductCatalogCreateForm>[0]['categories']}
         metalColors={(metalColors ?? []) as Parameters<typeof ProductCatalogCreateForm>[0]['metalColors']}
         metalPurities={(metalPurities ?? []) as Parameters<typeof ProductCatalogCreateForm>[0]['metalPurities']}

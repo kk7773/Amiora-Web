@@ -9,6 +9,7 @@ export type CatalogColorGroup = {
   label:   string
   hex:     string | null
   images:  string[]
+  videos?: string[]
 }
 
 export type CatalogPurity = {

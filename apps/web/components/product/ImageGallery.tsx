@@ -1,9 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import Image from 'next/image'
-import { ChevronLeft, ChevronRight, X, ZoomIn } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Film, X, ZoomIn } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@amiora/ui'
 import { useInlineImageZoom } from '@/hooks/useInlineImageZoom'
@@ -11,9 +11,74 @@ import { useInlineImageZoom } from '@/hooks/useInlineImageZoom'
 interface GalleryImage {
   id: string
   url: string
+  media_type?: 'image' | 'video'
   alt_text: string | null
   sort_order: number
   variant_id: string | null
+}
+
+function isVideoItem(item: GalleryImage) {
+  return item.media_type === 'video'
+}
+
+function GalleryThumb({ item, productName }: { item: GalleryImage; productName: string }) {
+  if (isVideoItem(item)) {
+    return (
+      <>
+        <video src={item.url} className="absolute inset-0 h-full w-full object-cover" muted playsInline preload="metadata" />
+        <span className="absolute inset-0 flex items-center justify-center bg-ink/25">
+          <Film className="h-4 w-4 text-white drop-shadow" aria-hidden />
+        </span>
+      </>
+    )
+  }
+  return (
+    <Image
+      src={item.url}
+      alt={item.alt_text ?? productName}
+      fill
+      className="object-cover"
+      sizes="64px"
+    />
+  )
+}
+
+function GallerySlide({
+  item,
+  productName,
+  priority,
+  className,
+  style,
+}: {
+  item: GalleryImage
+  productName: string
+  priority?: boolean
+  className?: string
+  style?: CSSProperties
+}) {
+  if (isVideoItem(item)) {
+    return (
+      <video
+        src={item.url}
+        controls
+        playsInline
+        className={cn('h-full w-full object-contain', className)}
+        style={style}
+      />
+    )
+  }
+  return (
+    <Image
+      src={item.url}
+      alt={item.alt_text ?? productName}
+      fill
+      priority={priority}
+      className={cn('object-contain select-none', className)}
+      sizes="(max-width: 768px) 100vw, 50vw"
+      draggable={false}
+      style={style}
+    />
+  )
 }
 
 interface ImageGalleryProps {
@@ -40,6 +105,7 @@ export function ImageGallery({
 
   const sorted = [...visible].sort((a, b) => a.sort_order - b.sort_order)
   const current = sorted[activeIdx] ?? sorted[0]
+  const currentIsVideo = current ? isVideoItem(current) : false
   const imageIdsKey = useMemo(() => sorted.map((i) => i.id).join(','), [sorted])
 
   const { imageStyle, zoomActive, isPanning, resetZoom, containerProps } =
@@ -160,16 +226,18 @@ export function ImageGallery({
               )}
 
               <div
-                ref={zoomContainerRef}
-                {...containerProps}
+                ref={currentIsVideo ? undefined : zoomContainerRef}
+                {...(currentIsVideo ? {} : containerProps)}
                 className={cn(
                   'relative flex-1 min-w-0 mx-auto aspect-square max-h-[min(62dvh,560px)] w-full rounded-xl overflow-hidden bg-surface',
                   'ring-1 ring-divider',
-                  zoomActive
-                    ? isPanning
-                      ? 'cursor-grabbing'
-                      : 'cursor-grab'
-                    : 'cursor-zoom-in',
+                  currentIsVideo
+                    ? ''
+                    : zoomActive
+                      ? isPanning
+                        ? 'cursor-grabbing'
+                        : 'cursor-grab'
+                      : 'cursor-zoom-in',
                 )}
               >
                 <AnimatePresence mode="wait">
@@ -180,20 +248,13 @@ export function ImageGallery({
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.15 }}
                     className="absolute inset-0"
-                    style={imageStyle}
+                    style={currentIsVideo ? undefined : imageStyle}
                   >
-                    <Image
-                      src={current.url}
-                      alt={current.alt_text ?? productName}
-                      fill
-                      className="object-contain select-none"
-                      sizes="(max-width: 768px) 90vw, 720px"
-                      draggable={false}
-                    />
+                    <GallerySlide item={current} productName={productName} />
                   </motion.div>
                 </AnimatePresence>
 
-                {!zoomActive && (
+                {!currentIsVideo && !zoomActive && (
                   <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 pointer-events-none flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-bg/90 backdrop-blur-sm text-ink-faint shadow-sm">
                     <ZoomIn className="h-3.5 w-3.5 shrink-0" aria-hidden />
                     <span className="text-2xs tracking-wide">Tap to zoom</span>
@@ -228,7 +289,7 @@ export function ImageGallery({
                         'shrink-0 w-11 h-11 sm:w-12 sm:h-12 rounded-md',
                       )}
                     >
-                      <Image src={img.url} alt="" fill className="object-cover" sizes="48px" />
+                      <GalleryThumb item={img} productName={productName} />
                     </button>
                   ))}
                 </div>
@@ -254,65 +315,87 @@ export function ImageGallery({
                 aria-current={i === activeIdx ? 'true' : undefined}
                 className={cn(thumbClass(i === activeIdx), 'aspect-square rounded-md')}
               >
-                <Image
-                  src={img.url}
-                  alt={img.alt_text ?? productName}
-                  fill
-                  className="object-cover"
-                  sizes="64px"
-                />
+                <GalleryThumb item={img} productName={productName} />
               </button>
             ))}
           </div>
         )}
 
         <div className="flex-1 min-w-0">
-          <button
-            type="button"
-            onClick={openViewer}
-            aria-label="Open image viewer"
-            className={cn(
-              'relative aspect-square w-full rounded-2xl overflow-hidden bg-surface text-left',
-              'ring-1 ring-divider shadow-[inset_0_2px_12px_rgba(26,20,16,0.04)]',
-              'cursor-zoom-in group focus:outline-none focus-visible:ring-2 focus-visible:ring-teal',
-            )}
-          >
-            <AnimatePresence mode="wait">
-              {current && (
-                <motion.div
-                  key={current.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="absolute inset-0"
-                >
-                  <Image
-                    src={current.url}
-                    alt={current.alt_text ?? productName}
-                    fill
-                    priority
-                    className="object-contain transition-transform duration-300 group-hover:scale-[1.02]"
-                    sizes="(max-width: 768px) 100vw, 50vw"
-                    draggable={false}
-                  />
-                </motion.div>
+          {currentIsVideo ? (
+            <div
+              className={cn(
+                'relative aspect-square w-full rounded-2xl overflow-hidden bg-surface',
+                'ring-1 ring-divider shadow-[inset_0_2px_12px_rgba(26,20,16,0.04)]',
               )}
-            </AnimatePresence>
-
-            <div className="absolute top-3 right-3 z-10 flex flex-col items-end gap-2 pointer-events-none">
+            >
+              <AnimatePresence mode="wait">
+                {current && (
+                  <motion.div
+                    key={current.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="absolute inset-0"
+                  >
+                    <GallerySlide item={current} productName={productName} priority />
+                  </motion.div>
+                )}
+              </AnimatePresence>
               {typeof discountPercentOff === 'number' && discountPercentOff >= 1 && (
-                <span className="inline-block bg-deep-teal text-cream text-2xs sm:text-xs font-semibold px-2.5 py-1 rounded-full tabular-nums shadow-sm">
-                  {discountPercentOff}% off
-                </span>
+                <div className="absolute top-3 right-3 z-10 pointer-events-none">
+                  <span className="inline-block bg-deep-teal text-cream text-2xs sm:text-xs font-semibold px-2.5 py-1 rounded-full tabular-nums shadow-sm">
+                    {discountPercentOff}% off
+                  </span>
+                </div>
               )}
             </div>
+          ) : (
+            <button
+              type="button"
+              onClick={openViewer}
+              aria-label="Open image viewer"
+              className={cn(
+                'relative aspect-square w-full rounded-2xl overflow-hidden bg-surface text-left',
+                'ring-1 ring-divider shadow-[inset_0_2px_12px_rgba(26,20,16,0.04)]',
+                'cursor-zoom-in group focus:outline-none focus-visible:ring-2 focus-visible:ring-teal',
+              )}
+            >
+              <AnimatePresence mode="wait">
+                {current && (
+                  <motion.div
+                    key={current.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="absolute inset-0"
+                  >
+                    <GallerySlide
+                      item={current}
+                      productName={productName}
+                      priority
+                      className="transition-transform duration-300 group-hover:scale-[1.02]"
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
-            <div className="absolute bottom-3 right-3 z-10 pointer-events-none flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-bg/80 backdrop-blur-sm text-ink-faint">
-              <ZoomIn className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              <span className="text-2xs tracking-wide">Tap to view</span>
-            </div>
-          </button>
+              <div className="absolute top-3 right-3 z-10 flex flex-col items-end gap-2 pointer-events-none">
+                {typeof discountPercentOff === 'number' && discountPercentOff >= 1 && (
+                  <span className="inline-block bg-deep-teal text-cream text-2xs sm:text-xs font-semibold px-2.5 py-1 rounded-full tabular-nums shadow-sm">
+                    {discountPercentOff}% off
+                  </span>
+                )}
+              </div>
+
+              <div className="absolute bottom-3 right-3 z-10 pointer-events-none flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-bg/80 backdrop-blur-sm text-ink-faint">
+                <ZoomIn className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span className="text-2xs tracking-wide">Tap to view</span>
+              </div>
+            </button>
+          )}
 
           {sorted.length > 1 && (
             <div className="md:hidden flex gap-2 mt-3 overflow-x-auto pb-1 scrollbar-none">
@@ -325,7 +408,7 @@ export function ImageGallery({
                   aria-current={i === activeIdx ? 'true' : undefined}
                   className={cn(thumbClass(i === activeIdx), 'shrink-0 w-14 h-14 rounded-md')}
                 >
-                  <Image src={img.url} alt="" fill className="object-cover" sizes="56px" />
+                  <GalleryThumb item={img} productName={productName} />
                 </button>
               ))}
             </div>

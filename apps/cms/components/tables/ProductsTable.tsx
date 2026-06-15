@@ -11,14 +11,32 @@ interface Product {
   id: string
   name: string
   slug: string
+  design_number?: string | null
   is_featured: boolean
   status: 'draft' | 'active' | 'archived'
   created_at: string
   collection?: { name: string } | null
+  collection_links?: { collections: { name: string } | null }[] | null
   category?:   { name: string } | null
   images?:  { url: string; is_primary: boolean }[]
   color_groups?: { images: string[]; display_order: number; is_active: boolean }[]
   variants?: { id: string }[]
+}
+
+function resolveCollectionNames(product: Product): string {
+  const fromLinks = (product.collection_links ?? [])
+    .map((link) => link.collections?.name)
+    .filter((n): n is string => !!n)
+  if (fromLinks.length > 0) return fromLinks.join(', ')
+  return product.collection?.name ?? '—'
+}
+
+function productInCollection(product: Product, collectionName: string): boolean {
+  const names = (product.collection_links ?? [])
+    .map((link) => link.collections?.name)
+    .filter((n): n is string => !!n)
+  if (names.length > 0) return names.includes(collectionName)
+  return product.collection?.name === collectionName
 }
 
 function resolveThumbnail(product: Product): string | null {
@@ -57,8 +75,15 @@ export function ProductsTable({ products, collections, categories }: Props) {
 
   const filtered = products.filter(p => {
     const q = search.toLowerCase()
-    if (q && !p.name.toLowerCase().includes(q) && !p.slug.includes(q)) return false
-    if (filterCollection && p.collection?.name !== filterCollection) return false
+    if (
+      q &&
+      !p.name.toLowerCase().includes(q) &&
+      !p.slug.includes(q) &&
+      !(p.design_number ?? '').toLowerCase().includes(q)
+    ) {
+      return false
+    }
+    if (filterCollection && !productInCollection(p, filterCollection)) return false
     if (filterStatus === 'active' && p.status !== 'active') return false
     if (filterStatus === 'inactive' && p.status === 'active') return false
     return true
@@ -86,7 +111,7 @@ export function ProductsTable({ products, collections, categories }: Props) {
         <div className="flex items-center gap-2 bg-surface rounded-lg px-3 py-2 flex-1">
           <Search className="w-3.5 h-3.5 text-ink-faint" />
           <input
-            placeholder="Search by name or slug…"
+            placeholder="Search by name, slug, or design #…"
             value={search} onChange={e => setSearch(e.target.value)}
             className="bg-transparent outline-none text-sm flex-1 placeholder:text-ink-faint"
           />
@@ -148,9 +173,12 @@ export function ProductsTable({ products, collections, categories }: Props) {
                   <td className="px-5 py-3">
                     <p className="font-medium text-ink">{p.name}</p>
                     <p className="text-xs text-ink-faint">{p.slug}</p>
+                    {p.design_number && (
+                      <p className="text-xs text-ink-muted font-mono mt-0.5">Design {p.design_number}</p>
+                    )}
                     {p.is_featured && <Badge variant="info" className="mt-1">Featured</Badge>}
                   </td>
-                  <td className="px-5 py-3 text-ink-muted">{p.collection?.name ?? '—'}</td>
+                  <td className="px-5 py-3 text-ink-muted">{resolveCollectionNames(p)}</td>
                   <td className="px-5 py-3">
                     <span className="inline-flex items-center justify-center w-6 h-6 bg-surface rounded-full text-xs font-medium text-ink-muted">
                       {p.variants?.length ?? 0}

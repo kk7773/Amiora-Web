@@ -8,6 +8,9 @@ import {
   ShoppingCart, Loader2,
 } from 'lucide-react'
 import { useCartStore, useCartHydrated } from '@/stores/cartStore'
+import { useSearchSuggest } from '@/hooks/useSearchSuggest'
+import { SearchCombobox, useSearchKeyboardNav } from '@/components/search/SearchCombobox'
+import type { SearchSuggestion } from '@/app/api/search/suggest/route'
 
 const STORE_LINKS = [
   { label: 'All Collections',  href: '/collections' },
@@ -34,6 +37,28 @@ export function MobileBottomNav() {
   const [searchQ,    setSearchQ]    = useState('')
   const searchRef                   = useRef<HTMLInputElement>(null)
   const [pending,    startNav]      = useTransition()
+  const { suggestions, loading, show: suggestOpen } = useSearchSuggest(searchOpen ? searchQ : '')
+
+  function navigateToSearch(q: string) {
+    const trimmed = q.trim()
+    if (!trimmed) return
+    setSearchOpen(false)
+    setSearchQ('')
+    startNav(() => router.push(`/search?q=${encodeURIComponent(trimmed)}`))
+  }
+
+  function navigateToProduct(suggestion: SearchSuggestion) {
+    setSearchOpen(false)
+    setSearchQ('')
+    startNav(() => router.push(suggestion.href))
+  }
+
+  const { activeIndex, setActiveIndex, handleKeyDown } = useSearchKeyboardNav(
+    suggestions,
+    suggestOpen && searchOpen,
+    () => navigateToSearch(searchQ),
+    navigateToProduct,
+  )
 
   useEffect(() => {
     document.body.style.overflow = storeOpen ? 'hidden' : ''
@@ -46,11 +71,7 @@ export function MobileBottomNav() {
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault()
-    const q = searchQ.trim()
-    if (!q) return
-    setSearchOpen(false)
-    setSearchQ('')
-    startNav(() => router.push(`/search?q=${encodeURIComponent(q)}`))
+    navigateToSearch(searchQ)
   }
 
   const isShop    = pathname === '/shop'
@@ -133,29 +154,37 @@ export function MobileBottomNav() {
 
       {/* ── Search bar (above nav) ──────────────────────────────────────── */}
       {searchOpen && (
-        <div
-          className="md:hidden fixed left-0 right-0 z-50"
-          style={{ bottom: 62, backgroundColor: '#285260', borderTop: '1px solid rgba(255,255,255,0.12)', padding: '10px 16px' }}
-        >
-          <form onSubmit={handleSearch} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Search size={16} color="#E0D7CF" style={{ opacity: 0.6, flexShrink: 0 }} />
-            <input
-              ref={searchRef}
-              type="search"
+        <>
+          <div
+            className="md:hidden fixed inset-0 z-40 bg-black/30"
+            onClick={() => { setSearchOpen(false); setSearchQ('') }}
+            aria-hidden
+          />
+          <div
+            className="md:hidden fixed left-0 right-0 z-50 px-4 pb-2"
+            style={{ bottom: 62, paddingTop: 10 }}
+          >
+          <form onSubmit={handleSearch}>
+            <SearchCombobox
               value={searchQ}
-              onChange={e => setSearchQ(e.target.value)}
-              placeholder="Search rings, necklaces, gold…"
-              style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: 14, color: '#E0D7CF' }}
+              onChange={setSearchQ}
+              onSubmit={() => navigateToSearch(searchQ)}
+              onSelect={navigateToProduct}
+              onClose={() => { setSearchOpen(false); setSearchQ('') }}
+              suggestions={suggestions}
+              loading={loading}
+              suggestOpen={suggestOpen}
+              activeIndex={activeIndex}
+              onActiveIndexChange={setActiveIndex}
+              onKeyDown={handleKeyDown}
+              inputRef={searchRef}
+              variant="mobile"
+              placeholder="Search rings, necklaces…"
+              pending={pending}
             />
-            <button
-              type="button"
-              onClick={() => { setSearchOpen(false); setSearchQ('') }}
-              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#E0D7CF', opacity: 0.6, display: 'flex' }}
-            >
-              <X size={16} />
-            </button>
           </form>
-        </div>
+          </div>
+        </>
       )}
 
       {/* ── Store bottom sheet ─────────────────────────────────────────── */}

@@ -28,7 +28,17 @@ export async function getProducts(
     )
 
   if (params.category) query = query.eq('category', params.category)
-  if (params.collectionId) query = query.eq('collection_id', params.collectionId)
+  if (params.collectionId) {
+    const { data: links } = await client
+      .from('collection_products')
+      .select('product_id')
+      .eq('collection_id', params.collectionId)
+    const ids = (links ?? []).map((r) => r.product_id)
+    if (ids.length === 0) {
+      return { data: [], count: 0, error: null }
+    }
+    query = query.in('id', ids)
+  }
   if (params.isFeatured !== undefined) query = query.eq('is_featured', params.isFeatured)
   if (params.isNewArrival !== undefined) query = query.eq('is_new_arrival', params.isNewArrival)
   if (params.isBestSeller !== undefined) query = query.eq('is_best_seller', params.isBestSeller)
@@ -81,10 +91,11 @@ export async function getNewArrivals(client: SupabaseClient, limit = 8) {
 }
 
 export async function searchProducts(client: SupabaseClient, query: string, limit = 10) {
+  const pattern = `%${query.replace(/[%_]/g, '')}%`
   return client
     .from('products')
-    .select(`id, slug, name, category, product_images: product_images (url, alt_text)`)
-    .or(`name.ilike.%${query}%, tags.cs.{${query}}`)
+    .select(`id, slug, name, product_images: product_images (url, alt_text)`)
+    .or(`name.ilike.${pattern},slug.ilike.${pattern},design_number.ilike.${pattern}`)
     .eq('status', 'active')
     .limit(limit)
 }

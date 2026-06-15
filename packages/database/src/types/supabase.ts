@@ -175,6 +175,62 @@ export interface Database {
         Relationships: []
       }
 
+      // ── collection_products ──────────────────────────────────────────────────
+      collection_products: {
+        Row: {
+          collection_id: string
+          product_id: string
+          display_order: number
+          created_at: string
+        }
+        Insert: {
+          collection_id: string
+          product_id: string
+          display_order?: number
+          created_at?: string
+        }
+        Update: Record<string, unknown>
+        Relationships: []
+      }
+
+      // ── tags ───────────────────────────────────────────────────────────────
+      tags: {
+        Row: {
+          id: string
+          name: string
+          slug: string
+          color: string | null
+          sort_order: number
+          is_active: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          slug: string
+          color?: string | null
+          sort_order?: number
+          is_active?: boolean
+          created_at?: string
+        }
+        Update: Record<string, unknown>
+        Relationships: []
+      }
+
+      // ── product_tags ─────────────────────────────────────────────────────────
+      product_tags: {
+        Row: {
+          product_id: string
+          tag_id: string
+        }
+        Insert: {
+          product_id: string
+          tag_id: string
+        }
+        Update: Record<string, unknown>
+        Relationships: []
+      }
+
       // ── metal_purities ───────────────────────────────────────────────────────
       metal_purities: {
         Row: {
@@ -234,6 +290,7 @@ export interface Database {
           category_id: string | null
           collection_id: string | null
           product_number: number
+          design_number: string | null
           diamond_shape: string | null
           diamond_count: number | null
           total_diamond_wt: number | null
@@ -266,6 +323,7 @@ export interface Database {
           category_id?: string | null
           collection_id?: string | null
           product_number?: number
+          design_number?: string | null
           diamond_shape?: string | null
           diamond_count?: number | null
           total_diamond_wt?: number | null

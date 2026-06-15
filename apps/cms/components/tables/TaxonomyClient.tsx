@@ -3,9 +3,13 @@
 import { useState, useCallback } from 'react'
 import {
   Plus, Edit2, Trash2, Loader2, X, Save, ChevronRight,
-  Tag as TagIcon, FolderTree, Menu, AlignJustify, Check,
+  Tag as TagIcon, FolderTree, Menu, AlignJustify, Check, Package,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import {
+  TaxonomyProductManager,
+  type TaxonomyType,
+} from '@/components/taxonomy/TaxonomyProductManager'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -57,11 +61,49 @@ interface Props {
   categories:  Category[]
 }
 
+type ManagingState = { type: TaxonomyType; id: string; name: string } | null
+
 export function TaxonomyClient({ collections: initCols, tags: initTags, categories: initCats }: Props) {
   const [tab, setTab]               = useState<Tab>('main')
   const [collections, setCols]      = useState(initCols)
   const [tags,        setTags]      = useState(initTags)
   const [categories,  setCats]      = useState(initCats)
+  const [managing, setManaging]     = useState<ManagingState>(null)
+  const [colCounts, setColCounts]   = useState<Record<string, number>>({})
+  const [catCounts, setCatCounts]   = useState<Record<string, number>>({})
+  const [tagCounts, setTagCounts]   = useState<Record<string, number>>({})
+
+  const handleCountChange = useCallback((type: TaxonomyType, id: string, count: number) => {
+    if (type === 'collection') setColCounts((prev) => ({ ...prev, [id]: count }))
+    else if (type === 'category') setCatCounts((prev) => ({ ...prev, [id]: count }))
+    else setTagCounts((prev) => ({ ...prev, [id]: count }))
+  }, [])
+
+  const prefetchCount = useCallback(async (type: TaxonomyType, itemId: string) => {
+    const known =
+      type === 'collection' ? colCounts[itemId]
+      : type === 'category' ? catCounts[itemId]
+      : tagCounts[itemId]
+    if (known !== undefined) return
+
+    const base =
+      type === 'collection' ? `/api/taxonomy/collections/${itemId}/products`
+      : type === 'category' ? `/api/taxonomy/categories/${itemId}/products`
+      : `/api/taxonomy/tags/${itemId}/products`
+
+    try {
+      const res = await fetch(`${base}?countOnly=1`)
+      if (!res.ok) return
+      const j = (await res.json()) as { productCount?: number }
+      if (typeof j.productCount === 'number') {
+        handleCountChange(type, itemId, j.productCount)
+      }
+    } catch { /* ignore */ }
+  }, [colCounts, catCounts, tagCounts, handleCountChange])
+
+  function openManager(type: TaxonomyType, id: string, name: string) {
+    setManaging({ type, id, name })
+  }
 
   const mainCols      = collections.filter(c => c.menu_type === 'main')
   const secondaryCols = collections.filter(c => c.menu_type === 'secondary')
@@ -75,6 +117,18 @@ export function TaxonomyClient({ collections: initCols, tags: initTags, categori
 
   return (
     <div className="space-y-5">
+      {managing && (
+        <TaxonomyProductManager
+          type={managing.type}
+          id={managing.id}
+          name={managing.name}
+          open
+          onClose={() => setManaging(null)}
+          onCountChange={(count) => handleCountChange(managing.type, managing.id, count)}
+          categories={managing.type === 'category' ? categories.map((c) => ({ id: c.id, name: c.name })) : undefined}
+        />
+      )}
+
       {/* Tab bar */}
       <div className="flex gap-1 p-1 bg-surface rounded-xl border border-divider w-fit">
         {TABS.map(t => (
@@ -102,6 +156,9 @@ export function TaxonomyClient({ collections: initCols, tags: initTags, categori
           menuType={tab}
           collections={tab === 'main' ? mainCols : secondaryCols}
           allCollections={collections}
+          productCounts={colCounts}
+          onPrefetchCount={(itemId) => void prefetchCount('collection', itemId)}
+          onManageProducts={(id, name) => openManager('collection', id, name)}
           onChange={updated => setCols(prev =>
             prev.map(c => c.id === updated.id ? updated : c)
           )}
@@ -112,6 +169,9 @@ export function TaxonomyClient({ collections: initCols, tags: initTags, categori
       {tab === 'tags' && (
         <TagsTab
           tags={tags}
+          productCounts={tagCounts}
+          onPrefetchCount={(itemId) => void prefetchCount('tag', itemId)}
+          onManageProducts={(id, name) => openManager('tag', id, name)}
           onChange={updated => setTags(prev => prev.map(t => t.id === updated.id ? updated : t))}
           onAdd={created => setTags(prev => [...prev, created])}
           onDelete={id => setTags(prev => prev.filter(t => t.id !== id))}
@@ -120,6 +180,9 @@ export function TaxonomyClient({ collections: initCols, tags: initTags, categori
       {tab === 'categories' && (
         <CategoriesTab
           categories={categories}
+          productCounts={catCounts}
+          onPrefetchCount={(itemId) => void prefetchCount('category', itemId)}
+          onManageProducts={(id, name) => openManager('category', id, name)}
           onChange={updated => setCats(prev => prev.map(c => c.id === updated.id ? updated : c))}
           onAdd={created => setCats(prev => [...prev, created])}
           onDelete={id => setCats(prev => prev.filter(c => c.id !== id))}
@@ -136,12 +199,15 @@ interface MenuTabProps {
   menuType: 'main' | 'secondary'
   collections: Collection[]
   allCollections: Collection[]
+  productCounts: Record<string, number>
+  onPrefetchCount: (id: string) => void
+  onManageProducts: (id: string, name: string) => void
   onChange: (c: Collection) => void
   onAdd:    (c: Collection) => void
   onDelete: (id: string) => void
 }
 
-function MenuTab({ menuType, collections, allCollections, onChange, onAdd, onDelete }: MenuTabProps) {
+function MenuTab({ menuType, collections, allCollections, productCounts, onPrefetchCount, onManageProducts, onChange, onAdd, onDelete }: MenuTabProps) {
   const [editing, setEditing] = useState<Partial<Collection> | null>(null)
   const [saving,  setSaving]  = useState(false)
 
@@ -197,6 +263,9 @@ function MenuTab({ menuType, collections, allCollections, onChange, onAdd, onDel
               <CollectionRow
                 col={root}
                 indent={0}
+                productCount={productCounts[root.id]}
+                onPrefetchCount={() => onPrefetchCount(root.id)}
+                onManageProducts={() => onManageProducts(root.id, root.name)}
                 onEdit={c => setEditing(c)}
                 onDelete={del}
                 onAddChild={() => setEditing({ is_active: true, sort_order: 0, menu_type: menuType, parent_id: root.id })}
@@ -206,6 +275,9 @@ function MenuTab({ menuType, collections, allCollections, onChange, onAdd, onDel
                   key={child.id}
                   col={child}
                   indent={1}
+                  productCount={productCounts[child.id]}
+                  onPrefetchCount={() => onPrefetchCount(child.id)}
+                  onManageProducts={() => onManageProducts(child.id, child.name)}
                   onEdit={c => setEditing(c)}
                   onDelete={del}
                   onAddChild={() => setEditing({ is_active: true, sort_order: 0, menu_type: menuType, parent_id: child.id })}
@@ -233,9 +305,11 @@ function MenuTab({ menuType, collections, allCollections, onChange, onAdd, onDel
 }
 
 function CollectionRow({
-  col, indent, onEdit, onDelete, onAddChild,
+  col, indent, productCount, onPrefetchCount, onManageProducts, onEdit, onDelete, onAddChild,
 }: {
-  col: Collection; indent: number
+  col: Collection; indent: number; productCount?: number
+  onPrefetchCount: () => void
+  onManageProducts: () => void
   onEdit: (c: Collection) => void
   onDelete: (id: string, name: string) => void
   onAddChild: () => void
@@ -251,6 +325,15 @@ function CollectionRow({
         {col.is_active ? 'Active' : 'Inactive'}
       </span>
       <div className="flex items-center gap-1 shrink-0">
+        <button
+          onClick={onManageProducts}
+          onMouseEnter={onPrefetchCount}
+          title="Manage products"
+          className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-teal hover:bg-teal/10 border border-teal/20"
+        >
+          <Package className="w-3.5 h-3.5" />
+          {productCount ?? '·'}
+        </button>
         {indent === 0 && (
           <button onClick={onAddChild} title="Add sub-collection" className="p-1.5 rounded hover:bg-surface text-ink-faint hover:text-teal">
             <Plus className="w-3.5 h-3.5" />
@@ -371,12 +454,15 @@ function CollectionModal({
 // ─────────────────────────────────────────────────────────────────────────────
 interface TagsTabProps {
   tags:     Tag[]
+  productCounts: Record<string, number>
+  onPrefetchCount: (id: string) => void
+  onManageProducts: (id: string, name: string) => void
   onChange: (t: Tag) => void
   onAdd:    (t: Tag) => void
   onDelete: (id: string) => void
 }
 
-function TagsTab({ tags, onChange, onAdd, onDelete }: TagsTabProps) {
+function TagsTab({ tags, productCounts, onPrefetchCount, onManageProducts, onChange, onAdd, onDelete }: TagsTabProps) {
   const [editing, setEditing] = useState<Partial<Tag> | null>(null)
   const [saving,  setSaving]  = useState(false)
 
@@ -435,6 +521,15 @@ function TagsTab({ tags, onChange, onAdd, onDelete }: TagsTabProps) {
               />
               <span className="text-sm font-medium text-ink">{tag.name}</span>
               <span className="font-mono text-xs text-ink-faint">{tag.slug}</span>
+              <button
+                onClick={() => onManageProducts(tag.id, tag.name)}
+                onMouseEnter={() => onPrefetchCount(tag.id)}
+                title="Manage products"
+                className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium text-teal hover:bg-teal/10 border border-teal/20 ml-1"
+              >
+                <Package className="w-3 h-3" />
+                {productCounts[tag.id] ?? '·'}
+              </button>
               <div className="flex items-center gap-0.5 ml-1">
                 <button onClick={() => setEditing(tag)} className="p-1 rounded hover:bg-surface text-ink-faint hover:text-teal">
                   <Edit2 className="w-3 h-3" />
@@ -532,12 +627,15 @@ function TagsTab({ tags, onChange, onAdd, onDelete }: TagsTabProps) {
 // ─────────────────────────────────────────────────────────────────────────────
 interface CategoriesTabProps {
   categories: Category[]
+  productCounts: Record<string, number>
+  onPrefetchCount: (id: string) => void
+  onManageProducts: (id: string, name: string) => void
   onChange:   (c: Category) => void
   onAdd:      (c: Category) => void
   onDelete:   (id: string)  => void
 }
 
-function CategoriesTab({ categories, onChange, onAdd, onDelete }: CategoriesTabProps) {
+function CategoriesTab({ categories, productCounts, onPrefetchCount, onManageProducts, onChange, onAdd, onDelete }: CategoriesTabProps) {
   const [editing, setEditing] = useState<Partial<Category> | null>(null)
   const [saving,  setSaving]  = useState(false)
 
@@ -592,6 +690,9 @@ function CategoriesTab({ categories, onChange, onAdd, onDelete }: CategoriesTabP
               <CategoryRow
                 cat={root}
                 indent={0}
+                productCount={productCounts[root.id]}
+                onPrefetchCount={() => onPrefetchCount(root.id)}
+                onManageProducts={() => onManageProducts(root.id, root.name)}
                 onEdit={c => setEditing(c)}
                 onDelete={del}
                 onAddChild={() => setEditing({ is_active: true, sort_order: 0, parent_id: root.id })}
@@ -601,6 +702,9 @@ function CategoriesTab({ categories, onChange, onAdd, onDelete }: CategoriesTabP
                   key={child.id}
                   cat={child}
                   indent={1}
+                  productCount={productCounts[child.id]}
+                  onPrefetchCount={() => onPrefetchCount(child.id)}
+                  onManageProducts={() => onManageProducts(child.id, child.name)}
                   onEdit={c => setEditing(c)}
                   onDelete={del}
                   onAddChild={() => {}}
@@ -684,9 +788,11 @@ function CategoriesTab({ categories, onChange, onAdd, onDelete }: CategoriesTabP
 }
 
 function CategoryRow({
-  cat, indent, onEdit, onDelete, onAddChild,
+  cat, indent, productCount, onPrefetchCount, onManageProducts, onEdit, onDelete, onAddChild,
 }: {
-  cat: Category; indent: number
+  cat: Category; indent: number; productCount?: number
+  onPrefetchCount: () => void
+  onManageProducts: () => void
   onEdit: (c: Category) => void
   onDelete: (id: string, name: string) => void
   onAddChild: () => void
@@ -702,6 +808,15 @@ function CategoryRow({
         {cat.is_active ? 'Active' : 'Inactive'}
       </span>
       <div className="flex items-center gap-1 shrink-0">
+        <button
+          onClick={onManageProducts}
+          onMouseEnter={onPrefetchCount}
+          title="Manage products"
+          className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-teal hover:bg-teal/10 border border-teal/20"
+        >
+          <Package className="w-3.5 h-3.5" />
+          {productCount ?? '·'}
+        </button>
         {indent === 0 && (
           <button onClick={onAddChild} title="Add sub-category" className="p-1.5 rounded hover:bg-surface text-ink-faint hover:text-teal">
             <Plus className="w-3.5 h-3.5" />

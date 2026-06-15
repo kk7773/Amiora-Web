@@ -3,7 +3,8 @@ import { Suspense } from 'react'
 import { createServerClient } from '@amiora/database'
 import { fetchPurityMapForProducts } from '@/lib/pricing/fetchPurityMap'
 import { getLatestPrices } from '@/lib/pricing/engine'
-import { mapProductForCard, PRODUCT_CARD_SELECT, type ProductCardRaw } from '@/lib/shop/mapProductForCard'
+import { mapProductForCard, type ProductCardRaw } from '@/lib/shop/mapProductForCard'
+import { fetchActiveProductCards } from '@/lib/shop/fetchProductCards'
 import { ProductCard }           from '@/components/product/ProductCard'
 import { SearchInput }           from './SearchInput'
 import { SearchX, Sparkles }     from 'lucide-react'
@@ -46,13 +47,15 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const supabase = createServerClient()
   const prices   = await getLatestPrices()
 
-  const { data: rows } = await supabase
-    .from('products')
-    .select(PRODUCT_CARD_SELECT)
-    .eq('status', 'active')
-    .ilike('name', `%${query}%`)
-    .order('created_at', { ascending: false })
-    .limit(48)
+  const { products: rows, error: searchError } = await fetchActiveProductCards(supabase, {
+    apply: (q) => q.ilike('name', `%${query.replace(/[%_]/g, '')}%`),
+    order: { column: 'created_at', ascending: false },
+    limit: 48,
+  })
+
+  if (searchError) {
+    console.error('[SearchPage] product query:', searchError)
+  }
 
   const purityMap = await fetchPurityMapForProducts(supabase, rows ?? [])
   const goldPrice = prices.gold?.pricePerGram ?? 7200

@@ -198,5 +198,6 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  // bulk-import has its own superadmin guard; skip middleware to avoid 10MB body buffer truncation
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/products/bulk-import).*)'],
 }

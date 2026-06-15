@@ -23,6 +23,7 @@ interface ProductDetailClientProps {
   product: {
     id:                 string
     name:               string
+    design_number:      string | null
     short_desc:         string | null
     description:        string | null
     diamond_shape:      string | null
@@ -59,14 +60,24 @@ const SERVICE_BADGES = [
   { icon: Gift,      label: 'Free Gift Wrap' },
 ]
 
-function toGallery(images: string[], productName: string) {
-  return images.map((url, i) => ({
-    id:          `cg-${i}`,
+function toGallery(images: string[], videos: string[], productName: string) {
+  const imageItems = images.map((url, i) => ({
+    id:          `cg-img-${i}`,
     url,
+    media_type:  'image' as const,
     alt_text:    `${productName} — image ${i + 1}`,
     sort_order:  i,
     variant_id:  null as string | null,
   }))
+  const videoItems = videos.map((url, i) => ({
+    id:          `cg-vid-${i}`,
+    url,
+    media_type:  'video' as const,
+    alt_text:    `${productName} — video ${i + 1}`,
+    sort_order:  images.length + i,
+    variant_id:  null as string | null,
+  }))
+  return [...imageItems, ...videoItems]
 }
 
 type PriceBreakupRow = {
@@ -195,11 +206,15 @@ export function ProductDetailClient({
 
   const galleryImages = useMemo(() => {
     const grp = catalog.colorGroups.find((g) => g.colorId === sel.colorId)
-    const urls =
-      grp && grp.images.length > 0
-        ? grp.images
-        : fallbackImages.map((i) => i.url)
-    return toGallery(urls, product.name)
+    const hasVariantMedia = grp && (grp.images.length > 0 || (grp.videos?.length ?? 0) > 0)
+    if (hasVariantMedia && grp) {
+      return toGallery(grp.images, grp.videos ?? [], product.name)
+    }
+    return toGallery(
+      fallbackImages.map((i) => i.url),
+      [],
+      product.name,
+    )
   }, [catalog.colorGroups, sel.colorId, fallbackImages, product.name])
 
   const activeVariant = sel.variant
@@ -228,7 +243,10 @@ export function ProductDetailClient({
       toast.error('Unavailable', { description: 'Pick an in-stock option.' })
       return
     }
-    const thumb = galleryImages[0]?.url ?? ''
+    const thumb =
+      galleryImages.find((item) => item.media_type !== 'video')?.url ??
+      galleryImages[0]?.url ??
+      ''
     addItem({
       productId:    product.id,
       variantId:    activeVariant.id,
@@ -282,6 +300,11 @@ export function ProductDetailClient({
 
           <div>
             <h1 className="font-display text-display-xl text-ink leading-tight">{product.name}</h1>
+            {product.design_number && (
+              <p className="mt-2 text-xs text-ink-muted font-mono tracking-wide">
+                Design No. {product.design_number}
+              </p>
+            )}
             {product.short_desc && (
               <p className="mt-2 text-sm text-ink-muted leading-relaxed">{product.short_desc}</p>
             )}

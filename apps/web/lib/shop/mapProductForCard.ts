@@ -1,9 +1,13 @@
 import { attachCardPrice, type PurityMeta } from '@/lib/pricing/attachCardPrice'
 import { resolveProductCardImages } from '@/lib/shop/resolveProductCardImages'
 
+/** Disambiguate embed after collection_products junction added a second FK path. */
+export const PRODUCT_COLLECTION_EMBED = 'collections!products_collection_id_fkey'
+export const PRODUCT_CATEGORY_EMBED = 'categories!products_category_id_fkey'
+
 /** Standard Supabase select for ProductCard listings. */
 export const PRODUCT_CARD_SELECT =
-  'id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,stone_lines,collection:collections(slug),category:categories(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(id,sku,price,stock_qty,metal_weight_g,purity_id,is_active)'
+  `id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,stone_lines,collection:${PRODUCT_COLLECTION_EMBED}(slug),category:${PRODUCT_CATEGORY_EMBED}(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(id,sku,price,stock_qty,metal_weight_g,purity_id,is_active)`
 
 export type ProductCardRaw = {
   id: string

@@ -157,6 +157,71 @@ const PDP_PRODUCT_LEGACY_SELECT = `
   product_images(id, url, alt_text, sort_order, is_primary)
 `
 
+const PCG_BASE_SELECT = `
+  id, color_id, images, display_order, is_active,
+  color:metal_colors(id, label, code, hex, display_order)
+`
+
+const PCG_WITH_VIDEOS_SELECT = `
+  id, color_id, images, videos, display_order, is_active,
+  color:metal_colors(id, label, code, hex, display_order)
+`
+
+type PcgFetchRow = {
+  id: string
+  color_id: string
+  images: string[] | null
+  videos?: string[] | null
+  display_order: number
+  is_active?: boolean
+  color:
+    | { id: string; label: string; code: string; hex: string | null; display_order: number }
+    | [{ id: string; label: string; code: string; hex: string | null; display_order: number }]
+    | null
+}
+
+function isVideosColumnMissing(message: string) {
+  return /videos/i.test(message) && /(column|schema cache|does not exist|42703)/i.test(message)
+}
+
+/** Tolerates DBs that have not yet applied migration 018 (product_color_groups.videos). */
+async function fetchProductColorGroups(
+  supabase: ReturnType<typeof createServerClient>,
+  productId: string,
+): Promise<{ data: PcgFetchRow[]; error: { message: string; code?: string } | null }> {
+  const withVideos = await supabase
+    .from('product_color_groups')
+    .select(PCG_WITH_VIDEOS_SELECT)
+    .eq('product_id', productId)
+    .eq('is_active', true)
+    .order('display_order', { ascending: true })
+
+  if (!withVideos.error) {
+    return { data: (withVideos.data ?? []) as PcgFetchRow[], error: null }
+  }
+
+  if (!isVideosColumnMissing(withVideos.error.message)) {
+    return { data: [], error: withVideos.error as { message: string; code?: string } }
+  }
+
+  const withoutVideos = await supabase
+    .from('product_color_groups')
+    .select(PCG_BASE_SELECT)
+    .eq('product_id', productId)
+    .eq('is_active', true)
+    .order('display_order', { ascending: true })
+
+  if (withoutVideos.error) {
+    return { data: [], error: withoutVideos.error as { message: string; code?: string } }
+  }
+
+  const rows = ((withoutVideos.data ?? []) as PcgFetchRow[]).map((row) => ({
+    ...row,
+    videos: [] as string[],
+  }))
+  return { data: rows, error: null }
+}
+
 async function fetchPdpProduct(
   supabase: ReturnType<typeof createServerClient>,
   slug: string,
@@ -286,15 +351,7 @@ export default async function ProductPage({ params }: Props) {
   /** Separate queries: avoid PostgREST embeds when FK relationships are missing from schema cache. */
   const [{ data: productColorGroupRows, error: pcgError }, { data: purityRows, error: purityErr }] =
     await Promise.all([
-      supabase
-        .from('product_color_groups')
-        .select(`
-      id, color_id, images, videos, display_order, is_active,
-      color:metal_colors(id, label, code, hex, display_order)
-    `)
-        .eq('product_id', product.id)
-        .eq('is_active', true)
-        .order('display_order', { ascending: true }),
+      fetchProductColorGroups(supabase, product.id),
       purityIdsForLookup.length > 0 && !useLegacyVariants
         ? supabase.from('metal_purities').select('id, label, code, display_order, metal').in('id', purityIdsForLookup)
         : emptyPurities,
@@ -313,19 +370,7 @@ export default async function ProductPage({ params }: Props) {
     .slice()
     .sort((a, b) => a.sort_order - b.sort_order)
 
-  type Pcg = {
-    id: string
-    color_id: string
-    images: string[] | null
-    videos?: string[] | null
-    display_order: number
-    is_active?: boolean
-    color:
-      | { id: string; label: string; code: string; hex: string | null; display_order: number }
-      | [{ id: string; label: string; code: string; hex: string | null; display_order: number }]
-      | null
-  }
-  const rawGroups = ((productColorGroupRows ?? []) as Pcg[])
+  const rawGroups = (productColorGroupRows ?? [])
     .filter((row) => row.is_active !== false)
     .slice()
     .sort((a, b) => a.display_order - b.display_order)

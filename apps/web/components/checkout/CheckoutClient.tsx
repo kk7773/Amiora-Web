@@ -22,6 +22,7 @@ const addressSchema = z.object({
   line1:        z.string().min(5, 'Address required'),
   line2:        z.string().optional(),
   city:         z.string().min(2, 'City required'),
+  district:     z.string().min(2, 'District required'),
   state:        z.string().min(2, 'State required'),
   pincode:      z.string().regex(/^\d{6}$/, '6-digit pincode required'),
   email:        z.string().email('Valid email required'),
@@ -29,7 +30,7 @@ const addressSchema = z.object({
 
 type AddressData = z.infer<typeof addressSchema>
 
-type PublicCoupon = {
+type EvaluatedCoupon = {
   id: string
   code: string
   description: string | null
@@ -38,6 +39,10 @@ type PublicCoupon = {
   min_order_amount: number
   expires_at: string | null
   applies_to: string
+  applicable: boolean
+  reason?: string
+  total_discount: number
+  is_best: boolean
 }
 
 const STORES = [
@@ -60,39 +65,29 @@ export function CheckoutClient() {
   const [selectedStore,  setSelectedStore]  = useState<string>(STORES[0]!.id)
   const [pickupDate,     setPickupDate]     = useState('')
   const [loading,        setLoading]        = useState(false)
-  const [publicCoupons,  setPublicCoupons]  = useState<PublicCoupon[]>([])
   const [loadingCoupons, setLoadingCoupons] = useState(true)
-  const [selectedCouponId, setSelectedCouponId]   = useState<string | null>(null)
-  const [appliedCoupon,    setAppliedCoupon]     = useState<{
+  const [evaluatedCoupons, setEvaluatedCoupons] = useState<EvaluatedCoupon[]>([])
+  const [selectedCouponId, setSelectedCouponId] = useState<string | null>(null)
+  const [appliedCoupon, setAppliedCoupon] = useState<{
     couponId: string
     code: string
     total_discount: number
   } | null>(null)
-  const [couponBusy,   setCouponBusy]   = useState(false)
-  const [couponError,  setCouponError]  = useState<string | null>(null)
+  const [pincodeLoading, setPincodeLoading] = useState(false)
+  const [pincodeError, setPincodeError] = useState<string | null>(null)
+  const [postOffices, setPostOffices] = useState<{ name: string }[]>([])
 
-  const { register, handleSubmit, formState: { errors } } = useForm<AddressData>({
+  const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<AddressData>({
     resolver: zodResolver(addressSchema),
   })
+
+  const pincodeValue = watch('pincode')
 
   const subtotal = total()
   const couponOff = appliedCoupon?.total_discount ?? 0
   const subtotalAfterCoupon = Math.max(0, subtotal - couponOff)
   const shipping   = deliveryMethod === 'pickup' ? 0 : (subtotalAfterCoupon >= 5000 ? 0 : 199)
   const grandTotal = subtotalAfterCoupon + shipping
-
-  useEffect(() => {
-    let cancelled = false
-    setLoadingCoupons(true)
-    fetch('/api/coupons')
-      .then((r) => r.json())
-      .then((d: { coupons?: PublicCoupon[] }) => {
-        if (!cancelled) setPublicCoupons(d.coupons ?? [])
-      })
-      .catch(() => { if (!cancelled) setPublicCoupons([]) })
-      .finally(() => { if (!cancelled) setLoadingCoupons(false) })
-    return () => { cancelled = true }
-  }, [])
 
   const cartLinePayload = useCallback(
     () =>
@@ -104,43 +99,6 @@ export function CheckoutClient() {
     [items]
   )
 
-  const tryApplyCoupon = useCallback(
-    async (code: string): Promise<boolean> => {
-      setCouponBusy(true)
-      setCouponError(null)
-      try {
-        const res  = await fetch('/api/coupons/validate', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ code, items: cartLinePayload() }),
-        })
-        const data = (await res.json()) as
-          { valid?: boolean; error?: string; total_discount?: number; coupon_id?: string; code?: string }
-        if (!res.ok || !data.valid) {
-          revalidateCouponCodeRef.current = null
-          setAppliedCoupon(null)
-          setCouponError(data.error ?? 'This coupon could not be applied')
-          return false
-        }
-        revalidateCouponCodeRef.current = data.code ?? code
-        setAppliedCoupon({
-          couponId: data.coupon_id!,
-          code:     data.code!,
-          total_discount: Number(data.total_discount ?? 0),
-        })
-        return true
-      } catch {
-        revalidateCouponCodeRef.current = null
-        setCouponError('Could not apply coupon')
-        setAppliedCoupon(null)
-        return false
-      } finally {
-        setCouponBusy(false)
-      }
-    },
-    [cartLinePayload]
-  )
-
   const cartSignature = useMemo(
     () =>
       JSON.stringify(
@@ -150,37 +108,114 @@ export function CheckoutClient() {
   )
 
   useEffect(() => {
-    const code = revalidateCouponCodeRef.current
-    if (!code) return
     if (items.length === 0) {
-      revalidateCouponCodeRef.current = null
+      setEvaluatedCoupons([])
       setAppliedCoupon(null)
       setSelectedCouponId(null)
-      setCouponError(null)
+      setLoadingCoupons(false)
       return
     }
-    void tryApplyCoupon(code)
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- revalidate when line items change, not on every object identity
-  }, [cartSignature, tryApplyCoupon, items.length])
 
-  const selectCoupon = async (c: PublicCoupon) => {
+    let cancelled = false
+    setLoadingCoupons(true)
+
+    fetch('/api/coupons/evaluate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: cartLinePayload() }),
+    })
+      .then((r) => r.json())
+      .then((d: { coupons?: EvaluatedCoupon[] }) => {
+        if (cancelled) return
+        const list = d.coupons ?? []
+        setEvaluatedCoupons(list)
+
+        setAppliedCoupon((prev) => {
+          if (!prev) return null
+          const match = list.find((c) => c.id === prev.couponId)
+          if (!match?.applicable) {
+            setSelectedCouponId(null)
+            revalidateCouponCodeRef.current = null
+            return null
+          }
+          revalidateCouponCodeRef.current = match.code
+          return {
+            couponId: match.id,
+            code: match.code,
+            total_discount: match.total_discount,
+          }
+        })
+      })
+      .catch(() => { if (!cancelled) setEvaluatedCoupons([]) })
+      .finally(() => { if (!cancelled) setLoadingCoupons(false) })
+
+    return () => { cancelled = true }
+  }, [cartSignature, cartLinePayload, items.length])
+
+  useEffect(() => {
+    const pin = pincodeValue?.trim() ?? ''
+    if (!/^\d{6}$/.test(pin)) {
+      setPincodeError(null)
+      setPostOffices([])
+      return
+    }
+
+    let cancelled = false
+    setPincodeLoading(true)
+    setPincodeError(null)
+
+    fetch(`/api/pincode/${pin}`)
+      .then((r) => r.json())
+      .then((d: { ok?: boolean; state?: string; district?: string; postOffices?: { name: string }[]; error?: string }) => {
+        if (cancelled) return
+        if (!d.ok) {
+          setPincodeError(d.error ?? 'Invalid pincode')
+          setPostOffices([])
+          return
+        }
+        if (d.state) setValue('state', d.state, { shouldValidate: true })
+        if (d.district) setValue('district', d.district, { shouldValidate: true })
+        const offices = d.postOffices ?? []
+        setPostOffices(offices)
+        if (offices.length === 1) {
+          setValue('city', offices[0]!.name, { shouldValidate: true })
+        } else if (offices.length > 1) {
+          setValue('city', offices[0]!.name, { shouldValidate: true })
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPincodeError('Could not fetch pincode details')
+      })
+      .finally(() => {
+        if (!cancelled) setPincodeLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [pincodeValue, setValue])
+
+  const selectCoupon = (c: EvaluatedCoupon) => {
+    if (!c.applicable) return
+
     if (selectedCouponId === c.id) {
       revalidateCouponCodeRef.current = null
       setSelectedCouponId(null)
       setAppliedCoupon(null)
-      setCouponError(null)
       return
     }
+
+    revalidateCouponCodeRef.current = c.code
     setSelectedCouponId(c.id)
-    const ok = await tryApplyCoupon(c.code)
-    if (!ok) setSelectedCouponId(null)
+    setAppliedCoupon({
+      couponId: c.id,
+      code: c.code,
+      total_discount: c.total_discount,
+    })
   }
 
   const clearCoupon = () => {
     revalidateCouponCodeRef.current = null
     setSelectedCouponId(null)
     setAppliedCoupon(null)
-    setCouponError(null)
   }
 
   if (!cartHydrated) {
@@ -220,6 +255,7 @@ export function CheckoutClient() {
         store_id:        deliveryMethod === 'pickup' ? selectedStore : undefined,
         pickup_date:     deliveryMethod === 'pickup' ? pickupDate     : undefined,
         shipping_address: addressData,
+        coupon_code: appliedCoupon?.code,
       }
 
       if (paymentMethod === 'online') {
@@ -355,14 +391,52 @@ export function CheckoutClient() {
               <h2 className="font-display text-xl text-ink mb-6">Shipping Address</h2>
               <form onSubmit={handleSubmit(onAddressSubmit)} className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Full Name"  error={errors.full_name?.message}><input {...register('full_name')}  placeholder="Your full name"   className={inputCls} /></Field>
-                  <Field label="Email"      error={errors.email?.message}><input    {...register('email')}       placeholder="email@example.com" className={inputCls} type="email" /></Field>
-                  <Field label="Phone"      error={errors.phone?.message}><input    {...register('phone')}       placeholder="+91 XXXXX XXXXX"   className={inputCls} /></Field>
-                  <Field label="Pincode"    error={errors.pincode?.message}><input  {...register('pincode')}     placeholder="6-digit pincode"   className={inputCls} /></Field>
-                  <Field label="Address"    error={errors.line1?.message} className="sm:col-span-2"><input {...register('line1')} placeholder="Flat/House no., Street" className={inputCls} /></Field>
-                  <Field label="Area (optional)"><input {...register('line2')} placeholder="Area, Landmark" className={inputCls} /></Field>
-                  <Field label="City"       error={errors.city?.message}><input   {...register('city')}   placeholder="City"  className={inputCls} /></Field>
-                  <Field label="State"      error={errors.state?.message}><input  {...register('state')}  placeholder="State" className={inputCls} /></Field>
+                  <Field label="Pincode" error={errors.pincode?.message ?? pincodeError ?? undefined}>
+                    <div className="relative">
+                      <input
+                        {...register('pincode')}
+                        placeholder="6-digit pincode"
+                        className={inputCls}
+                        inputMode="numeric"
+                        maxLength={6}
+                      />
+                      {pincodeLoading && (
+                        <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-teal" />
+                      )}
+                    </div>
+                  </Field>
+                  <Field label="State" error={errors.state?.message}>
+                    <input {...register('state')} readOnly className={`${inputCls} bg-surface cursor-not-allowed`} placeholder="Auto-filled" />
+                  </Field>
+                  <Field label="District" error={errors.district?.message}>
+                    <input {...register('district')} readOnly className={`${inputCls} bg-surface cursor-not-allowed`} placeholder="Auto-filled" />
+                  </Field>
+                  <Field label="City / Area" error={errors.city?.message}>
+                    {postOffices.length > 1 ? (
+                      <select {...register('city')} className={inputCls}>
+                        {postOffices.map((o) => (
+                          <option key={o.name} value={o.name}>{o.name}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input {...register('city')} readOnly className={`${inputCls} bg-surface cursor-not-allowed`} placeholder="Auto-filled" />
+                    )}
+                  </Field>
+                  <Field label="Full Name" error={errors.full_name?.message}>
+                    <input {...register('full_name')} placeholder="Your full name" className={inputCls} />
+                  </Field>
+                  <Field label="Phone" error={errors.phone?.message}>
+                    <input {...register('phone')} placeholder="+91 XXXXX XXXXX" className={inputCls} />
+                  </Field>
+                  <Field label="Email" error={errors.email?.message} className="sm:col-span-2">
+                    <input {...register('email')} placeholder="email@example.com" className={inputCls} type="email" />
+                  </Field>
+                  <Field label="Address" error={errors.line1?.message} className="sm:col-span-2">
+                    <input {...register('line1')} placeholder="Flat/House no., Street" className={inputCls} />
+                  </Field>
+                  <Field label="Area / Landmark (optional)" className="sm:col-span-2">
+                    <input {...register('line2')} placeholder="Area, Landmark" className={inputCls} />
+                  </Field>
                 </div>
                 <div className="flex gap-3 pt-2">
                   <button type="button" onClick={() => setStep(0)} className="px-6 py-3 text-sm border border-divider rounded-xl hover:border-teal transition-colors">Back</button>
@@ -455,40 +529,63 @@ export function CheckoutClient() {
             </p>
             {loadingCoupons ? (
               <p className="text-sm text-ink-faint">Loading offers…</p>
-            ) : publicCoupons.length === 0 ? (
-              <p className="text-sm text-ink-faint">No public coupons right now.</p>
+            ) : evaluatedCoupons.length === 0 ? (
+              <p className="text-sm text-ink-faint">No offers available for this cart.</p>
             ) : (
-              <ul className="space-y-2 max-h-48 overflow-y-auto pr-0.5">
-                {publicCoupons.map((c) => {
+              <ul className="space-y-2 max-h-56 overflow-y-auto pr-0.5">
+                {evaluatedCoupons.map((c) => {
                   const selected = selectedCouponId === c.id
+                  const disabled = !c.applicable
                   return (
                     <li key={c.id}>
                       <button
                         type="button"
-                        onClick={() => void selectCoupon(c)}
-                        disabled={couponBusy}
-                        className={`w-full text-left rounded-xl border p-2.5 text-sm transition-colors ${
-                          selected ? 'border-teal bg-teal/5' : 'border-divider hover:border-teal/40'
-                        } ${couponBusy ? 'opacity-60' : ''}`}
+                        onClick={() => selectCoupon(c)}
+                        disabled={disabled}
+                        className={`w-full text-left rounded-xl border p-2.5 text-sm transition-colors relative ${
+                          !c.applicable
+                            ? 'border-divider opacity-50 cursor-not-allowed'
+                            : selected
+                              ? 'border-teal bg-teal/5'
+                              : c.is_best
+                                ? 'border-gold bg-gold/5 hover:border-gold/80'
+                                : 'border-divider hover:border-teal/40'
+                        }`}
                       >
+                        {c.is_best && c.applicable && (
+                          <span className="absolute top-2 right-2 text-[0.65rem] uppercase tracking-wider font-semibold text-gold bg-gold/10 px-1.5 py-0.5 rounded">
+                            Best deal
+                          </span>
+                        )}
                         <span className="font-mono font-semibold text-ink tracking-wide">{c.code}</span>
                         {c.description && (
-                          <span className="block text-xs text-ink-muted mt-0.5 line-clamp-2">{c.description}</span>
+                          <span className="block text-xs text-ink-muted mt-0.5 line-clamp-2 pr-16">{c.description}</span>
                         )}
-                        {c.min_order_amount > 0 && (
-                          <span className="block text-xs text-ink-faint mt-0.5">Min. order {formatINR(c.min_order_amount)}</span>
+                        {c.applicable && c.total_discount > 0 && (
+                          <span className="block text-xs text-teal mt-0.5 font-medium">
+                            Save {formatINR(c.total_discount)}
+                          </span>
                         )}
-                        <span className="block text-[0.7rem] text-ink-faint mt-0.5">
-                          {selected ? 'Tap to remove' : 'Tap to apply'}
-                        </span>
+                        {!c.applicable && c.reason && (
+                          <span className="block text-xs text-ink-faint mt-0.5">{c.reason}</span>
+                        )}
+                        {c.applicable && c.min_order_amount > 0 && (
+                          <span className="block text-xs text-ink-faint mt-0.5">
+                            Min. {c.applies_to === 'gem_price' ? 'diamond/stone value' : c.applies_to === 'making_charge' ? 'making charge' : 'discountable value'} {formatINR(c.min_order_amount)}
+                          </span>
+                        )}
+                        {c.applicable && (
+                          <span className="block text-[0.7rem] text-ink-faint mt-0.5">
+                            {selected ? 'Tap to remove' : 'Tap to apply'}
+                          </span>
+                        )}
                       </button>
                     </li>
                   )
                 })}
               </ul>
             )}
-            {couponError && <p className="text-xs text-red-600 mt-2">{couponError}</p>}
-            {appliedCoupon && !couponError && (
+            {appliedCoupon && (
               <div className="mt-2 flex items-center justify-between text-sm text-teal">
                 <span>Coupon {appliedCoupon.code}</span>
                 <button type="button" onClick={clearCoupon} className="inline-flex items-center gap-1 text-ink-muted hover:text-ink" aria-label="Remove coupon">

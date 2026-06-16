@@ -45,13 +45,13 @@ export function FeaturedCollections({ collections }: FeaturedCollectionsProps) {
         viewport={{ once: true, margin: '-60px' }}
       >
         {/* Heading */}
-        <motion.div variants={fadeUp} className="mb-12 text-center">
+        <motion.div variants={fadeUp} className="mb-8 md:mb-12 text-center">
           <p className="text-2xs uppercase tracking-widest2 text-ink mb-3">Explore</p>
           <h2 className="font-display text-display-2xl text-ink">Our Collections</h2>
         </motion.div>
 
-        {/* Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Grid — horizontal snap on mobile, grid on md+ */}
+        <div className="flex md:grid md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 overflow-x-auto snap-x snap-mandatory hide-scrollbar md:overflow-visible pb-1 md:pb-0">
           {collections.map((col) => {
             const slugKey = normKey(col.slug)
             const nameKey = normKey(col.name)
@@ -61,7 +61,7 @@ export function FeaturedCollections({ collections }: FeaturedCollectionsProps) {
               COLLECTION_FALLBACK_IMAGES[nameKey] ||
               (nameKey.includes('office') ? COLLECTION_FALLBACK_IMAGES['office-wear'] : null)
             return (
-            <motion.div key={col.slug} variants={fadeUp}>
+            <motion.div key={col.slug} variants={fadeUp} className="shrink-0 w-[72vw] max-w-[280px] snap-start md:w-auto md:max-w-none">
               <Link
                 href={getCollectionHref(col.slug)}
                 className="group relative block aspect-[3/4] rounded-lg overflow-hidden bg-surface"

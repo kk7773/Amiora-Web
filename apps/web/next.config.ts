@@ -1,7 +1,12 @@
 import type { NextConfig } from 'next'
+import path from 'path'
+
+const monorepoRoot = path.resolve(__dirname, '../..')
 
 const nextConfig: NextConfig = {
   transpilePackages: ['@amiora/ui', '@amiora/database', '@amiora/types'],
+  outputFileTracingRoot: monorepoRoot,
+  ...(process.env.NODE_ENV === 'production' ? { output: 'standalone' as const } : {}),
 
   images: {
     formats: ['image/avif', 'image/webp'],   // modern formats → 40-60% smaller
@@ -21,7 +26,6 @@ const nextConfig: NextConfig = {
     optimizePackageImports: ['@amiora/ui', 'lucide-react', 'framer-motion'],
   },
 
-  output: 'standalone',
   compress: true,
   logging: { fetches: { fullUrl: false } },
 }

@@ -2,17 +2,11 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { User, Package, Heart, MessageSquare, LogOut } from 'lucide-react'
+import { LogOut } from 'lucide-react'
 import { createBrowserClient } from '@amiora/database'
 import { toast } from 'sonner'
 import { cn } from '@amiora/ui'
-
-const NAV = [
-  { href: '/account',           label: 'Profile',   icon: User          },
-  { href: '/account/orders',    label: 'My Orders', icon: Package        },
-  { href: '/account/wishlist',  label: 'Wishlist',  icon: Heart          },
-  { href: '/account/requests',  label: 'Requests',  icon: MessageSquare  },
-]
+import { ACCOUNT_NAV } from '@/lib/account/nav'
 
 export function AccountSidebar() {
   const pathname = usePathname()
@@ -28,7 +22,7 @@ export function AccountSidebar() {
 
   return (
     <aside className="space-y-1">
-      {NAV.map(({ href, label, icon: Icon }) => {
+      {ACCOUNT_NAV.map(({ href, label, icon: Icon }) => {
         const active = href === '/account' ? pathname === href : pathname.startsWith(href)
         return (
           <Link

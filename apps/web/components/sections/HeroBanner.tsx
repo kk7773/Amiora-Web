@@ -32,7 +32,7 @@ export function HeroBanner() {
   }, [])
 
   return (
-    <section ref={containerRef} className="relative h-[100dvh] min-h-[500px] sm:min-h-[600px] overflow-hidden">
+    <section ref={containerRef} className="relative h-[72dvh] min-h-[420px] md:h-[100dvh] md:min-h-[500px] lg:min-h-[600px] overflow-hidden">
       <div className="hero-parallax-bg absolute inset-0">
         <Image
           src={DESKTOP_BANNER}

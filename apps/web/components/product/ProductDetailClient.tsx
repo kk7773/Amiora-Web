@@ -15,6 +15,7 @@ import { ImageGallery } from './ImageGallery'
 import { ProductShare }   from './ProductShare'
 import { StarRating }     from '@/components/ui/StarRating'
 import { useCartStore }   from '@/stores/cartStore'
+import { useWishlist }    from '@/hooks/useWishlist'
 import { breakdownToDisplayRows, formatINR, resolveLiveRate } from '@amiora/pricing'
 import { useCatalogPrices, type CatalogPricingContext } from '@/hooks/useCatalogPrices'
 import { MetalPurityTable, formatWeightGrams } from './MetalPurityTable'
@@ -200,8 +201,7 @@ export function ProductDetailClient({
     colorId:   initialColorId,
     variant:   initialVariant,
   }))
-  const [activeTab,  setActiveTab]  = useState(0)
-  const [wishlisted, setWishlisted] = useState(false)
+  const [activeTab, setActiveTab] = useState(0)
   const addItem = useCartStore((s) => s.addItem)
 
   const galleryImages = useMemo(() => {
@@ -218,6 +218,10 @@ export function ProductDetailClient({
   }, [catalog.colorGroups, sel.colorId, fallbackImages, product.name])
 
   const activeVariant = sel.variant
+  const { isWishlisted, toggle: toggleWishlist } = useWishlist(
+    product.id,
+    activeVariant?.id ?? null,
+  )
 
   const { computedPrices, goldPerGram, silverPerGram } = useCatalogPrices(
     catalog.variants,
@@ -369,11 +373,11 @@ export function ProductDetailClient({
             <ProductShare productName={product.name} />
             <button
               type="button"
-              onClick={() => setWishlisted((v) => !v)}
+              onClick={() => toggleWishlist()}
               className="flex items-center gap-1.5 px-4 py-2 text-sm border border-divider rounded-lg text-ink-muted hover:border-teal hover:text-teal transition-colors"
             >
-              <Heart className={`h-4 w-4 ${wishlisted ? 'fill-red-500 text-red-500' : ''}`} />
-              {wishlisted ? 'Wishlisted' : 'Wishlist'}
+              <Heart className={`h-4 w-4 ${isWishlisted ? 'fill-red-500 text-red-500' : ''}`} />
+              {isWishlisted ? 'Wishlisted' : 'Wishlist'}
             </button>
             <Link
               href="/stores"

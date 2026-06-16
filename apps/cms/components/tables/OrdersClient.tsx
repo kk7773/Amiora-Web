@@ -14,6 +14,7 @@ interface OrderItem {
 }
 interface Order {
   id: string; order_number: string; total_amount: number; status: string
+  discount_amount?: number; coupon_code?: string | null
   payment_mode?: string; created_at: string; shipping_address?: Record<string, string>
   pickup_store_id?: string
   user?: { full_name?: string; phone?: string } | null
@@ -145,9 +146,17 @@ export function OrdersClient({ orders: initial, stores }: { orders: Order[]; sto
                     )
                   })}
                 </div>
-                <div className="mt-3 pt-3 border-t border-divider flex items-center justify-between">
-                  <span className="text-sm text-ink-muted">Total</span>
-                  <span className="font-display text-lg font-medium text-deep-teal">₹{selected.total_amount?.toLocaleString()}</span>
+                <div className="mt-3 pt-3 border-t border-divider space-y-1">
+                  {selected.discount_amount != null && selected.discount_amount > 0 && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-ink-muted">Coupon {selected.coupon_code ? `(${selected.coupon_code})` : ''}</span>
+                      <span className="text-teal">−₹{selected.discount_amount.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-ink-muted">Total</span>
+                    <span className="font-display text-lg font-medium text-deep-teal">₹{selected.total_amount?.toLocaleString()}</span>
+                  </div>
                 </div>
               </div>
 
@@ -157,7 +166,11 @@ export function OrdersClient({ orders: initial, stores }: { orders: Order[]; sto
                 {selected.shipping_address ? (
                   <div className="text-sm text-ink bg-surface rounded-lg p-3 space-y-1">
                     <p>{selected.shipping_address.line1}{selected.shipping_address.line2 && `, ${selected.shipping_address.line2}`}</p>
-                    <p>{selected.shipping_address.city}, {selected.shipping_address.state} — {selected.shipping_address.pincode}</p>
+                    <p>
+                      {selected.shipping_address.city}
+                      {selected.shipping_address.district && `, ${selected.shipping_address.district}`}
+                      {`, ${selected.shipping_address.state}`} — {selected.shipping_address.pincode}
+                    </p>
                   </div>
                 ) : selected.pickup_store_id ? (
                   <p className="text-sm text-ink bg-surface rounded-lg p-3">

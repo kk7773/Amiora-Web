@@ -40,9 +40,9 @@ interface FormState {
 }
 
 const APPLIES_TO_LABELS: Record<AppliesTo, string> = {
-  making_charge: 'Making Charges only',
-  gem_price:     'Stone / Gem Price only',
-  both:          'Making Charges + Stone Price',
+  making_charge: 'Making charges only',
+  gem_price:     'Diamond / Stone price only',
+  both:          'Making charges + Diamond/Stone',
 }
 
 const EMPTY_FORM: FormState = {
@@ -50,7 +50,7 @@ const EMPTY_FORM: FormState = {
   description:         '',
   type:                'percentage',
   value:               '',
-  applies_to:          'both',
+  applies_to:          'making_charge',
   min_order_amount:    '',
   max_discount_amount: '',
   usage_limit:         '',
@@ -462,12 +462,12 @@ export function CouponsClient({ initial }: { initial: Coupon[] }) {
                   onChange={e => setForm(f => ({ ...f, applies_to: e.target.value as AppliesTo }))}
                   className={inp}
                 >
-                  <option value="both">Making Charges + Stone / Gem Price</option>
-                  <option value="making_charge">Making Charges only</option>
-                  <option value="gem_price">Stone / Gem Price only</option>
+                  <option value="both">{APPLIES_TO_LABELS.both}</option>
+                  <option value="making_charge">{APPLIES_TO_LABELS.making_charge}</option>
+                  <option value="gem_price">{APPLIES_TO_LABELS.gem_price}</option>
                 </select>
                 <p className="text-xs text-gray-400 mt-1">
-                  Discount is applied on these components only — never on metal price.
+                  Metal price is never discounted. Coupons apply only to making and/or diamond/stone components.
                 </p>
               </div>
 

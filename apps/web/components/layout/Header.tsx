@@ -3,11 +3,10 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useEffect, useRef, useState, useTransition } from 'react'
-import { Search, User, Heart, ShoppingBag, Menu, X, Loader2, LogOut, Package, UserCircle, ChevronDown } from 'lucide-react'
+import { Search, User, Heart, ShoppingBag, X, Loader2, LogOut, Package, UserCircle, ChevronDown } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useCartStore, useCartHydrated } from '@/stores/cartStore'
 import { MegaMenu } from './MegaMenu'
-import { MobileMenu } from './MobileMenu'
 import { createBrowserClient } from '@/lib/supabase/client'
 import { useSearchSuggest } from '@/hooks/useSearchSuggest'
 import { SearchCombobox, useSearchKeyboardNav } from '@/components/search/SearchCombobox'
@@ -24,7 +23,6 @@ const NAV_LINKS = [
 export function Header() {
   const [scrolled,     setScrolled]     = useState(false)
   const [megaOpen,     setMegaOpen]     = useState(false)
-  const [mobileOpen,   setMobileOpen]   = useState(false)
   const [searchOpen,   setSearchOpen]   = useState(false)
   const [searchQuery,  setSearchQuery]  = useState('')
   const [user,         setUser]         = useState<SupabaseUser | null>(null)
@@ -119,35 +117,32 @@ export function Header() {
 
       <header className="sticky top-0 z-40 w-full">
 
-        {/* ── MOBILE header ── deep-teal bg, hamburger left, logo centered ── */}
-        <div className="md:hidden flex h-14 items-center px-4 bg-deep-teal">
-          {/* Hamburger */}
-          <button
-            onClick={() => setMobileOpen(true)}
-            aria-label="Open menu"
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8, display: 'flex', alignItems: 'center' }}
-          >
-            <Menu size={22} color="#C9A84C" />
-          </button>
+        {/* ── MOBILE header ── slim bar, logo centered, wishlist right ── */}
+        <div className="md:hidden flex h-12 items-center px-3 bg-deep-teal">
+          <div className="w-10 shrink-0" aria-hidden />
 
-          {/* Logo — centered */}
           <Link
             href="/"
             aria-label="Amiora home"
-            style={{ flex: 1, display: 'flex', justifyContent: 'center', textDecoration: 'none' }}
+            className="flex flex-1 justify-center"
           >
             <Image
               src="https://res.cloudinary.com/dqayol6fn/image/upload/v1778259827/Amiora-final-logo-01_mu4i6k.png"
               alt="Amiora"
               width={120}
               height={40}
-              className="h-8 w-auto"
+              className="h-7 w-auto"
               priority
             />
           </Link>
 
-          {/* Right placeholder — keeps logo visually centered */}
-          <div style={{ width: 38 }} />
+          <Link
+            href={user ? '/account/wishlist' : '/login?redirect=%2Faccount%2Fwishlist'}
+            aria-label="Wishlist"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gold transition-colors active:scale-95 hover:text-gold-light"
+          >
+            <Heart className="h-5 w-5" />
+          </Link>
         </div>
 
         {/* ── DESKTOP header ── light bg, logo left, nav center, actions right ── */}
@@ -260,8 +255,6 @@ export function Header() {
         )}
       </header>
 
-      {/* Mobile drawer */}
-      <MobileMenu isOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
     </>
   )
 }

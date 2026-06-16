@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { cn } from '@amiora/ui'
 import { StarRating } from '@/components/ui/StarRating'
 import { useCartStore } from '@/stores/cartStore'
+import { useWishlist } from '@/hooks/useWishlist'
 import { formatINR } from '@/lib/pricing/calculator'
 import { getProductHref } from '@/lib/shop/paths'
 
@@ -58,7 +59,6 @@ export function ProductCard({ product, badgeLabel, className }: ProductCardProps
   const [hovered, setHovered] = useState(false)
   const [showHoverImage, setShowHoverImage] = useState(false)
   const hoverImageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [wishlisted, setWishlisted] = useState(false)
   const [imageFailed, setImageFailed] = useState(false)
   const addItem  = useCartStore((s) => s.addItem)
   const router   = useRouter()
@@ -101,6 +101,7 @@ export function ProductCard({ product, badgeLabel, className }: ProductCardProps
 
   const variants = Array.isArray(product.product_variants) ? product.product_variants : []
   const firstVariant = variants.find((v) => (v.stock_qty ?? 0) > 0 && (v.is_active ?? true)) ?? variants[0] ?? null
+  const { isWishlisted, toggle: toggleWishlist } = useWishlist(product.id, firstVariant?.id ?? null)
   const displayPrice = product.basePrice ?? 0
   const inStock = firstVariant ? (firstVariant.stock_qty ?? 0) > 0 : false
   const productHref = product.slug ? getProductHref(product as { slug: string; collectionSlug?: string | null; categorySlug?: string | null }) : '/shop'
@@ -122,11 +123,7 @@ export function ProductCard({ product, badgeLabel, className }: ProductCardProps
   }
 
   const handleWishlist = (e: React.MouseEvent) => {
-    e.preventDefault()
-    setWishlisted((v) => !v)
-    toast(wishlisted ? 'Removed from wishlist' : 'Added to wishlist', {
-      icon: wishlisted ? '💔' : '❤️',
-    })
+    toggleWishlist(e)
   }
 
   return (
@@ -205,7 +202,7 @@ export function ProductCard({ product, badgeLabel, className }: ProductCardProps
             aria-label="Toggle wishlist"
           >
             <Heart
-              className={cn('h-4 w-4', wishlisted && 'fill-red-500 text-red-500')}
+              className={cn('h-4 w-4', isWishlisted && 'fill-red-500 text-red-500')}
             />
           </button>
         </div>

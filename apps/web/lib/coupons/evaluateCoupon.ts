@@ -4,7 +4,12 @@ import { priceCartLines } from '@/lib/checkout/priceCartLines'
 export type { AppliesTo } from '@/lib/coupons/constants'
 export { APPLIES_TO_LABELS } from '@/lib/coupons/constants'
 
-export type CartLine = { product_id: string; variant_id: string; quantity: number }
+export type CartLine = {
+  product_id: string
+  variant_id: string
+  quantity: number
+  variant_sku?: string | null
+}
 
 export type CouponRow = {
   id: string

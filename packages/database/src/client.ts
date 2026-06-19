@@ -3,17 +3,31 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env['NEXT_PUBLIC_SUPABASE_URL'] ?? ''
 const supabaseAnonKey = process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'] ?? ''
 const supabaseServiceRoleKey = process.env['SUPABASE_SERVICE_ROLE_KEY'] ?? ''
+let browserClientSingleton: ReturnType<typeof createClient> | null = null
 
 /**
  * Browser/client-side Supabase client — uses anon key, respects RLS.
  */
 export function createBrowserClient() {
-  return createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-    },
-  })
+  if (typeof window === 'undefined') {
+    return createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    })
+  }
+
+  if (!browserClientSingleton) {
+    browserClientSingleton = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    })
+  }
+
+  return browserClientSingleton
 }
 
 /**

@@ -9,9 +9,11 @@ import { toast }      from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check, Store, Truck, CreditCard, ChevronRight, Loader2, Tag, X } from 'lucide-react'
 import { useCartStore, useCartHydrated }  from '@/stores/cartStore'
+import { useUser } from '@/hooks/useUser'
 import { formatINR }     from '@/lib/pricing/calculator'
 import { APPLIES_TO_LABELS, type AppliesTo } from '@/lib/coupons/constants'
 import { fadeUp }        from '@/lib/animations'
+import { getPublicRazorpayKeyId, loadRazorpayCheckout } from '@/lib/razorpay/loadCheckout'
 
 /* ── Types ── */
 type DeliveryMethod = 'online' | 'pickup'
@@ -64,6 +66,24 @@ type CartQuote = {
   coupons?: EvaluatedCoupon[]
 }
 
+type OrderPayload = {
+  items: Array<{
+    product_id: string
+    variant_id: string
+    quantity: number
+    size_label: string
+    product_name: string
+    variant_label: string
+    image_url: string | null
+  }>
+  delivery_method: DeliveryMethod
+  payment_method: PaymentMethod
+  store_id?: string
+  pickup_date?: string
+  shipping_address?: AddressData
+  coupon_code?: string
+}
+
 const STORES = [
   { id: 's1', name: 'AMIORA — Connaught Place', address: '23 Connaught Place, New Delhi 110001', phone: '+91 98765-43210', timings: 'Mon–Sat 10am–8pm' },
   { id: 's2', name: 'AMIORA — Bandra West',      address: '14 Hill Road, Bandra West, Mumbai 400050', phone: '+91 98765-43211', timings: 'Mon–Sun 10am–9pm' },
@@ -74,9 +94,11 @@ const STEPS = ['Delivery', 'Details', 'Payment']
 
 export function CheckoutClient() {
   const router = useRouter()
+  const { user } = useUser()
   const cartHydrated = useCartHydrated()
   const { items, clearCart } = useCartStore()
   const revalidateCouponCodeRef = useRef<string | null>(null)
+  const razorpayKeyId = getPublicRazorpayKeyId()
 
   const [step,           setStep]           = useState(0)
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('online')
@@ -96,8 +118,11 @@ export function CheckoutClient() {
     total_discount: number
   } | null>(null)
 
-  const { register, handleSubmit, formState: { errors } } = useForm<AddressData>({
+  const { register, handleSubmit, setValue, formState: { errors } } = useForm<AddressData>({
     resolver: zodResolver(addressSchema),
+    defaultValues: {
+      email: user?.email ?? '',
+    },
   })
 
   const subtotal = quote?.subtotal ?? 0
@@ -106,13 +131,23 @@ export function CheckoutClient() {
   const shipping = quote?.shipping ?? 0
   const grandTotal = quote?.grand_total ?? 0
 
+  useEffect(() => {
+    if (user?.email) {
+      setValue('email', user.email)
+    }
+  }, [setValue, user?.email])
+
   const orderItemsPayload = useCallback(
     () =>
       items.map((i) => ({
         product_id: i.productId,
         variant_id: i.variantId,
         quantity:   i.quantity,
+        variant_sku: i.variantLabel,
         size_label: i.sizeLabel,
+        product_name: i.productName,
+        variant_label: i.variantLabel,
+        image_url: i.imageUrl ?? null,
       })),
     [items],
   )
@@ -123,6 +158,7 @@ export function CheckoutClient() {
         product_id: i.productId,
         variant_id: i.variantId,
         quantity:   i.quantity,
+        variant_sku: i.variantLabel,
       })),
     [items],
   )
@@ -293,7 +329,7 @@ export function CheckoutClient() {
 
     setLoading(true)
     try {
-      const payload = {
+      const payload: OrderPayload = {
         items: orderItemsPayload(),
         delivery_method: deliveryMethod,
         payment_method:  paymentMethod,
@@ -306,7 +342,7 @@ export function CheckoutClient() {
       if (paymentMethod === 'online') {
         await handleRazorpay(payload)
       } else {
-        const res  = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, status: 'booked_for_pickup' }) })
+        const res  = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
         const data = (await res.json()) as { order_number?: string; error?: string }
         if (!res.ok) {
           toast.error(data.error ?? 'Order could not be placed.')
@@ -327,7 +363,14 @@ export function CheckoutClient() {
   }
 
   /* ── Razorpay ── */
-  const handleRazorpay = async (payload: object) => {
+  const handleRazorpay = async (payload: OrderPayload) => {
+    if (!razorpayKeyId) {
+      toast.error('Razorpay key is missing.')
+      return
+    }
+
+    await loadRazorpayCheckout()
+
     const orderRes  = await fetch('/api/payment/create-order', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -346,13 +389,22 @@ export function CheckoutClient() {
     const payAmount = orderData.grand_total ?? grandTotal
 
     const options = {
-      key:      process.env['NEXT_PUBLIC_RAZORPAY_KEY_ID'],
+      key:      razorpayKeyId,
       amount:   payAmount * 100,
       currency: orderData.currency ?? 'INR',
       name:     'Amiora Diamonds',
       order_id: orderData.id,
       handler: async (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => {
-        const res  = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, payment_id: response.razorpay_payment_id, razorpay_order_id: response.razorpay_order_id, status: 'confirmed' }) })
+        const res  = await fetch('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...payload,
+            payment_id: response.razorpay_payment_id,
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_signature: response.razorpay_signature,
+          }),
+        })
         const data = (await res.json()) as { order_number?: string; error?: string }
         if (!res.ok) {
           toast.error(data.error ?? 'Payment succeeded but we could not save your order. Please contact support with your payment ID.')
@@ -365,7 +417,11 @@ export function CheckoutClient() {
         clearCart()
         router.push(`/order-confirmation/${data.order_number}`)
       },
-      prefill: { name: '', email: '', contact: '' },
+      prefill: {
+        name: payload.shipping_address?.full_name ?? user?.user_metadata?.full_name ?? '',
+        email: payload.shipping_address?.email ?? user?.email ?? '',
+        contact: payload.shipping_address?.phone ?? '',
+      },
       theme:   { color: '#285260' },
       modal:   {
         ondismiss: () => {

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/server'
 import { computeCartQuote } from '@/lib/checkout/computeCartQuote'
+import { createServerClient } from '@/lib/supabase/server'
 import type { CartLine } from '@/lib/coupons/evaluateCoupon'
+import { getRazorpayServerCredentials } from '@/lib/razorpay/serverConfig'
 
 export async function POST(req: NextRequest) {
   try {
@@ -40,8 +41,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: itemErrors[0] }, { status: 400 })
     }
 
-    const keyId     = process.env['RAZORPAY_KEY_ID']
-    const keySecret = process.env['RAZORPAY_KEY_SECRET']
+    const { keyId, keySecret } = getRazorpayServerCredentials()
 
     if (!keyId || !keySecret) {
       return NextResponse.json({ error: 'Payment gateway not configured' }, { status: 503 })
@@ -56,9 +56,13 @@ export async function POST(req: NextRequest) {
         'Content-Type':  'application/json',
       },
       body: JSON.stringify({
-        amount:   quote.grand_total * 100,
+        amount:   Math.round(quote.grand_total * 100),
         currency: 'INR',
         receipt:  `rcpt_${Date.now()}`,
+        notes: {
+          delivery_method: body.delivery_method ?? 'online',
+          coupon_code: body.coupon_code?.trim().toUpperCase() ?? '',
+        },
       }),
     })
 

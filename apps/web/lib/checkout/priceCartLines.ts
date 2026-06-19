@@ -34,6 +34,7 @@ type ProductRow = {
 type VariantRow = {
   id: string
   product_id: string
+  sku?: string | null
   metal_weight_g: number | null
   purity_id: string
   is_active: boolean
@@ -82,8 +83,8 @@ export async function priceCartLines(
       .eq('status', 'active'),
     supabase
       .from('product_variants')
-      .select('id, product_id, metal_weight_g, purity_id, is_active, stock_qty, making_charge_discount_pct, gem_price_discount_pct')
-      .in('id', variantIds),
+      .select('id, product_id, sku, metal_weight_g, purity_id, is_active, stock_qty, making_charge_discount_pct, gem_price_discount_pct')
+      .in('product_id', productIds),
   ])
 
   const purityIds = [
@@ -96,12 +97,22 @@ export async function priceCartLines(
 
   const productMap = new Map((products ?? []).map((p) => [(p as ProductRow).id, p as ProductRow]))
   const variantMap = new Map((variants ?? []).map((v) => [(v as VariantRow).id, v as VariantRow]))
+  const variantSkuMap = new Map(
+    (variants ?? [])
+      .map((v) => v as VariantRow)
+      .filter((v) => typeof v.sku === 'string' && v.sku.trim().length > 0)
+      .map((v) => [`${v.product_id}:${v.sku!.trim().toLowerCase()}`, v] as const),
+  )
   const purityMap = new Map((purities ?? []).map((p) => [(p as PurityRow).id, p as PurityRow]))
 
   for (const line of items) {
     const qty = clampQty(line.quantity)
     const product = productMap.get(line.product_id)
-    const variant = variantMap.get(line.variant_id)
+    const variant =
+      variantMap.get(line.variant_id) ??
+      (line.variant_sku
+        ? variantSkuMap.get(`${line.product_id}:${line.variant_sku.trim().toLowerCase()}`)
+        : undefined)
 
     if (!product) {
       errors.push('A product in your cart is no longer available')
@@ -161,7 +172,7 @@ export async function priceCartLines(
 
     lines.push({
       product_id: line.product_id,
-      variant_id: line.variant_id,
+      variant_id: variant.id,
       quantity: qty,
       unit_price: unitPrice,
       line_total: unitPrice * qty,

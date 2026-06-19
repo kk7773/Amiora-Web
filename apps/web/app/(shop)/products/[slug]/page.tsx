@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
+import { cache } from 'react'
+import { unstable_cache } from 'next/cache'
 import { createServerClient } from '@amiora/database'
 import { ProductDetailClient } from '@/components/product/ProductDetailClient'
 import { ProductCard }         from '@/components/product/ProductCard'
@@ -222,7 +224,7 @@ async function fetchProductColorGroups(
   return { data: rows, error: null }
 }
 
-async function fetchPdpProduct(
+async function fetchPdpProductImpl(
   supabase: ReturnType<typeof createServerClient>,
   slug: string,
 ): Promise<{ data: PdpProductRow | null; error: { message: string; code?: string } | null }> {
@@ -279,11 +281,18 @@ async function fetchPdpProduct(
   return { data: row, error: null }
 }
 
+const fetchPdpProduct = cache((slug: string) =>
+  unstable_cache(
+    async () => fetchPdpProductImpl(createServerClient(), slug),
+    ['pdp-product', slug],
+    { revalidate: 120 },
+  )(),
+)
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   try {
     const { slug } = await params
-    const supabase = createServerClient()
-    const { data } = await fetchPdpProduct(supabase, slug)
+    const { data } = await fetchPdpProduct(slug)
     if (!data) return {}
     type Img = { url: string; is_primary: boolean }
     const imgs = (data.product_images ?? []) as Img[]
@@ -321,7 +330,7 @@ export default async function ProductPage({ params }: Props) {
   const { slug } = await params
   const supabase = createServerClient()
 
-  const { data: product, error: productError } = await fetchPdpProduct(supabase, slug)
+  const { data: product, error: productError } = await fetchPdpProduct(slug)
 
   if (productError) {
     console.error('[ProductPage] query error:', productError.message, '| slug:', slug)
@@ -664,6 +673,8 @@ export default async function ProductPage({ params }: Props) {
           collectionName:  (product.collection as unknown as { name: string } | null)?.name ?? null,
           collectionSlug:  (product.collection as unknown as { slug: string } | null)?.slug ?? null,
           categoryName:    (product.category   as unknown as { name: string } | null)?.name ?? null,
+          categorySlug:    (product.category   as unknown as { slug: string } | null)?.slug ?? null,
+          slug:            slug,
         }}
         catalog={{
           colorGroups: catalogColorGroups,

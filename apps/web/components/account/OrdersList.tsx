@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Package, X, ChevronRight } from 'lucide-react'
+import { Package, X, ChevronRight, Truck, ExternalLink } from 'lucide-react'
 import { formatINR } from '@/lib/pricing/calculator'
 
 const STATUS_STYLES: Record<string, string> = {
@@ -22,7 +22,8 @@ interface OrderItem {
   quantity: number
   unit_price: number
   size_label: string | null
-  product: { name: string; slug: string; product_images: { url: string; is_primary: boolean }[] } | null
+  imageUrl?: string | null
+  product: { name: string; slug: string; product_images?: { url: string; is_primary: boolean }[] } | null
 }
 
 interface Order {
@@ -33,6 +34,9 @@ interface Order {
   created_at: string
   delivery_method: string
   pickup_date: string | null
+  awb_code?: string | null
+  courier_name?: string | null
+  tracking_url?: string | null
   order_items: OrderItem[]
 }
 
@@ -77,10 +81,13 @@ export function OrdersList({ orders }: { orders: Order[] }) {
             {/* Item thumbnails */}
             <div className="flex gap-2 mt-4">
               {order.order_items.slice(0, 4).map((item) => {
-                const img = item.product?.product_images.find((i) => i.is_primary) ?? item.product?.product_images[0]
+                const imgUrl =
+                  item.imageUrl ??
+                  item.product?.product_images?.find((i) => i.is_primary)?.url ??
+                  item.product?.product_images?.[0]?.url
                 return (
                   <div key={item.id} className="relative h-12 w-12 rounded-md overflow-hidden bg-surface-2 shrink-0">
-                    {img ? <Image src={img.url} alt="" fill className="object-cover" sizes="48px" /> : null}
+                    {imgUrl ? <Image src={imgUrl} alt="" fill className="object-cover" sizes="48px" /> : null}
                   </div>
                 )
               })}
@@ -130,11 +137,14 @@ export function OrdersList({ orders }: { orders: Order[] }) {
                 {/* Items */}
                 <div className="space-y-3">
                   {selected.order_items.map((item) => {
-                    const img = item.product?.product_images.find((i) => i.is_primary) ?? item.product?.product_images[0]
+                    const imgUrl =
+                      item.imageUrl ??
+                      item.product?.product_images?.find((i) => i.is_primary)?.url ??
+                      item.product?.product_images?.[0]?.url
                     return (
                       <div key={item.id} className="flex gap-4 py-3 border-b border-divider last:border-0">
                         <div className="relative h-16 w-16 rounded-lg overflow-hidden bg-surface shrink-0">
-                          {img && <Image src={img.url} alt="" fill className="object-cover" sizes="64px" />}
+                          {imgUrl && <Image src={imgUrl} alt="" fill className="object-cover" sizes="64px" />}
                         </div>
                         <div className="flex-1 min-w-0">
                           <Link href={`/products/${item.product?.slug}`} className="text-sm font-medium text-ink hover:text-deep-teal transition-colors line-clamp-2">
@@ -153,6 +163,28 @@ export function OrdersList({ orders }: { orders: Order[] }) {
                   <span>Total</span>
                   <span>{formatINR(selected.total_amount)}</span>
                 </div>
+
+                {/* Shipment tracking */}
+                {selected.awb_code && (
+                  <div className="rounded-xl border border-divider bg-surface p-4 space-y-2">
+                    <div className="flex items-center gap-2 text-sm font-medium text-ink">
+                      <Truck className="h-4 w-4 text-teal" />
+                      Shipment
+                    </div>
+                    <p className="text-sm text-ink-muted">
+                      AWB: <span className="font-mono text-ink">{selected.awb_code}</span>
+                      {selected.courier_name ? ` · ${selected.courier_name}` : ''}
+                    </p>
+                    <a
+                      href={selected.tracking_url ?? `https://shiprocket.co/tracking/${selected.awb_code}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm font-medium text-teal hover:text-deep-teal"
+                    >
+                      Track shipment <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  </div>
+                )}
 
                 {/* Actions */}
                 {(selected.status === 'pending' || selected.status === 'confirmed') && (

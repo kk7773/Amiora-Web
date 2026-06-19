@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { Search, Filter, X, ChevronRight, Package, Loader2 } from 'lucide-react'
+import { Search, X, ChevronRight, Package, Loader2, Truck, ExternalLink } from 'lucide-react'
 import { StatusBadge, Badge } from '@/components/ui/Badge'
 import { toast } from 'sonner'
 
@@ -17,8 +17,20 @@ interface Order {
   discount_amount?: number; coupon_code?: string | null
   payment_mode?: string; created_at: string; shipping_address?: Record<string, string>
   pickup_store_id?: string
+  awb_code?: string | null
+  courier_name?: string | null
+  tracking_url?: string | null
   user?: { full_name?: string; phone?: string } | null
   items?: OrderItem[]
+}
+
+function canCreateShipment(order: Order) {
+  return (
+    Boolean(order.shipping_address) &&
+    !order.pickup_store_id &&
+    !order.awb_code &&
+    (order.status === 'confirmed' || order.status === 'processing')
+  )
 }
 
 export function OrdersClient({ orders: initial, stores }: { orders: Order[]; stores: { id: string; name: string }[] }) {
@@ -28,6 +40,7 @@ export function OrdersClient({ orders: initial, stores }: { orders: Order[]; sto
   const [selected, setSelected] = useState<Order | null>(null)
   const [newStatus, setNewStatus] = useState('')
   const [saving, setSaving]   = useState(false)
+  const [shipping, setShipping] = useState(false)
 
   const filtered = orders.filter(o => {
     if (search && !o.order_number.includes(search) && !o.user?.full_name?.toLowerCase().includes(search.toLowerCase())) return false
@@ -48,6 +61,43 @@ export function OrdersClient({ orders: initial, stores }: { orders: Order[]; sto
       setSelected(o => o ? { ...o, status: newStatus } : null)
       toast.success('Status updated')
     } catch { toast.error('Failed to update') } finally { setSaving(false) }
+  }
+
+  async function createShipment() {
+    if (!selected) return
+    setShipping(true)
+    try {
+      const res = await fetch(`/api/orders/${selected.id}/shiprocket`, { method: 'POST' })
+      const data = (await res.json()) as {
+        awb_code?: string
+        courier_name?: string
+        tracking_url?: string
+        error?: string
+        already_created?: boolean
+      }
+      if (!res.ok) throw new Error(data.error ?? 'Shipment creation failed')
+
+      const patch = {
+        awb_code: data.awb_code ?? null,
+        courier_name: data.courier_name ?? null,
+        tracking_url: data.tracking_url ?? null,
+        status: selected.status === 'confirmed' ? 'processing' : selected.status,
+      }
+
+      setOrders((os) => os.map((o) => (o.id === selected.id ? { ...o, ...patch } : o)))
+      setSelected((o) => (o ? { ...o, ...patch } : null))
+      setNewStatus(patch.status)
+
+      toast.success(
+        data.already_created
+          ? 'Shipment already exists'
+          : `AWB assigned: ${data.awb_code}`,
+      )
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create shipment')
+    } finally {
+      setShipping(false)
+    }
   }
 
   return (
@@ -179,6 +229,43 @@ export function OrdersClient({ orders: initial, stores }: { orders: Order[]; sto
                   </p>
                 ) : null}
               </div>
+
+              {/* Shiprocket */}
+              {selected.shipping_address && !selected.pickup_store_id && (
+                <div className="bg-surface rounded-lg p-4 space-y-3">
+                  <p className="text-xs text-ink-faint uppercase tracking-wider">Shiprocket</p>
+                  {selected.awb_code ? (
+                    <div className="space-y-2 text-sm">
+                      <p><span className="text-ink-muted">AWB:</span> <span className="font-mono text-teal">{selected.awb_code}</span></p>
+                      {selected.courier_name && (
+                        <p><span className="text-ink-muted">Courier:</span> {selected.courier_name}</p>
+                      )}
+                      {(selected.tracking_url ?? selected.awb_code) && (
+                        <a
+                          href={selected.tracking_url ?? `https://shiprocket.co/tracking/${selected.awb_code}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-teal hover:text-deep-teal text-sm font-medium"
+                        >
+                          Track shipment <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                    </div>
+                  ) : canCreateShipment(selected) ? (
+                    <button
+                      type="button"
+                      onClick={createShipment}
+                      disabled={shipping}
+                      className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-deep-teal text-white rounded-lg text-sm hover:bg-teal disabled:opacity-60"
+                    >
+                      {shipping ? <Loader2 className="w-4 h-4 animate-spin" /> : <Truck className="w-4 h-4" />}
+                      Create Shiprocket Shipment
+                    </button>
+                  ) : (
+                    <p className="text-xs text-ink-muted">Shipment available when order is confirmed or processing.</p>
+                  )}
+                </div>
+              )}
 
               {/* Update Status */}
               <div className="bg-surface rounded-lg p-4 flex items-center gap-3">

@@ -161,3 +161,16 @@ export function getProductHref(product: {
   const parentSlug = product.collectionSlug ?? product.categorySlug
   return parentSlug ? `/shop/${parentSlug}/${product.slug}` : `/products/${product.slug}`
 }
+
+export function getCartItemHref(item: {
+  productSlug?: string
+  collectionSlug?: string | null
+  categorySlug?: string | null
+}) {
+  if (!item.productSlug) return '/shop'
+  return getProductHref({
+    slug: item.productSlug,
+    collectionSlug: item.collectionSlug,
+    categorySlug: item.categorySlug,
+  })
+}

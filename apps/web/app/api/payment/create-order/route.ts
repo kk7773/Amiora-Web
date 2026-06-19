@@ -1,8 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createServerClient } from '@/lib/supabase/server'
+import { computeCartQuote } from '@/lib/checkout/computeCartQuote'
+import type { CartLine } from '@/lib/coupons/evaluateCoupon'
 
 export async function POST(req: NextRequest) {
   try {
-    const { amount } = (await req.json()) as { amount: number }
+    const body = (await req.json()) as {
+      items?: CartLine[]
+      coupon_code?: string
+      delivery_method?: string
+    }
+
+    const items = Array.isArray(body.items) ? body.items : []
+    if (items.length === 0) {
+      return NextResponse.json({ error: 'Cart is empty' }, { status: 400 })
+    }
+
+    const supabase = await createServerClient()
+    const quote = await computeCartQuote(supabase, {
+      items,
+      coupon_code: body.coupon_code,
+      delivery_method: body.delivery_method,
+      validateStock: true,
+    })
+
+    if (quote.lines.length === 0) {
+      return NextResponse.json({ error: quote.errors[0] ?? 'Could not price cart' }, { status: 400 })
+    }
+
+    if (body.coupon_code?.trim() && !quote.coupon) {
+      return NextResponse.json(
+        { error: quote.errors.find((e) => e.toLowerCase().includes('coupon')) ?? 'Coupon is not applicable' },
+        { status: 400 },
+      )
+    }
+
+    const itemErrors = quote.errors.filter((e) => !e.toLowerCase().includes('coupon'))
+    if (itemErrors.length > 0) {
+      return NextResponse.json({ error: itemErrors[0] }, { status: 400 })
+    }
 
     const keyId     = process.env['RAZORPAY_KEY_ID']
     const keySecret = process.env['RAZORPAY_KEY_SECRET']
@@ -20,14 +56,26 @@ export async function POST(req: NextRequest) {
         'Content-Type':  'application/json',
       },
       body: JSON.stringify({
-        amount:   amount * 100,
+        amount:   quote.grand_total * 100,
         currency: 'INR',
         receipt:  `rcpt_${Date.now()}`,
       }),
     })
 
-    const data = (await response.json()) as object
-    return NextResponse.json(data)
+    const data = (await response.json()) as { id?: string; currency?: string; error?: { description?: string } }
+
+    if (!response.ok || !data.id) {
+      return NextResponse.json(
+        { error: data.error?.description ?? 'Payment order creation failed' },
+        { status: 502 },
+      )
+    }
+
+    return NextResponse.json({
+      id: data.id,
+      currency: data.currency ?? 'INR',
+      grand_total: quote.grand_total,
+    })
   } catch {
     return NextResponse.json({ error: 'Payment order creation failed' }, { status: 500 })
   }

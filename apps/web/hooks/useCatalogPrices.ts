@@ -19,7 +19,11 @@ export function useCatalogPrices(
   purities: CatalogPurity[],
   ctx: CatalogPricingContext,
 ) {
-  const { gold, silver, loading } = usePricing()
+  const { gold, silver, loading } = usePricing({
+    deferFetch: true,
+    initialGoldPerGram: ctx.initialGoldPerGram,
+    initialSilverPerGram: ctx.initialSilverPerGram,
+  })
 
   const goldPerGram = gold?.pricePerGram ?? ctx.initialGoldPerGram
   const silverPerGram = silver?.pricePerGram ?? ctx.initialSilverPerGram

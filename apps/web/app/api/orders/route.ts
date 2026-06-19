@@ -1,19 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@amiora/database'
-import {
-  aggregateCartComponents,
-  evaluateCoupon,
-  type CartLine,
-  type CouponRow,
-} from '@/lib/coupons/evaluateCoupon'
-
-const SHIPPING_FEE = 199
-const FREE_SHIPPING_THRESHOLD = 5000
-
-function computeShipping(subtotalAfterCoupon: number, deliveryMethod: string): number {
-  if (deliveryMethod === 'pickup') return 0
-  return subtotalAfterCoupon >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_FEE
-}
+import { computeCartQuote } from '@/lib/checkout/computeCartQuote'
+import type { CartLine } from '@/lib/coupons/evaluateCoupon'
 
 export async function POST(req: NextRequest) {
   try {
@@ -22,12 +10,8 @@ export async function POST(req: NextRequest) {
         product_id: string
         variant_id: string
         quantity: number
-        unit_price: number
         size_label: string
-        metal_weight_g?: number
-        metal_rate_per_gram?: number
       }[]
-      total_amount: number
       delivery_method: string
       payment_method?: string
       store_id?: string
@@ -46,68 +30,50 @@ export async function POST(req: NextRequest) {
     const supabase = createServerClient()
     const { data: { user } } = await supabase.auth.getUser()
 
-    const subtotal = body.items.reduce(
-      (sum, item) => sum + Number(item.unit_price) * Number(item.quantity),
-      0,
-    )
+    const cartLines: CartLine[] = body.items.map((i) => ({
+      product_id: i.product_id,
+      variant_id: i.variant_id,
+      quantity: i.quantity,
+    }))
 
-    let discountAmount = 0
-    let couponId: string | null = null
-    let couponCode: string | null = null
+    const quote = await computeCartQuote(supabase, {
+      items: cartLines,
+      coupon_code: body.coupon_code,
+      delivery_method: body.delivery_method,
+      validateStock: true,
+    })
 
-    if (body.coupon_code?.trim()) {
-      const code = body.coupon_code.toUpperCase().trim()
-      const cartLines: CartLine[] = body.items.map((i) => ({
-        product_id: i.product_id,
-        variant_id: i.variant_id,
-        quantity: i.quantity,
-      }))
-
-      const components = await aggregateCartComponents(supabase, cartLines)
-
-      const { data: coupon, error: couponErr } = await supabase
-        .from('coupons')
-        .select('*')
-        .eq('code', code)
-        .eq('is_active', true)
-        .single()
-
-      if (couponErr || !coupon) {
-        return NextResponse.json({ error: 'Invalid coupon code' }, { status: 400 })
-      }
-
-      const evaluation = evaluateCoupon(coupon as CouponRow, components)
-      if (!evaluation.applicable) {
-        return NextResponse.json(
-          { error: evaluation.reason ?? 'Coupon is not applicable to this order' },
-          { status: 400 },
-        )
-      }
-
-      discountAmount = evaluation.total_discount
-      couponId = (coupon as CouponRow).id
-      couponCode = (coupon as CouponRow).code
-    }
-
-    const subtotalAfterCoupon = Math.max(0, subtotal - discountAmount)
-    const shipping = computeShipping(subtotalAfterCoupon, body.delivery_method)
-    const authoritativeTotal = subtotalAfterCoupon + shipping
-
-    if (Math.abs(authoritativeTotal - Number(body.total_amount)) > 1) {
+    if (quote.lines.length === 0) {
       return NextResponse.json(
-        { error: 'Order total mismatch. Please refresh checkout and try again.' },
+        { error: quote.errors[0] ?? 'Cart is invalid' },
         { status: 400 },
       )
     }
+
+    if (body.coupon_code?.trim() && !quote.coupon) {
+      return NextResponse.json(
+        { error: quote.errors.find((e) => e.toLowerCase().includes('coupon')) ?? 'Coupon is not applicable' },
+        { status: 400 },
+      )
+    }
+
+    const itemErrors = quote.errors.filter((e) => !e.toLowerCase().includes('coupon'))
+    if (itemErrors.length > 0) {
+      return NextResponse.json({ error: itemErrors[0] }, { status: 400 })
+    }
+
+    const sizeByKey = new Map(
+      body.items.map((i) => [`${i.product_id}:${i.variant_id}`, i.size_label ?? '']),
+    )
 
     const { data: order, error } = await supabase
       .from('orders')
       .insert({
         user_id: user?.id ?? null,
-        total_amount: authoritativeTotal,
-        discount_amount: discountAmount,
-        coupon_id: couponId,
-        coupon_code: couponCode,
+        total_amount: quote.grand_total,
+        discount_amount: quote.discount_amount,
+        coupon_id: quote.coupon?.id ?? null,
+        coupon_code: quote.coupon?.code ?? null,
         status: body.status ?? 'pending',
         payment_method: body.payment_method ?? 'online',
         store_id: body.store_id ?? null,
@@ -121,32 +87,29 @@ export async function POST(req: NextRequest) {
     if (error || !order) throw error ?? new Error('Order creation failed')
 
     await supabase.from('order_items').insert(
-      body.items.map((item) => ({
+      quote.lines.map((line) => ({
         order_id: order.id,
-        product_id: item.product_id,
-        variant_id: item.variant_id,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        size_label: item.size_label,
-        metal_weight_g:
-          item.metal_weight_g != null && Number.isFinite(item.metal_weight_g)
-            ? item.metal_weight_g
-            : null,
+        product_id: line.product_id,
+        variant_id: line.variant_id,
+        quantity: line.quantity,
+        unit_price: line.unit_price,
+        size_label: sizeByKey.get(`${line.product_id}:${line.variant_id}`) ?? '',
+        metal_weight_g: line.metal_weight_g,
       })),
     )
 
-    if (couponId) {
+    if (quote.coupon?.id) {
       const { data: couponRow } = await supabase
         .from('coupons')
         .select('used_count')
-        .eq('id', couponId)
+        .eq('id', quote.coupon.id)
         .single()
 
       if (couponRow) {
         await supabase
           .from('coupons')
           .update({ used_count: (couponRow.used_count ?? 0) + 1 })
-          .eq('id', couponId)
+          .eq('id', quote.coupon.id)
       }
     }
 

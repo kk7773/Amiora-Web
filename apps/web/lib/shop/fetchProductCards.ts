@@ -1,4 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { unstable_cache } from 'next/cache'
+import { createServerClient } from '@amiora/database'
 import {
   PRODUCT_CARD_SELECT,
   PRODUCT_CATEGORY_EMBED,
@@ -6,16 +8,27 @@ import {
   type ProductCardRaw,
 } from '@/lib/shop/mapProductForCard'
 
+/** Colour-group embed — required for catalog-era product thumbnails. */
+const PCG_EMBED =
+  'product_color_groups(id,color_id,images,display_order,is_active)'
+
 /** Minimal columns — safe when optional migrations/columns are missing. */
 export const PRODUCT_CARD_SELECT_LITE =
-  `id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,collection:${PRODUCT_COLLECTION_EMBED}(slug),category:${PRODUCT_CATEGORY_EMBED}(slug),product_images(url,alt_text,is_primary,is_hover),product_variants(id,sku,price,stock_qty,metal_weight_g,purity_id,is_active)`
+  `id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,collection:${PRODUCT_COLLECTION_EMBED}(slug),category:${PRODUCT_CATEGORY_EMBED}(slug),product_images(url,alt_text,is_primary,is_hover),${PCG_EMBED},product_variants(id,sku,price,stock_qty,metal_weight_g,purity_id,is_active)`
+
+/** Full select without stone_lines — retry when stone_lines column missing. */
+export const PRODUCT_CARD_SELECT_MID =
+  `id,name,slug,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,collection:${PRODUCT_COLLECTION_EMBED}(slug),category:${PRODUCT_CATEGORY_EMBED}(slug),product_images(*),${PCG_EMBED},product_variants(id,sku,price,stock_qty,metal_weight_g,purity_id,is_active)`
 
 /** Listing pages need created_at for sorting. */
 export const PRODUCT_LISTING_SELECT_FULL =
-  `id,name,slug,created_at,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,stone_lines,collection:${PRODUCT_COLLECTION_EMBED}(slug),category:${PRODUCT_CATEGORY_EMBED}(slug),product_images(*),product_color_groups(id,color_id,images,display_order,is_active),product_variants(id,sku,price,stock_qty,metal_weight_g,purity_id,is_active)`
+  `id,name,slug,created_at,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,stone_lines,collection:${PRODUCT_COLLECTION_EMBED}(slug),category:${PRODUCT_CATEGORY_EMBED}(slug),product_images(*),${PCG_EMBED},product_variants(id,sku,price,stock_qty,metal_weight_g,purity_id,is_active)`
+
+export const PRODUCT_LISTING_SELECT_MID =
+  `id,name,slug,created_at,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,collection:${PRODUCT_COLLECTION_EMBED}(slug),category:${PRODUCT_CATEGORY_EMBED}(slug),product_images(*),${PCG_EMBED},product_variants(id,sku,price,stock_qty,metal_weight_g,purity_id,is_active)`
 
 export const PRODUCT_LISTING_SELECT_LITE =
-  `id,name,slug,created_at,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,collection:${PRODUCT_COLLECTION_EMBED}(slug),category:${PRODUCT_CATEGORY_EMBED}(slug),product_images(url,alt_text,is_primary,is_hover),product_variants(id,sku,price,stock_qty,metal_weight_g,purity_id,is_active)`
+  `id,name,slug,created_at,making_charge_pct,making_charge_discount_pct,gem_price_discount_pct,collection:${PRODUCT_COLLECTION_EMBED}(slug),category:${PRODUCT_CATEGORY_EMBED}(slug),product_images(url,alt_text,is_primary,is_hover),${PCG_EMBED},product_variants(id,sku,price,stock_qty,metal_weight_g,purity_id,is_active)`
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ProductQuery = any
@@ -29,13 +42,14 @@ function logQueryError(label: string, message: string) {
 }
 
 /**
- * Run a product query with full select; on failure retry with lite select.
+ * Run a product query: full → mid (no stone_lines) → lite.
  */
 export async function runProductQuery<T>(
   supabase: SupabaseClient,
   fullSelect: string,
   liteSelect: string,
   apply: ProductQueryApplier,
+  midSelect?: string,
 ): Promise<{ data: T[]; error: string | null }> {
   const fullResult = await apply(
     supabase.from('products').select(fullSelect).eq('status', 'active'),
@@ -47,6 +61,18 @@ export async function runProductQuery<T>(
 
   if (fullResult.error) {
     logQueryError('full select failed', fullResult.error.message)
+  }
+
+  if (midSelect) {
+    const midResult = await apply(
+      supabase.from('products').select(midSelect).eq('status', 'active'),
+    )
+    if (!midResult.error && midResult.data) {
+      return { data: midResult.data as T[], error: null }
+    }
+    if (midResult.error) {
+      logQueryError('mid select failed', midResult.error.message)
+    }
   }
 
   const liteResult = await apply(
@@ -76,8 +102,22 @@ export async function fetchActiveProductCards(
   supabase: SupabaseClient,
   options: FetchActiveProductCardsOptions = {},
 ): Promise<{ products: ProductCardRaw[]; error: string | null }> {
+  const cacheKey = JSON.stringify(options)
+
+  return unstable_cache(
+    async () => fetchActiveProductCardsImpl(createServerClient(), options),
+    ['fetchActiveProductCards', cacheKey],
+    { revalidate: 120 },
+  )()
+}
+
+async function fetchActiveProductCardsImpl(
+  supabase: SupabaseClient,
+  options: FetchActiveProductCardsOptions = {},
+): Promise<{ products: ProductCardRaw[]; error: string | null }> {
   const useListing = options.select === 'listing'
   const fullSelect = useListing ? PRODUCT_LISTING_SELECT_FULL : PRODUCT_CARD_SELECT
+  const midSelect = useListing ? PRODUCT_LISTING_SELECT_MID : PRODUCT_CARD_SELECT_MID
   const liteSelect = useListing ? PRODUCT_LISTING_SELECT_LITE : PRODUCT_CARD_SELECT_LITE
 
   const apply: ProductQueryApplier = (base) => {
@@ -115,6 +155,7 @@ export async function fetchActiveProductCards(
     fullSelect,
     liteSelect,
     apply,
+    midSelect,
   )
 
   return { products: data, error }

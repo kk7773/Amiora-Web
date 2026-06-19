@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { fadeUp, stagger } from '@/lib/animations'
 import { getCollectionHref } from '@/lib/shop/paths'
+import { resolveCollectionImageUrl } from '@/lib/shop/collectionFallbackImages'
 
 interface CollectionCard {
   id: string
@@ -17,22 +18,6 @@ interface CollectionCard {
 
 interface FeaturedCollectionsProps {
   collections: CollectionCard[]
-}
-
-const COLLECTION_FALLBACK_IMAGES: Record<string, string> = {
-  bridal: 'https://images.unsplash.com/photo-1611652022419-a9419f74343d?auto=format&fit=crop&w=1200&q=80',
-  everyday: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=1200&q=80',
-  'office-wear': 'https://images.unsplash.com/photo-1627293509201-cd0a9fce9fca?auto=format&fit=crop&w=1200&q=80',
-  'gift-sets': 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=1200&q=80',
-}
-
-function normKey(input: string) {
-  return input
-    .trim()
-    .toLowerCase()
-    .replace(/&/g, 'and')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
 }
 
 export function FeaturedCollections({ collections }: FeaturedCollectionsProps) {
@@ -53,13 +38,7 @@ export function FeaturedCollections({ collections }: FeaturedCollectionsProps) {
         {/* Grid — horizontal snap on mobile, grid on md+ */}
         <div className="flex md:grid md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 overflow-x-auto snap-x snap-mandatory hide-scrollbar md:overflow-visible pb-1 md:pb-0">
           {collections.map((col) => {
-            const slugKey = normKey(col.slug)
-            const nameKey = normKey(col.name)
-            const imageUrl =
-              col.banner_url ||
-              COLLECTION_FALLBACK_IMAGES[slugKey] ||
-              COLLECTION_FALLBACK_IMAGES[nameKey] ||
-              (nameKey.includes('office') ? COLLECTION_FALLBACK_IMAGES['office-wear'] : null)
+            const imageUrl = resolveCollectionImageUrl(col.banner_url, col.slug, col.name)
             return (
             <motion.div key={col.slug} variants={fadeUp} className="shrink-0 w-[72vw] max-w-[280px] snap-start md:w-auto md:max-w-none">
               <Link

@@ -4,15 +4,18 @@ import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { createBrowserClient } from '@/lib/supabase/client'
+import { useWishlistContext } from '@/components/providers/WishlistProvider'
 
-export function useWishlist(productId: string, variantId?: string | null) {
+function useWishlistFallback(productId: string, variantId: string | null | undefined, enabled: boolean) {
   const [isWishlisted, setIsWishlisted] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [ready, setReady] = useState(false)
+  const [ready, setReady] = useState(!enabled)
   const [userId, setUserId] = useState<string | null>(null)
   const router = useRouter()
 
   useEffect(() => {
+    if (!enabled) return
+
     let cancelled = false
     const supabase = createBrowserClient()
 
@@ -41,19 +44,20 @@ export function useWishlist(productId: string, variantId?: string | null) {
       }
     }
 
-    load()
+    void load()
     const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
-      load()
+      void load()
     })
 
     return () => {
       cancelled = true
       subscription.unsubscribe()
     }
-  }, [productId])
+  }, [productId, enabled])
 
   const toggle = useCallback(
     async (e?: React.MouseEvent) => {
+      if (!enabled) return
       e?.preventDefault()
       e?.stopPropagation()
 
@@ -92,8 +96,24 @@ export function useWishlist(productId: string, variantId?: string | null) {
         setBusy(false)
       }
     },
-    [userId, isWishlisted, productId, variantId, router],
+    [enabled, userId, isWishlisted, productId, variantId, router],
   )
 
   return { isWishlisted, toggle, busy, ready }
+}
+
+export function useWishlist(productId: string, variantId?: string | null) {
+  const ctx = useWishlistContext()
+  const fallback = useWishlistFallback(productId, variantId, !ctx)
+
+  if (ctx) {
+    return {
+      isWishlisted: ctx.wishlistedIds.has(productId),
+      toggle: (e?: React.MouseEvent) => ctx.toggle(productId, variantId, e),
+      busy: ctx.busyId === productId,
+      ready: ctx.ready,
+    }
+  }
+
+  return fallback
 }

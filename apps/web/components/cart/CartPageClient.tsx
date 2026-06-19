@@ -8,6 +8,7 @@ import { Trash2, Heart, ShoppingBag, ArrowRight, Minus, Plus } from 'lucide-reac
 import { toast } from 'sonner'
 import { useCartStore, useCartHydrated } from '@/stores/cartStore'
 import { formatINR }    from '@/lib/pricing/calculator'
+import { getCartItemHref } from '@/lib/shop/paths'
 import { ProductCard, type ProductCardProps } from '@/components/product/ProductCard'
 import { Skeleton }     from '@/components/ui/Skeleton'
 import { fadeUp, stagger } from '@/lib/animations'
@@ -88,7 +89,9 @@ export function CartPageClient() {
             className="divide-y divide-divider"
           >
             <AnimatePresence initial={false}>
-              {items.map((item) => (
+              {items.map((item) => {
+                const productHref = getCartItemHref(item)
+                return (
                 <motion.li
                   key={`${item.productId}-${item.variantId}`}
                   variants={fadeUp}
@@ -96,7 +99,7 @@ export function CartPageClient() {
                   className="flex gap-5 py-6"
                 >
                   {/* Image */}
-                  <Link href={`/products/${item.productId}`} className="relative h-24 w-24 shrink-0 rounded-lg overflow-hidden bg-surface">
+                  <Link href={productHref} className="relative h-24 w-24 shrink-0 rounded-lg overflow-hidden bg-surface">
                     {item.imageUrl ? (
                       <Image src={item.imageUrl} alt={item.productName} fill className="object-cover" sizes="96px" />
                     ) : (
@@ -107,7 +110,7 @@ export function CartPageClient() {
                   {/* Details */}
                   <div className="flex flex-1 flex-col gap-1.5 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <Link href={`/products/${item.productId}`} className="font-display text-base text-ink hover:text-deep-teal transition-colors line-clamp-2">
+                      <Link href={productHref} className="font-display text-base text-ink hover:text-deep-teal transition-colors line-clamp-2">
                         {item.productName}
                       </Link>
                       <button
@@ -147,7 +150,8 @@ export function CartPageClient() {
                     </div>
                   </div>
                 </motion.li>
-              ))}
+                )
+              })}
             </AnimatePresence>
           </motion.ul>
         </div>

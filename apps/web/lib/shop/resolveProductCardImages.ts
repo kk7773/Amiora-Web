@@ -13,9 +13,18 @@ type LegacyImage = {
 }
 
 type ColorGroup = {
-  images?: string[] | null
+  images?: (string | { url?: string | null } | null)[] | null
   display_order?: number
   is_active?: boolean
+}
+
+function normalizeImageUrl(raw: unknown): string {
+  if (typeof raw === 'string') return raw.trim()
+  if (raw && typeof raw === 'object' && 'url' in raw) {
+    const url = (raw as { url?: unknown }).url
+    return typeof url === 'string' ? url.trim() : ''
+  }
+  return ''
 }
 
 /**
@@ -31,7 +40,7 @@ export function resolveProductCardImages(
   const ordered: Array<{ url: string; alt_text: string | null; is_primary?: boolean; is_hover?: boolean }> = []
 
   for (const img of productImages ?? []) {
-    const url = typeof img?.url === 'string' ? img.url.trim() : ''
+    const url = normalizeImageUrl(img?.url)
     if (!url || seen.has(url)) continue
     seen.add(url)
     ordered.push({
@@ -48,7 +57,7 @@ export function resolveProductCardImages(
 
   for (const group of groups) {
     for (const raw of group.images ?? []) {
-      const url = typeof raw === 'string' ? raw.trim() : ''
+      const url = normalizeImageUrl(raw)
       if (!url || seen.has(url)) continue
       seen.add(url)
       ordered.push({ url, alt_text: null })

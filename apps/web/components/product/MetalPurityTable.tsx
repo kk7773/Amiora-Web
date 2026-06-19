@@ -55,7 +55,52 @@ export function MetalPurityTable({
       <p className="text-xs text-ink-faint">
         Prices update automatically when gold/silver rates change.
       </p>
-      <div className="overflow-x-auto">
+
+      {/* Mobile: stacked cards */}
+      <div className="md:hidden space-y-2">
+        {rows.map(({ variant, purityLabel, breakdown }) => {
+          const isSelected = selectedPurityId === variant.purity_id
+          return (
+            <div
+              key={variant.id}
+              className={cn(
+                'rounded-lg border border-divider bg-white p-3 space-y-2',
+                isSelected && 'border-teal ring-1 ring-teal/30 bg-teal/5',
+              )}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-medium text-ink">{purityLabel}</span>
+                <span className="text-sm font-medium text-ink tabular-nums">
+                  {breakdown ? formatINR(breakdown.finalPrice) : '—'}
+                </span>
+              </div>
+              <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                <div className="flex justify-between gap-2 col-span-2 sm:col-span-1">
+                  <dt className="text-ink-faint">Weight</dt>
+                  <dd className="text-ink tabular-nums">{formatWeightGrams(variant.metal_weight_g)}</dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="text-ink-faint">Metal</dt>
+                  <dd className="text-ink tabular-nums">{breakdown ? formatINR(breakdown.baseMetalPrice) : '—'}</dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="text-ink-faint">Making</dt>
+                  <dd className="text-ink tabular-nums">{breakdown ? formatINR(breakdown.makingChargeNet) : '—'}</dd>
+                </div>
+                <div className="flex justify-between gap-2 col-span-2">
+                  <dt className="text-ink-faint">Diamond</dt>
+                  <dd className="text-ink tabular-nums">
+                    {breakdown && breakdown.gemPriceNet > 0 ? formatINR(breakdown.gemPriceNet) : '—'}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Desktop: full table */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-sm border-collapse min-w-[28rem]">
           <thead>
             <tr className="bg-surface">

@@ -21,7 +21,65 @@ function isVideoItem(item: GalleryImage) {
   return item.media_type === 'video'
 }
 
-function GalleryThumb({ item, productName }: { item: GalleryImage; productName: string }) {
+function ResilientGalleryImage({
+  src,
+  alt,
+  priority,
+  loading,
+  className,
+  style,
+  sizes,
+  objectFit = 'contain',
+}: {
+  src: string
+  alt: string
+  priority?: boolean
+  loading?: 'lazy' | 'eager'
+  className?: string
+  style?: CSSProperties
+  sizes: string
+  objectFit?: 'cover' | 'contain'
+}) {
+  const [failed, setFailed] = useState(false)
+
+  if (failed) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt={alt}
+        className={cn(
+          'absolute inset-0 h-full w-full select-none',
+          objectFit === 'cover' ? 'object-cover' : 'object-contain',
+          className,
+        )}
+        style={style}
+        draggable={false}
+      />
+    )
+  }
+
+  return (
+    <Image
+      src={src}
+      alt={alt}
+      fill
+      priority={priority}
+      loading={priority ? undefined : (loading ?? 'lazy')}
+      className={cn(
+        objectFit === 'cover' ? 'object-cover' : 'object-contain',
+        'select-none',
+        className,
+      )}
+      sizes={sizes}
+      draggable={false}
+      style={style}
+      onError={() => setFailed(true)}
+    />
+  )
+}
+
+function GalleryThumb({ item, productName, lazy = true }: { item: GalleryImage; productName: string; lazy?: boolean }) {
   if (isVideoItem(item)) {
     return (
       <>
@@ -33,12 +91,13 @@ function GalleryThumb({ item, productName }: { item: GalleryImage; productName: 
     )
   }
   return (
-    <Image
+    <ResilientGalleryImage
       src={item.url}
       alt={item.alt_text ?? productName}
-      fill
       className="object-cover"
       sizes="64px"
+      objectFit="cover"
+      loading={lazy ? 'lazy' : 'eager'}
     />
   )
 }
@@ -68,15 +127,13 @@ function GallerySlide({
     )
   }
   return (
-    <Image
+    <ResilientGalleryImage
       src={item.url}
       alt={item.alt_text ?? productName}
-      fill
       priority={priority}
-      className={cn('object-contain select-none', className)}
-      sizes="(max-width: 768px) 100vw, 50vw"
-      draggable={false}
+      className={className}
       style={style}
+      sizes="(max-width: 768px) 100vw, 50vw"
     />
   )
 }
@@ -97,7 +154,10 @@ export function ImageGallery({
   const [activeIdx, setActiveIdx] = useState(0)
   const [viewerOpen, setViewerOpen] = useState(false)
   const [portalReady, setPortalReady] = useState(false)
+  const [allThumbsVisible, setAllThumbsVisible] = useState(false)
   const zoomContainerRef = useRef<HTMLDivElement>(null)
+
+  const INITIAL_THUMBS = 4
 
   const visible = activeVariantId
     ? images.filter((i) => !i.variant_id || i.variant_id === activeVariantId)
@@ -107,6 +167,13 @@ export function ImageGallery({
   const current = sorted[activeIdx] ?? sorted[0]
   const currentIsVideo = current ? isVideoItem(current) : false
   const imageIdsKey = useMemo(() => sorted.map((i) => i.id).join(','), [sorted])
+  const thumbIndices = allThumbsVisible || sorted.length <= INITIAL_THUMBS
+    ? sorted.map((_, i) => i)
+    : Array.from({ length: INITIAL_THUMBS }, (_, i) => i)
+
+  useEffect(() => {
+    if (activeIdx >= INITIAL_THUMBS) setAllThumbsVisible(true)
+  }, [activeIdx])
 
   const { imageStyle, zoomActive, isPanning, resetZoom, containerProps } =
     useInlineImageZoom(zoomContainerRef)
@@ -276,8 +343,10 @@ export function ImageGallery({
 
             {sorted.length > 1 && (
               <div className="px-4 pb-4 sm:px-5 sm:pb-5 border-t border-divider/60 pt-3 shrink-0">
-                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none justify-center">
-                  {sorted.map((img, i) => (
+                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none justify-center" onScroll={() => setAllThumbsVisible(true)}>
+                  {thumbIndices.map((i) => {
+                    const img = sorted[i]!
+                    return (
                     <button
                       key={img.id}
                       type="button"
@@ -289,9 +358,10 @@ export function ImageGallery({
                         'shrink-0 w-11 h-11 sm:w-12 sm:h-12 rounded-md',
                       )}
                     >
-                      <GalleryThumb item={img} productName={productName} />
+                      <GalleryThumb item={img} productName={productName} lazy={i >= INITIAL_THUMBS} />
                     </button>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )}
@@ -303,10 +373,12 @@ export function ImageGallery({
 
   return (
     <>
-      <div className="flex gap-4">
+      <div className="flex gap-4 -mx-4 sm:mx-0">
         {sorted.length > 1 && (
-          <div className="hidden md:flex flex-col gap-2 w-16 shrink-0">
-            {sorted.map((img, i) => (
+          <div className="hidden md:flex flex-col gap-2 w-16 shrink-0" onMouseEnter={() => setAllThumbsVisible(true)}>
+            {thumbIndices.map((i) => {
+              const img = sorted[i]!
+              return (
               <button
                 key={img.id}
                 type="button"
@@ -315,9 +387,10 @@ export function ImageGallery({
                 aria-current={i === activeIdx ? 'true' : undefined}
                 className={cn(thumbClass(i === activeIdx), 'aspect-square rounded-md')}
               >
-                <GalleryThumb item={img} productName={productName} />
+                <GalleryThumb item={img} productName={productName} lazy={i >= INITIAL_THUMBS} />
               </button>
-            ))}
+              )
+            })}
           </div>
         )}
 
@@ -325,7 +398,7 @@ export function ImageGallery({
           {currentIsVideo ? (
             <div
               className={cn(
-                'relative aspect-square w-full rounded-2xl overflow-hidden bg-surface',
+                'relative aspect-square w-full max-h-[min(72vw,420px)] md:max-h-none rounded-none sm:rounded-2xl overflow-hidden bg-surface',
                 'ring-1 ring-divider shadow-[inset_0_2px_12px_rgba(26,20,16,0.04)]',
               )}
             >
@@ -333,7 +406,7 @@ export function ImageGallery({
                 {current && (
                   <motion.div
                     key={current.id}
-                    initial={{ opacity: 0 }}
+                    initial={false}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.2 }}
@@ -357,7 +430,7 @@ export function ImageGallery({
               onClick={openViewer}
               aria-label="Open image viewer"
               className={cn(
-                'relative aspect-square w-full rounded-2xl overflow-hidden bg-surface text-left',
+                'relative aspect-square w-full max-h-[min(72vw,420px)] md:max-h-none rounded-none sm:rounded-2xl overflow-hidden bg-surface text-left',
                 'ring-1 ring-divider shadow-[inset_0_2px_12px_rgba(26,20,16,0.04)]',
                 'cursor-zoom-in group focus:outline-none focus-visible:ring-2 focus-visible:ring-teal',
               )}
@@ -366,7 +439,7 @@ export function ImageGallery({
                 {current && (
                   <motion.div
                     key={current.id}
-                    initial={{ opacity: 0 }}
+                    initial={false}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.2 }}
@@ -398,7 +471,7 @@ export function ImageGallery({
           )}
 
           {sorted.length > 1 && (
-            <div className="md:hidden flex gap-2 mt-3 overflow-x-auto pb-1 scrollbar-none">
+            <div className="md:hidden flex gap-2 mt-3 px-4 sm:px-0 overflow-x-auto pb-1 scrollbar-none">
               {sorted.map((img, i) => (
                 <button
                   key={img.id}
@@ -408,7 +481,7 @@ export function ImageGallery({
                   aria-current={i === activeIdx ? 'true' : undefined}
                   className={cn(thumbClass(i === activeIdx), 'shrink-0 w-14 h-14 rounded-md')}
                 >
-                  <GalleryThumb item={img} productName={productName} />
+                  <GalleryThumb item={img} productName={productName} lazy />
                 </button>
               ))}
             </div>

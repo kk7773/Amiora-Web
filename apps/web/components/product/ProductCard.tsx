@@ -118,6 +118,9 @@ export function ProductCard({ product, badgeLabel, className }: ProductCardProps
       imageUrl:     primaryImage?.url ?? '',
       unitPrice:    displayPrice,
       quantity:     1,
+      productSlug:  product.slug,
+      collectionSlug: product.collectionSlug ?? null,
+      categorySlug:   product.categorySlug ?? null,
     })
     toast.success('Added to cart', { description: product.name })
   }
@@ -149,15 +152,12 @@ export function ProductCard({ product, badgeLabel, className }: ProductCardProps
                 sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                 onError={() => setImageFailed(true)}
               />
-              {hasAlternateImage && (
+              {showHoverImage && hasAlternateImage && (
                 <Image
                   src={hoverImage!.url!}
                   alt={hoverImage?.alt_text ?? `${product.name} — alternate view`}
                   fill
-                  className={cn(
-                    'object-cover transition-all duration-500 group-hover:scale-105',
-                    showHoverImage ? 'opacity-100' : 'opacity-0',
-                  )}
+                  className="object-cover transition-all duration-500 group-hover:scale-105 opacity-100"
                   sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                 />
               )}

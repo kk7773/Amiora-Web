@@ -11,6 +11,8 @@ const nextConfig: NextConfig = {
   images: {
     formats: ['image/avif', 'image/webp'],   // modern formats → 40-60% smaller
     minimumCacheTTL: 3600,                   // CDN cache images for 1h
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
     remotePatterns: [
       { protocol: 'https', hostname: '*.supabase.co',         pathname: '/storage/v1/object/public/**' },
       { protocol: 'https', hostname: 'res.cloudinary.com',    pathname: '/**' },
@@ -23,7 +25,7 @@ const nextConfig: NextConfig = {
 
   experimental: {
     // Tree-shake these large packages — only used icons/components get bundled
-    optimizePackageImports: ['@amiora/ui', 'lucide-react', 'framer-motion'],
+    optimizePackageImports: ['@amiora/ui', 'lucide-react', 'framer-motion', 'gsap'],
   },
 
   compress: true,

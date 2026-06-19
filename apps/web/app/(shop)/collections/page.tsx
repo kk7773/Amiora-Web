@@ -5,6 +5,7 @@ import { createServerClient } from '@amiora/database'
 import { JsonLd } from '@/components/seo/JsonLd'
 import { buildCollectionListJsonLd, buildWebPageJsonLd } from '@/lib/seo/jsonLd'
 import { getCollectionHref } from '@/lib/shop/paths'
+import { resolveCollectionImageUrl } from '@/lib/shop/collectionFallbackImages'
 
 export const metadata: Metadata = {
   title: 'Collections',
@@ -27,7 +28,7 @@ export default async function CollectionsPage() {
     name: col.name,
     slug: col.slug,
     description: col.description,
-    image: col.banner_url,
+    image: resolveCollectionImageUrl(col.banner_url, col.slug, col.name),
   }))
 
   return (
@@ -52,14 +53,20 @@ export default async function CollectionsPage() {
       </div>
       <div className="grid gap-6">
         <div className="grid gap-6 md:grid-cols-[1.75fr_1fr] md:grid-rows-[repeat(2,minmax(260px,1fr))]">
-          {collections[0] && (
+          {collections[0] && (() => {
+            const heroImage = resolveCollectionImageUrl(
+              collections[0].banner_url,
+              collections[0].slug,
+              collections[0].name,
+            )
+            return (
             <Link
               href={getCollectionHref(collections[0].slug)}
               className="group relative rounded-2xl overflow-hidden bg-surface md:row-span-2 md:min-h-[560px]"
             >
-              {collections[0].banner_url && (
+              {heroImage && (
                 <Image
-                  src={collections[0].banner_url}
+                  src={heroImage}
                   alt={collections[0].name}
                   fill
                   className="object-cover transition-transform duration-700 group-hover:scale-110"
@@ -74,18 +81,21 @@ export default async function CollectionsPage() {
                 )}
               </div>
             </Link>
-          )}
+            )
+          })()}
 
           <div className="grid gap-6 md:grid-cols-2 md:grid-rows-2">
-            {collections.slice(1).map((col) => (
+            {collections.slice(1).map((col) => {
+              const imageUrl = resolveCollectionImageUrl(col.banner_url, col.slug, col.name)
+              return (
               <Link
                 key={col.slug}
                 href={getCollectionHref(col.slug)}
                 className="group relative rounded-2xl overflow-hidden bg-surface min-h-[240px]"
               >
-                {col.banner_url && (
+                {imageUrl && (
                   <Image
-                    src={col.banner_url}
+                    src={imageUrl}
                     alt={col.name}
                     fill
                     className="object-cover transition-transform duration-700 group-hover:scale-110"
@@ -100,7 +110,8 @@ export default async function CollectionsPage() {
                   )}
                 </div>
               </Link>
-            ))}
+              )
+            })}
           </div>
         </div>
       </div>

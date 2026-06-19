@@ -5,6 +5,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { WishlistGrid } from '@/components/account/WishlistGrid'
 import { fetchPurityMapForProducts } from '@/lib/pricing/fetchPurityMap'
 import { getLatestPrices } from '@/lib/pricing/engine'
+import { PRODUCT_CARD_SELECT_LITE } from '@/lib/shop/fetchProductCards'
 import { mapProductForCard, PRODUCT_CARD_SELECT, type ProductCardRaw } from '@/lib/shop/mapProductForCard'
 
 export const metadata: Metadata = { title: 'My Wishlist' }
@@ -14,12 +15,22 @@ export default async function WishlistPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [{ data: wishlists }, prices] = await Promise.all([
-    supabase
+  let wishlistRows = await supabase
+    .from('wishlists')
+    .select(`*, product:products(${PRODUCT_CARD_SELECT})`)
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+
+  if (wishlistRows.error) {
+    wishlistRows = await supabase
       .from('wishlists')
-      .select(`*, product:products(${PRODUCT_CARD_SELECT})`)
+      .select(`*, product:products(${PRODUCT_CARD_SELECT_LITE})`)
       .eq('user_id', user.id)
-      .order('created_at', { ascending: false }),
+      .order('created_at', { ascending: false })
+  }
+
+  const [{ data: wishlists }, prices] = await Promise.all([
+    Promise.resolve(wishlistRows),
     getLatestPrices().catch(() => ({ gold: null, silver: null })),
   ])
 

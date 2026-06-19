@@ -34,6 +34,9 @@ export function WishlistGrid({ products: initialProducts }: WishlistGridProps) {
       imageUrl:     product.product_images?.find((i) => i.is_primary)?.url ?? '',
       unitPrice:    product.basePrice ?? 0,
       quantity:     1,
+      productSlug:  product.slug,
+      collectionSlug: product.collectionSlug ?? null,
+      categorySlug:   product.categorySlug ?? null,
     })
     toast.success('Added to cart')
   }

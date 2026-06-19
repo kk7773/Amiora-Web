@@ -4,6 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useEffect, useState } from 'react'
 import { ChevronRight } from 'lucide-react'
+import { resolveCollectionImageUrl } from '@/lib/shop/collectionFallbackImages'
 
 interface MenuCollection {
   id: string
@@ -17,6 +18,10 @@ interface MegaMenuProps {
   onClose: () => void
 }
 
+function collectionPreviewUrl(col: MenuCollection) {
+  return resolveCollectionImageUrl(col.thumb_url, col.slug, col.name)
+}
+
 export function MegaMenu({ onClose }: MegaMenuProps) {
   const [collections, setCollections] = useState<MenuCollection[]>([])
   const [activeImage,  setActiveImage]  = useState<string | null>(null)
@@ -27,7 +32,8 @@ export function MegaMenu({ onClose }: MegaMenuProps) {
       .then((r) => r.json())
       .then((d: { collections: MenuCollection[] }) => {
         setCollections(d.collections ?? [])
-        setActiveImage(d.collections?.[0]?.thumb_url ?? null)
+        const first = d.collections?.[0]
+        setActiveImage(first ? collectionPreviewUrl(first) : null)
         setLoading(false)
       })
       .catch(() => setLoading(false))
@@ -52,7 +58,7 @@ export function MegaMenu({ onClose }: MegaMenuProps) {
                 <div
                   key={col.slug}
                   className="flex min-w-0 flex-col items-stretch"
-                  onMouseEnter={() => setActiveImage(col.thumb_url)}
+                  onMouseEnter={() => setActiveImage(collectionPreviewUrl(col))}
                 >
                   <Link
                     href={`/shop/${col.slug}`}

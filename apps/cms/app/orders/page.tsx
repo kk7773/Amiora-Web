@@ -7,7 +7,7 @@ export default async function OrdersPage() {
     .from('orders')
     .select(`
       id, order_number, total_amount, discount_amount, coupon_code, status, payment_mode, created_at,
-      shipping_address, pickup_store_id,
+      shipping_address, pickup_store_id, awb_code, courier_name, tracking_url,
       user:user_profiles(full_name, phone),
       items:order_items(id, quantity, unit_price, variant_label,
         product:products(name, slug, images:product_images(url, is_primary))

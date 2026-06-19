@@ -9,7 +9,7 @@ export default function CheckoutPage() {
   return (
     <>
       <StaticPageSchema title="Checkout" path="/checkout" />
-      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="beforeInteractive" />
+      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
       <CheckoutClient />
     </>
   )

@@ -4,6 +4,7 @@ import {
   aggregateCartComponents,
   evaluateCoupon,
   markBestCoupons,
+  sortEvaluatedCoupons,
   type CartLine,
   type CouponRow,
 } from '@/lib/coupons/evaluateCoupon'
@@ -35,15 +36,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ coupons: [] })
     }
 
-    const now = new Date()
-    const activeRows = (data ?? []).filter((c) => {
-      const row = c as CouponRow
-      if (row.expires_at && new Date(row.expires_at) < now) return false
-      if (row.usage_limit != null && row.used_count >= row.usage_limit) return false
-      return true
-    }) as CouponRow[]
-
-    const evaluated = activeRows.map((coupon) => {
+    const evaluated = ((data ?? []) as CouponRow[]).map((coupon) => {
       const result = evaluateCoupon(coupon, components)
       return {
         id: coupon.id,
@@ -64,8 +57,9 @@ export async function POST(req: NextRequest) {
     })
 
     const withBest = markBestCoupons(evaluated)
+    const sorted = sortEvaluatedCoupons(withBest)
 
-    return NextResponse.json({ coupons: withBest, components })
+    return NextResponse.json({ coupons: sorted, components })
   } catch (err) {
     console.error('[POST /api/coupons/evaluate]', err)
     return NextResponse.json({ coupons: [] }, { status: 500 })

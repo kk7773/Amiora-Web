@@ -19,11 +19,13 @@ import { useWishlist }    from '@/hooks/useWishlist'
 import { breakdownToDisplayRows, formatINR, resolveLiveRate } from '@amiora/pricing'
 import { useCatalogPrices, type CatalogPricingContext } from '@/hooks/useCatalogPrices'
 import { MetalPurityTable, formatWeightGrams } from './MetalPurityTable'
+import { MOBILE_NAV_HEIGHT } from '@/components/layout/MobileBottomNav'
 
 interface ProductDetailClientProps {
   product: {
     id:                 string
     name:               string
+    slug:               string
     design_number:      string | null
     short_desc:         string | null
     description:        string | null
@@ -39,6 +41,7 @@ interface ProductDetailClientProps {
     collectionName:     string | null
     collectionSlug:    string | null
     categoryName:       string | null
+    categorySlug:       string | null
   }
   catalog: {
     colorGroups: CatalogColorGroup[]
@@ -260,6 +263,9 @@ export function ProductDetailClient({
       imageUrl:     thumb,
       unitPrice:    displayPrice,
       quantity:     sel.quantity,
+      productSlug:  product.slug,
+      collectionSlug: product.collectionSlug ?? null,
+      categorySlug:   product.categorySlug ?? null,
       metalWeightG: activeVariant.metal_weight_g ?? undefined,
       metalRatePerGram: resolveLiveRate(
         catalog.purities.find((p) => p.id === activeVariant.purity_id)?.metal,
@@ -276,10 +282,13 @@ export function ProductDetailClient({
     return breakdownToDisplayRows(activeBreakdown, product.making_charge_pct)
   }, [activeBreakdown, product.making_charge_pct])
 
+  const addToCartLabel = !activeVariant ? 'Select options' : inStock ? 'Add to Cart' : 'Out of Stock'
+
   return (
-    <div className="section-x py-10">
-      <div className="grid gap-10 lg:grid-cols-2">
-        <div className="lg:sticky lg:top-20 lg:self-start">
+    <>
+    <div className="section-x py-6 md:py-10 pb-28 md:pb-10 overflow-x-hidden">
+      <div className="grid gap-6 lg:gap-10 lg:grid-cols-2">
+        <div className="min-w-0 lg:sticky lg:top-20 lg:self-start">
           <ImageGallery
             key={sel.colorId}
             images={galleryImages}
@@ -287,7 +296,7 @@ export function ProductDetailClient({
           />
         </div>
 
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-5 md:space-y-6">
           <nav className="flex items-center gap-1 text-xs text-ink-muted">
             <Link href="/" className="hover:text-teal transition-colors">Home</Link>
             <span>/</span>
@@ -303,7 +312,7 @@ export function ProductDetailClient({
           </nav>
 
           <div>
-            <h1 className="font-display text-display-xl text-ink leading-tight">{product.name}</h1>
+            <h1 className="font-display text-display-lg md:text-display-xl text-ink leading-tight">{product.name}</h1>
             {product.design_number && (
               <p className="mt-2 text-xs text-ink-muted font-mono tracking-wide">
                 Design No. {product.design_number}
@@ -320,7 +329,7 @@ export function ProductDetailClient({
 
           <div className="space-y-1">
             <div className="flex flex-wrap items-baseline gap-3">
-              <p className="font-display text-3xl text-ink tabular-nums">
+              <p className="font-display text-2xl sm:text-3xl text-ink tabular-nums">
                 {displayPrice > 0 ? formatINR(displayPrice) : '—'}
               </p>
               {activeVariant && (
@@ -345,14 +354,14 @@ export function ProductDetailClient({
 
           <div className="w-full h-px bg-divider" />
 
-          <div className="flex flex-col gap-3">
+          <div className="hidden md:flex flex-col gap-3">
             <button
               type="button"
               onClick={handleAddToCart}
               disabled={!inStock}
               className="w-full py-4 bg-deep-teal text-cream text-sm font-medium uppercase tracking-widest rounded-xl hover:bg-teal disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {!activeVariant ? 'Select options' : inStock ? 'Add to Cart' : 'Out of Stock'}
+              {addToCartLabel}
             </button>
           </div>
 
@@ -369,31 +378,31 @@ export function ProductDetailClient({
             ))}
           </div>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-3">
             <ProductShare productName={product.name} />
             <button
               type="button"
               onClick={() => toggleWishlist()}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm border border-divider rounded-lg text-ink-muted hover:border-teal hover:text-teal transition-colors"
+              className="flex items-center justify-center gap-1.5 px-3 py-2 text-sm border border-divider rounded-lg text-ink-muted hover:border-teal hover:text-teal transition-colors"
             >
-              <Heart className={`h-4 w-4 ${isWishlisted ? 'fill-red-500 text-red-500' : ''}`} />
+              <Heart className={`h-4 w-4 shrink-0 ${isWishlisted ? 'fill-red-500 text-red-500' : ''}`} />
               {isWishlisted ? 'Wishlisted' : 'Wishlist'}
             </button>
             <Link
               href="/stores"
-              className="flex items-center gap-1.5 px-4 py-2 text-sm border border-divider rounded-lg text-ink-muted hover:border-teal hover:text-teal transition-colors"
+              className="flex items-center justify-center gap-1.5 px-3 py-2 text-sm border border-divider rounded-lg text-ink-muted hover:border-teal hover:text-teal transition-colors"
             >
-              <MapPin className="h-4 w-4" /> Visit Store
+              <MapPin className="h-4 w-4 shrink-0" /> Visit Store
             </Link>
             <Link
               href="/customization"
-              className="flex items-center gap-1.5 px-4 py-2 text-sm border border-divider rounded-lg text-ink-muted hover:border-teal hover:text-teal transition-colors"
+              className="flex items-center justify-center gap-1.5 px-3 py-2 text-sm border border-divider rounded-lg text-ink-muted hover:border-teal hover:text-teal transition-colors"
             >
-              <User className="h-4 w-4" /> Request Demo
+              <User className="h-4 w-4 shrink-0" /> Request Demo
             </Link>
           </div>
 
-          <div>
+          <div className="min-w-0 overflow-x-hidden">
             <div className="flex gap-0 border-b border-divider overflow-x-auto hide-scrollbar">
               {TABS.map((tab, i) => (
                 <button
@@ -446,7 +455,18 @@ export function ProductDetailClient({
                 liveBreakupRows ? (
                   <div className="space-y-3">
                     <h4 className="font-display text-lg text-ink">Price Breakup</h4>
-                    <div className="overflow-x-auto">
+                    <div className="md:hidden space-y-2">
+                      {liveBreakupRows.map((row) => (
+                        <div
+                          key={`${row.label}-${row.amount}-mobile`}
+                          className="flex items-center justify-between gap-3 rounded-lg border border-divider bg-surface px-3 py-2.5"
+                        >
+                          <span className="text-sm text-ink font-medium">{row.label}</span>
+                          <span className="text-sm text-ink tabular-nums shrink-0">{formatINR(row.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="hidden md:block overflow-x-auto">
                       <table className="w-full text-sm border-collapse min-w-[22rem]">
                         <thead>
                           <tr className="bg-surface">
@@ -482,5 +502,33 @@ export function ProductDetailClient({
         </div>
       </div>
     </div>
+
+    {/* Sticky mobile buy bar — sits above bottom nav */}
+    <div
+      className="md:hidden fixed left-0 right-0 z-40 border-t border-divider bg-white shadow-[0_-4px_16px_rgba(26,20,16,0.08)] px-4 py-3"
+      style={{ bottom: `calc(${MOBILE_NAV_HEIGHT}px + env(safe-area-inset-bottom))` }}
+    >
+      <div className="flex items-center gap-3">
+        <div className="shrink-0 min-w-0">
+          <p className="font-display text-xl text-ink tabular-nums leading-none">
+            {displayPrice > 0 ? formatINR(displayPrice) : '—'}
+          </p>
+          {activeVariant?.metal_weight_g != null && (
+            <p className="text-2xs text-ink-muted mt-0.5 tabular-nums">
+              {formatWeightGrams(activeVariant.metal_weight_g)}
+            </p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={handleAddToCart}
+          disabled={!inStock}
+          className="flex-1 py-3.5 bg-deep-teal text-cream text-sm font-medium uppercase tracking-widest rounded-xl hover:bg-teal disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {addToCartLabel}
+        </button>
+      </div>
+    </div>
+    </>
   )
 }

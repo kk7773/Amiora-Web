@@ -13,6 +13,20 @@ import { SearchCombobox, useSearchKeyboardNav } from '@/components/search/Search
 import type { SearchSuggestion } from '@/app/api/search/suggest/route'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 
+function useIsDesktopHeader() {
+  const [isDesktop, setIsDesktop] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)')
+    setIsDesktop(mq.matches)
+    const onChange = (e: MediaQueryListEvent) => setIsDesktop(e.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+
+  return isDesktop
+}
+
 const NAV_LINKS = [
   { label: 'Collections', href: '/collections', hasMega: true },
   { label: 'Shop',        href: '/shop',        hasMega: false },
@@ -31,6 +45,7 @@ export function Header() {
   const itemCount                       = useCartStore((s) => s.itemCount())
   const cartHydrated                    = useCartHydrated()
   const cartBadge                       = cartHydrated ? itemCount : 0
+  const isDesktop                       = useIsDesktopHeader()
   const router                          = useRouter()
   const [pending, startSearch]          = useTransition()
   const { suggestions, loading, show: suggestOpen } = useSearchSuggest(searchOpen ? searchQuery : '')
@@ -118,7 +133,7 @@ export function Header() {
       <header className="sticky top-0 z-40 w-full">
 
         {/* ── MOBILE header ── slim bar, logo centered, wishlist right ── */}
-        <div className="md:hidden flex h-12 items-center px-3 bg-deep-teal">
+        <div className="md:hidden flex h-14 items-center px-3 bg-white border-b border-divider">
           <div className="w-10 shrink-0" aria-hidden />
 
           <Link
@@ -129,17 +144,17 @@ export function Header() {
             <Image
               src="https://res.cloudinary.com/dqayol6fn/image/upload/v1778259827/Amiora-final-logo-01_mu4i6k.png"
               alt="Amiora"
-              width={120}
-              height={40}
-              className="h-7 w-auto"
-              priority
+              width={160}
+              height={48}
+              className="h-10 w-auto"
+              priority={isDesktop !== true}
             />
           </Link>
 
           <Link
             href={user ? '/account/wishlist' : '/login?redirect=%2Faccount%2Fwishlist'}
             aria-label="Wishlist"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gold transition-colors active:scale-95 hover:text-gold-light"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-ink-muted transition-colors active:scale-95 hover:text-deep-teal"
           >
             <Heart className="h-5 w-5" />
           </Link>
@@ -162,7 +177,7 @@ export function Header() {
                 width={150}
                 height={35}
                 className="h-10 w-auto max-h-10"
-                priority
+                priority={isDesktop === true}
               />
             </Link>
 

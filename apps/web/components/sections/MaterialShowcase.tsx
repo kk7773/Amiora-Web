@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { motion } from 'framer-motion'
 import { fadeUp, stagger } from '@/lib/animations'
 
@@ -12,7 +13,7 @@ const MATERIALS = [
     sub:   '22K · 18K · 14K · 9K',
     body:  'From timeless yellow gold to romantic rose gold and modern white gold — every variant BIS hallmarked and certified.',
     href:  '/shop/gold',
-    bgImage:'https://images.unsplash.com/photo-1610375461246-83df859d849d?auto=format&fit=crop&w=1200&q=80',
+    bgImage:'https://images.unsplash.com/photo-1610375461246-83df859d849d?auto=format&fit=crop&w=800&q=80',
     accent:'text-gold',
   },
   {
@@ -23,7 +24,7 @@ const MATERIALS = [
     body:  'Round Brilliant, Princess, Emerald, Oval and more. Every diamond independently certified with full traceability.',
     href:  '/shop/diamond',
     bgImage:
-      'https://images.unsplash.com/photo-1603561591411-07134e71a2a9?auto=format&fit=crop&w=1200&q=80',
+      'https://images.unsplash.com/photo-1603561591411-07134e71a2a9?auto=format&fit=crop&w=800&q=80',
     accent:'text-ink',
   },
 ]
@@ -48,11 +49,17 @@ export function MaterialShowcase() {
             <motion.div
               key={mat.key}
               variants={fadeUp}
-              className="rounded-2xl p-8 flex flex-col gap-4 bg-cover bg-center bg-no-repeat"
-              style={{
-                backgroundImage: `linear-gradient(rgba(250, 247, 242, 0.58), rgba(250, 247, 242, 0.62)), url('${mat.bgImage}')`,
-              }}
+              className="relative rounded-2xl p-8 flex flex-col gap-4 overflow-hidden min-h-[280px]"
             >
+              <Image
+                src={mat.bgImage}
+                alt=""
+                fill
+                loading="lazy"
+                sizes="(max-width: 768px) 100vw, 50vw"
+                className="object-cover object-center -z-20"
+              />
+              <div className="absolute inset-0 bg-[rgba(250,247,242,0.6)] -z-10" aria-hidden />
               <div className={`text-3xl ${mat.accent}`}>{mat.emoji}</div>
               <div>
                 <h3 className="font-display text-xl text-ink">{mat.title}</h3>

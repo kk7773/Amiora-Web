@@ -11,6 +11,11 @@ export interface CartItem {
   imageUrl:     string
   unitPrice:    number
   quantity:     number
+  /** Display hint only — checkout uses server quote for authoritative pricing */
+  /** URL slug for PDP links (not the UUID productId) */
+  productSlug?:  string
+  collectionSlug?: string | null
+  categorySlug?:   string | null
   /** Snapshot at add-to-cart for order audit */
   metalWeightG?: number
   metalRatePerGram?: number
@@ -42,6 +47,9 @@ export const useCartStore = create<CartStore>()(
           ...items[existing]!,
           quantity:  Math.min((items[existing]!.quantity) + item.quantity, 5),
           unitPrice: item.unitPrice,
+          ...(item.productSlug ? { productSlug: item.productSlug } : {}),
+          ...(item.collectionSlug !== undefined ? { collectionSlug: item.collectionSlug } : {}),
+          ...(item.categorySlug !== undefined ? { categorySlug: item.categorySlug } : {}),
         }
         return { items }
       }

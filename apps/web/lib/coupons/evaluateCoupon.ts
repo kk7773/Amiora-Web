@@ -1,8 +1,8 @@
-import { calculateVariantPrice } from '@/lib/pricing/calculator'
-import { getLatestPrices } from '@/lib/pricing/engine'
 import type { SupabaseClient } from '@supabase/supabase-js'
-
-export type AppliesTo = 'making_charge' | 'gem_price' | 'both'
+import type { AppliesTo } from '@/lib/coupons/constants'
+import { priceCartLines } from '@/lib/checkout/priceCartLines'
+export type { AppliesTo } from '@/lib/coupons/constants'
+export { APPLIES_TO_LABELS } from '@/lib/coupons/constants'
 
 export type CartLine = { product_id: string; variant_id: string; quantity: number }
 
@@ -31,75 +31,13 @@ export type CouponEvaluation = {
   total_discount: number
 }
 
-function resolveWeightGrams(variant: Record<string, unknown>): number | null {
-  const metalWeight = variant['metal_weight_g']
-  if (metalWeight != null && Number(metalWeight) > 0) return Number(metalWeight)
-  const weightGrams = variant['weight_grams']
-  if (weightGrams != null && Number(weightGrams) > 0) return Number(weightGrams)
-  return null
-}
-
 export async function aggregateCartComponents(
   supabase: SupabaseClient,
   items: CartLine[],
 ): Promise<CartComponents> {
-  const prices = await getLatestPrices().catch(() => ({ gold: null, silver: null }))
-  const gold = prices.gold?.pricePerGram ?? 7200
-  const silver = prices.silver?.pricePerGram ?? 90
-  let making = 0
-  let gem = 0
-
-  for (const line of items) {
-    const qty = Math.max(1, Math.min(5, Number(line.quantity) || 1))
-    const { data: product } = await supabase
-      .from('products')
-      .select('making_charge_pct, making_charge_discount_pct, gem_price_discount_pct')
-      .eq('id', line.product_id)
-      .eq('is_active', true)
-      .single()
-
-    const { data: variant } = await supabase
-      .from('product_variants')
-      .select(
-        'purity, weight_grams, metal_weight_g, gem_price_override, is_active, making_charge_discount_pct, gem_price_discount_pct',
-      )
-      .eq('id', line.variant_id)
-      .eq('product_id', line.product_id)
-      .single()
-
-    if (!product || !variant) continue
-    if ((variant as { is_active?: boolean }).is_active === false) continue
-
-    const v = variant as Record<string, unknown>
-    const p = product as Record<string, unknown>
-    const wg = resolveWeightGrams(v)
-    if (wg == null) continue
-
-    const live = String(v['purity'] ?? '') === '92.5' ? silver : gold
-    const variantMcDisc = v['making_charge_discount_pct']
-    const variantGemDisc = v['gem_price_discount_pct']
-
-    const breakdown = calculateVariantPrice({
-      weightGrams: wg,
-      purity: String(v['purity'] ?? '18k'),
-      livePricePerGram999: live,
-      makingChargePct: Number(p['making_charge_pct'] ?? 8),
-      gemPriceOverride: v['gem_price_override'] != null ? Number(v['gem_price_override']) : null,
-      makingChargeDiscountPct: Number(p['making_charge_discount_pct'] ?? 0),
-      gemPriceDiscountPct: Number(p['gem_price_discount_pct'] ?? 0),
-      variantMakingChargeDiscountPct:
-        variantMcDisc != null ? Number(variantMcDisc) : null,
-      variantGemPriceDiscountPct:
-        variantGemDisc != null ? Number(variantGemDisc) : null,
-    })
-
-    making += breakdown.makingChargeNet * qty
-    gem += breakdown.gemPriceNet * qty
-  }
-
-  return { making, gem }
+  const { components } = await priceCartLines(supabase, items, { validateStock: false })
+  return components
 }
-
 export function isCouponActive(coupon: CouponRow, now = new Date()): boolean {
   if (!coupon.is_active) return false
   if (coupon.expires_at && new Date(coupon.expires_at) < now) return false
@@ -215,4 +153,19 @@ export function markBestCoupons<T extends { applicable: boolean; total_discount:
     ...c,
     is_best: c.applicable && c.total_discount > 0 && c.total_discount === maxDiscount,
   }))
+}
+
+/** Applicable coupons first (highest savings on top), then inapplicable by code. */
+export function sortEvaluatedCoupons<T extends { applicable: boolean; total_discount: number; code: string }>(
+  coupons: T[],
+): T[] {
+  return [...coupons].sort((a, b) => {
+    const aOk = a.applicable && a.total_discount > 0
+    const bOk = b.applicable && b.total_discount > 0
+    if (aOk !== bOk) return aOk ? -1 : 1
+    if (aOk && bOk && a.total_discount !== b.total_discount) {
+      return b.total_discount - a.total_discount
+    }
+    return a.code.localeCompare(b.code)
+  })
 }

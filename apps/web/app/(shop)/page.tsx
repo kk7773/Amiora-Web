@@ -74,7 +74,7 @@ export default async function HomePage() {
     }),
     fetchActiveProductCards(supabase, {
       order: { column: 'created_at', ascending: false },
-      limit: 40,
+      limit: 10,
     }),
     supabase.from('testimonials').select('id,name,location,quote,rating').eq('is_featured', true).order('sort_order').limit(8),
     supabase.from('blogs').select('id,title,slug,excerpt,cover_url,tags,published_at').eq('is_published', true).order('published_at', { ascending: false }).limit(3),

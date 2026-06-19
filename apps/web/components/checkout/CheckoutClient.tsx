@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Check, Store, Truck, CreditCard, ChevronRight, Loader2, Tag, X } from 'lucide-react'
 import { useCartStore, useCartHydrated }  from '@/stores/cartStore'
 import { formatINR }     from '@/lib/pricing/calculator'
+import { APPLIES_TO_LABELS, type AppliesTo } from '@/lib/coupons/constants'
 import { fadeUp }        from '@/lib/animations'
 
 /* ── Types ── */
@@ -45,6 +46,24 @@ type EvaluatedCoupon = {
   is_best: boolean
 }
 
+type CartQuote = {
+  lines: Array<{
+    product_id: string
+    variant_id: string
+    quantity: number
+    unit_price: number
+    line_total: number
+  }>
+  subtotal: number
+  discount_amount: number
+  subtotal_after_coupon: number
+  shipping: number
+  grand_total: number
+  coupon: { id: string; code: string; total_discount: number } | null
+  errors: string[]
+  coupons?: EvaluatedCoupon[]
+}
+
 const STORES = [
   { id: 's1', name: 'AMIORA — Connaught Place', address: '23 Connaught Place, New Delhi 110001', phone: '+91 98765-43210', timings: 'Mon–Sat 10am–8pm' },
   { id: 's2', name: 'AMIORA — Bandra West',      address: '14 Hill Road, Bandra West, Mumbai 400050', phone: '+91 98765-43211', timings: 'Mon–Sun 10am–9pm' },
@@ -56,7 +75,7 @@ const STEPS = ['Delivery', 'Details', 'Payment']
 export function CheckoutClient() {
   const router = useRouter()
   const cartHydrated = useCartHydrated()
-  const { items, total, clearCart } = useCartStore()
+  const { items, clearCart } = useCartStore()
   const revalidateCouponCodeRef = useRef<string | null>(null)
 
   const [step,           setStep]           = useState(0)
@@ -66,6 +85,9 @@ export function CheckoutClient() {
   const [pickupDate,     setPickupDate]     = useState('')
   const [loading,        setLoading]        = useState(false)
   const [loadingCoupons, setLoadingCoupons] = useState(true)
+  const [loadingQuote,   setLoadingQuote]   = useState(true)
+  const [quoteError,     setQuoteError]     = useState<string | null>(null)
+  const [quote,          setQuote]          = useState<CartQuote | null>(null)
   const [evaluatedCoupons, setEvaluatedCoupons] = useState<EvaluatedCoupon[]>([])
   const [selectedCouponId, setSelectedCouponId] = useState<string | null>(null)
   const [appliedCoupon, setAppliedCoupon] = useState<{
@@ -73,21 +95,27 @@ export function CheckoutClient() {
     code: string
     total_discount: number
   } | null>(null)
-  const [pincodeLoading, setPincodeLoading] = useState(false)
-  const [pincodeError, setPincodeError] = useState<string | null>(null)
-  const [postOffices, setPostOffices] = useState<{ name: string }[]>([])
 
-  const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<AddressData>({
+  const { register, handleSubmit, formState: { errors } } = useForm<AddressData>({
     resolver: zodResolver(addressSchema),
   })
 
-  const pincodeValue = watch('pincode')
+  const subtotal = quote?.subtotal ?? 0
+  const couponOff = quote?.discount_amount ?? 0
+  const subtotalAfterCoupon = quote?.subtotal_after_coupon ?? 0
+  const shipping = quote?.shipping ?? 0
+  const grandTotal = quote?.grand_total ?? 0
 
-  const subtotal = total()
-  const couponOff = appliedCoupon?.total_discount ?? 0
-  const subtotalAfterCoupon = Math.max(0, subtotal - couponOff)
-  const shipping   = deliveryMethod === 'pickup' ? 0 : (subtotalAfterCoupon >= 5000 ? 0 : 199)
-  const grandTotal = subtotalAfterCoupon + shipping
+  const orderItemsPayload = useCallback(
+    () =>
+      items.map((i) => ({
+        product_id: i.productId,
+        variant_id: i.variantId,
+        quantity:   i.quantity,
+        size_label: i.sizeLabel,
+      })),
+    [items],
+  )
 
   const cartLinePayload = useCallback(
     () =>
@@ -96,37 +124,67 @@ export function CheckoutClient() {
         variant_id: i.variantId,
         quantity:   i.quantity,
       })),
-    [items]
+    [items],
   )
 
   const cartSignature = useMemo(
     () =>
       JSON.stringify(
-        items.map((i) => [i.productId, i.variantId, i.quantity, i.unitPrice])
+        items.map((i) => [i.productId, i.variantId, i.quantity]),
       ),
-    [items]
+    [items],
+  )
+
+  const quoteSignature = useMemo(
+    () => JSON.stringify([cartSignature, appliedCoupon?.code ?? null, deliveryMethod]),
+    [cartSignature, appliedCoupon?.code, deliveryMethod],
+  )
+
+  const quoteLineMap = useMemo(
+    () =>
+      new Map(
+        (quote?.lines ?? []).map((l) => [`${l.product_id}:${l.variant_id}`, l] as const),
+      ),
+    [quote?.lines],
   )
 
   useEffect(() => {
     if (items.length === 0) {
+      setQuote(null)
       setEvaluatedCoupons([])
       setAppliedCoupon(null)
       setSelectedCouponId(null)
+      setQuoteError(null)
+      setLoadingQuote(false)
       setLoadingCoupons(false)
       return
     }
 
     let cancelled = false
+    setLoadingQuote(true)
     setLoadingCoupons(true)
+    setQuoteError(null)
 
-    fetch('/api/coupons/evaluate', {
+    fetch('/api/checkout/quote', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: cartLinePayload() }),
+      body: JSON.stringify({
+        items: cartLinePayload(),
+        coupon_code: appliedCoupon?.code,
+        delivery_method: deliveryMethod,
+      }),
     })
       .then((r) => r.json())
-      .then((d: { coupons?: EvaluatedCoupon[] }) => {
+      .then((d: CartQuote & { error?: string }) => {
         if (cancelled) return
+        if (d.error) {
+          setQuote(null)
+          setEvaluatedCoupons([])
+          setQuoteError(d.error)
+          return
+        }
+        setQuote(d)
+
         const list = d.coupons ?? []
         setEvaluatedCoupons(list)
 
@@ -145,53 +203,40 @@ export function CheckoutClient() {
             total_discount: match.total_discount,
           }
         })
-      })
-      .catch(() => { if (!cancelled) setEvaluatedCoupons([]) })
-      .finally(() => { if (!cancelled) setLoadingCoupons(false) })
 
-    return () => { cancelled = true }
-  }, [cartSignature, cartLinePayload, items.length])
-
-  useEffect(() => {
-    const pin = pincodeValue?.trim() ?? ''
-    if (!/^\d{6}$/.test(pin)) {
-      setPincodeError(null)
-      setPostOffices([])
-      return
-    }
-
-    let cancelled = false
-    setPincodeLoading(true)
-    setPincodeError(null)
-
-    fetch(`/api/pincode/${pin}`)
-      .then((r) => r.json())
-      .then((d: { ok?: boolean; state?: string; district?: string; postOffices?: { name: string }[]; error?: string }) => {
-        if (cancelled) return
-        if (!d.ok) {
-          setPincodeError(d.error ?? 'Invalid pincode')
-          setPostOffices([])
-          return
+        const couponErr = d.errors?.find((e) => e.toLowerCase().includes('coupon'))
+        if (appliedCoupon?.code && couponErr) {
+          setAppliedCoupon(null)
+          setSelectedCouponId(null)
+          revalidateCouponCodeRef.current = null
+          toast.error(couponErr)
+        } else if (appliedCoupon && d.coupon) {
+          setAppliedCoupon({
+            couponId: d.coupon.id,
+            code: d.coupon.code,
+            total_discount: d.coupon.total_discount,
+          })
         }
-        if (d.state) setValue('state', d.state, { shouldValidate: true })
-        if (d.district) setValue('district', d.district, { shouldValidate: true })
-        const offices = d.postOffices ?? []
-        setPostOffices(offices)
-        if (offices.length === 1) {
-          setValue('city', offices[0]!.name, { shouldValidate: true })
-        } else if (offices.length > 1) {
-          setValue('city', offices[0]!.name, { shouldValidate: true })
-        }
+
+        const itemErr = d.errors?.find((e) => !e.toLowerCase().includes('coupon'))
+        setQuoteError(itemErr ?? null)
       })
       .catch(() => {
-        if (!cancelled) setPincodeError('Could not fetch pincode details')
+        if (!cancelled) {
+          setQuote(null)
+          setEvaluatedCoupons([])
+          setQuoteError('Could not load pricing')
+        }
       })
       .finally(() => {
-        if (!cancelled) setPincodeLoading(false)
+        if (!cancelled) {
+          setLoadingQuote(false)
+          setLoadingCoupons(false)
+        }
       })
 
     return () => { cancelled = true }
-  }, [pincodeValue, setValue])
+  }, [quoteSignature, cartLinePayload, items.length, appliedCoupon?.code, deliveryMethod])
 
   const selectCoupon = (c: EvaluatedCoupon) => {
     if (!c.applicable) return
@@ -237,19 +282,19 @@ export function CheckoutClient() {
 
   /* ── Place order ── */
   const placeOrder = async (addressData?: AddressData) => {
+    if (loadingQuote || !quote || quote.lines.length === 0) {
+      toast.error(quoteError ?? 'Prices are still loading. Please wait.')
+      return
+    }
+    if (quoteError) {
+      toast.error(quoteError)
+      return
+    }
+
     setLoading(true)
     try {
       const payload = {
-        items: items.map((i) => ({
-          product_id: i.productId,
-          variant_id: i.variantId,
-          quantity:   i.quantity,
-          unit_price: i.unitPrice,
-          size_label: i.sizeLabel,
-          metal_weight_g: i.metalWeightG,
-          metal_rate_per_gram: i.metalRatePerGram,
-        })),
-        total_amount:    grandTotal,
+        items: orderItemsPayload(),
         delivery_method: deliveryMethod,
         payment_method:  paymentMethod,
         store_id:        deliveryMethod === 'pickup' ? selectedStore : undefined,
@@ -283,17 +328,26 @@ export function CheckoutClient() {
 
   /* ── Razorpay ── */
   const handleRazorpay = async (payload: object) => {
-    const orderRes  = await fetch('/api/payment/create-order', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: grandTotal }) })
+    const orderRes  = await fetch('/api/payment/create-order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        items: orderItemsPayload(),
+        coupon_code: appliedCoupon?.code,
+        delivery_method: deliveryMethod,
+      }),
+    })
     if (!orderRes.ok) {
       const err = (await orderRes.json().catch(() => ({}))) as { error?: string }
       toast.error(err.error ?? 'Could not start payment.')
       return
     }
-    const orderData = (await orderRes.json()) as { id: string; currency: string }
+    const orderData = (await orderRes.json()) as { id: string; currency: string; grand_total: number }
+    const payAmount = orderData.grand_total ?? grandTotal
 
     const options = {
       key:      process.env['NEXT_PUBLIC_RAZORPAY_KEY_ID'],
-      amount:   grandTotal * 100,
+      amount:   payAmount * 100,
       currency: orderData.currency ?? 'INR',
       name:     'Amiora Diamonds',
       order_id: orderData.id,
@@ -337,20 +391,28 @@ export function CheckoutClient() {
   }
 
   return (
-    <div className="section-x py-10 grid gap-10 lg:grid-cols-[1fr_360px]">
-      {/* Left — Steps */}
-      <div>
+    <div className="section-x py-6 md:py-10 pb-28 md:pb-10 grid gap-6 lg:gap-10 lg:grid-cols-[1fr_360px] overflow-x-hidden min-w-0">
+      {/* Steps */}
+      <div className="order-2 lg:order-1 min-w-0">
         {/* Step indicator */}
-        <div className="flex items-center gap-0 mb-10">
+        <div className="flex items-center mb-6 sm:mb-10">
           {STEPS.map((label, i) => (
-            <div key={label} className="flex items-center">
-              <div className={`flex items-center justify-center h-8 w-8 rounded-full text-sm font-medium transition-colors ${
-                i < step ? 'bg-teal text-white' : i === step ? 'bg-deep-teal text-white' : 'bg-surface-2 text-ink-faint'
-              }`}>
-                {i < step ? <Check className="h-4 w-4" /> : i + 1}
+            <div key={label} className="flex items-center flex-1 last:flex-none min-w-0">
+              <div className="flex flex-col items-center gap-1 min-w-[3.25rem] sm:min-w-0 sm:flex-row sm:gap-2">
+                <div className={`flex shrink-0 items-center justify-center h-7 w-7 sm:h-8 sm:w-8 rounded-full text-xs sm:text-sm font-medium transition-colors ${
+                  i < step ? 'bg-teal text-white' : i === step ? 'bg-deep-teal text-white' : 'bg-surface-2 text-ink-faint'
+                }`}>
+                  {i < step ? <Check className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : i + 1}
+                </div>
+                <span className={`text-[10px] leading-tight sm:text-sm text-center sm:text-left max-w-[4.5rem] sm:max-w-none truncate sm:overflow-visible sm:whitespace-normal ${
+                  i === step ? 'text-ink font-medium' : 'text-ink-muted'
+                }`}>
+                  {label}
+                </span>
               </div>
-              <span className={`ml-2 text-sm ${i === step ? 'text-ink font-medium' : 'text-ink-muted'}`}>{label}</span>
-              {i < STEPS.length - 1 && <div className="w-8 h-px bg-divider mx-3" />}
+              {i < STEPS.length - 1 && (
+                <div className="h-px flex-1 min-w-2 bg-divider mx-1 sm:mx-3 self-start mt-3.5 sm:mt-0 sm:self-center" aria-hidden />
+              )}
             </div>
           ))}
         </div>
@@ -378,7 +440,7 @@ export function CheckoutClient() {
               </div>
               <button
                 onClick={() => setStep(1)}
-                className="mt-4 flex items-center gap-2 bg-deep-teal text-cream px-8 py-3.5 text-sm font-medium uppercase tracking-widest rounded-xl hover:bg-teal transition-colors"
+                className="mt-4 flex w-full sm:w-auto items-center justify-center gap-2 bg-deep-teal text-cream px-8 py-3.5 text-sm font-medium uppercase tracking-widest rounded-xl hover:bg-teal transition-colors"
               >
                 Continue <ChevronRight className="h-4 w-4" />
               </button>
@@ -387,61 +449,51 @@ export function CheckoutClient() {
 
           {/* STEP 1 — Address / Store */}
           {step === 1 && deliveryMethod === 'online' && (
-            <motion.div key="step1-online" variants={fadeUp} initial="hidden" animate="visible" exit={{ opacity: 0 }}>
-              <h2 className="font-display text-xl text-ink mb-6">Shipping Address</h2>
+            <motion.div key="step1-online" variants={fadeUp} initial="hidden" animate="visible" exit={{ opacity: 0 }} className="min-w-0">
+              <h2 className="font-display text-lg sm:text-xl text-ink mb-4 sm:mb-6">Shipping Address</h2>
               <form onSubmit={handleSubmit(onAddressSubmit)} className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Pincode" error={errors.pincode?.message ?? pincodeError ?? undefined}>
-                    <div className="relative">
-                      <input
-                        {...register('pincode')}
-                        placeholder="6-digit pincode"
-                        className={inputCls}
-                        inputMode="numeric"
-                        maxLength={6}
-                      />
-                      {pincodeLoading && (
-                        <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-teal" />
-                      )}
-                    </div>
-                  </Field>
-                  <Field label="State" error={errors.state?.message}>
-                    <input {...register('state')} readOnly className={`${inputCls} bg-surface cursor-not-allowed`} placeholder="Auto-filled" />
-                  </Field>
-                  <Field label="District" error={errors.district?.message}>
-                    <input {...register('district')} readOnly className={`${inputCls} bg-surface cursor-not-allowed`} placeholder="Auto-filled" />
-                  </Field>
-                  <Field label="City / Area" error={errors.city?.message}>
-                    {postOffices.length > 1 ? (
-                      <select {...register('city')} className={inputCls}>
-                        {postOffices.map((o) => (
-                          <option key={o.name} value={o.name}>{o.name}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input {...register('city')} readOnly className={`${inputCls} bg-surface cursor-not-allowed`} placeholder="Auto-filled" />
-                    )}
-                  </Field>
+                <div className="grid grid-cols-1 gap-3.5 sm:gap-4 sm:grid-cols-2">
                   <Field label="Full Name" error={errors.full_name?.message}>
-                    <input {...register('full_name')} placeholder="Your full name" className={inputCls} />
+                    <input {...register('full_name')} placeholder="Your full name" className={inputCls} autoComplete="name" />
                   </Field>
                   <Field label="Phone" error={errors.phone?.message}>
-                    <input {...register('phone')} placeholder="+91 XXXXX XXXXX" className={inputCls} />
+                    <input {...register('phone')} placeholder="+91 XXXXX XXXXX" className={inputCls} type="tel" inputMode="tel" autoComplete="tel" />
                   </Field>
                   <Field label="Email" error={errors.email?.message} className="sm:col-span-2">
-                    <input {...register('email')} placeholder="email@example.com" className={inputCls} type="email" />
+                    <input {...register('email')} placeholder="email@example.com" className={inputCls} type="email" autoComplete="email" />
                   </Field>
                   <Field label="Address" error={errors.line1?.message} className="sm:col-span-2">
-                    <input {...register('line1')} placeholder="Flat/House no., Street" className={inputCls} />
+                    <input {...register('line1')} placeholder="Flat/House no., Street" className={inputCls} autoComplete="address-line1" />
                   </Field>
-                  <Field label="Area / Landmark (optional)" className="sm:col-span-2">
-                    <input {...register('line2')} placeholder="Area, Landmark" className={inputCls} />
+                  <Field label="Landmark (optional)" className="sm:col-span-2">
+                    <input {...register('line2')} placeholder="Area, landmark" className={inputCls} autoComplete="address-line2" />
+                  </Field>
+                  <Field label="City" error={errors.city?.message}>
+                    <input {...register('city')} placeholder="City" className={inputCls} autoComplete="address-level2" />
+                  </Field>
+                  <Field label="State" error={errors.state?.message}>
+                    <input {...register('state')} placeholder="State" className={inputCls} autoComplete="address-level1" />
+                  </Field>
+                  <Field label="District" error={errors.district?.message}>
+                    <input {...register('district')} placeholder="District" className={inputCls} />
+                  </Field>
+                  <Field label="Pincode" error={errors.pincode?.message}>
+                    <input
+                      {...register('pincode')}
+                      placeholder="6-digit pincode"
+                      className={inputCls}
+                      inputMode="numeric"
+                      maxLength={6}
+                      autoComplete="postal-code"
+                    />
                   </Field>
                 </div>
-                <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={() => setStep(0)} className="px-6 py-3 text-sm border border-divider rounded-xl hover:border-teal transition-colors">Back</button>
-                  <button type="submit" className="flex items-center gap-2 bg-deep-teal text-cream px-8 py-3 text-sm font-medium uppercase tracking-widest rounded-xl hover:bg-teal transition-colors">
-                    Continue to Payment <ChevronRight className="h-4 w-4" />
+                <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
+                  <button type="button" onClick={() => setStep(0)} className={secondaryBtnCls}>Back</button>
+                  <button type="submit" className={primaryBtnCls}>
+                    <span className="sm:hidden">Continue</span>
+                    <span className="hidden sm:inline">Continue to Payment</span>
+                    <ChevronRight className="h-4 w-4" />
                   </button>
                 </div>
               </form>
@@ -475,12 +527,13 @@ export function CheckoutClient() {
                   <PaymentCard title="Pay At Store" sub="Pay when you pick up" icon={<Store className="h-5 w-5" />} active={paymentMethod === 'at_store'} onClick={() => setPaymentMethod('at_store')} />
                 </div>
               </div>
-              <div className="flex gap-3">
-                <button onClick={() => setStep(0)} className="px-6 py-3 text-sm border border-divider rounded-xl hover:border-teal transition-colors">Back</button>
+              <div className="flex flex-col-reverse sm:flex-row gap-3">
+                <button type="button" onClick={() => setStep(0)} className={secondaryBtnCls}>Back</button>
                 <button
+                  type="button"
                   onClick={() => void placeOrder()}
                   disabled={loading || !pickupDate}
-                  className="flex items-center gap-2 bg-deep-teal text-cream px-8 py-3.5 text-sm font-medium uppercase tracking-widest rounded-xl hover:bg-teal disabled:opacity-50 transition-colors"
+                  className={primaryBtnCls}
                 >
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   {paymentMethod === 'online' ? 'Pay & Confirm' : 'Confirm Booking'}
@@ -506,21 +559,31 @@ export function CheckoutClient() {
         </AnimatePresence>
       </div>
 
-      {/* Right — Order summary */}
-      <div className="lg:sticky lg:top-24 lg:self-start">
-        <div className="bg-surface rounded-2xl p-6 space-y-4">
-          <h3 className="font-display text-lg text-ink">Order Summary</h3>
-          <ul className="space-y-3 divide-y divide-divider">
-            {items.map((item) => (
+      {/* Order summary — compact on top for mobile */}
+      <div className="order-1 lg:order-2 lg:sticky lg:top-24 lg:self-start min-w-0">
+        <div className="bg-surface rounded-2xl p-4 sm:p-6 space-y-4">
+          <h3 className="font-display text-base sm:text-lg text-ink">Order Summary</h3>
+          <ul className="space-y-3 divide-y divide-divider max-h-40 sm:max-h-none overflow-y-auto sm:overflow-visible">
+            {items.map((item) => {
+              const priced = quoteLineMap.get(`${item.productId}:${item.variantId}`)
+              const lineTotal = priced?.line_total ?? null
+              return (
               <li key={`${item.productId}-${item.variantId}`} className="pt-3 first:pt-0 flex justify-between text-sm gap-2">
                 <div className="min-w-0">
                   <p className="font-medium text-ink line-clamp-1">{item.productName}</p>
                   <p className="text-xs text-ink-muted">{item.variantLabel} · Qty {item.quantity}</p>
                 </div>
-                <p className="shrink-0 font-medium text-ink">{formatINR(item.unitPrice * item.quantity)}</p>
+                <p className="shrink-0 font-medium text-ink">
+                  {loadingQuote || lineTotal == null ? '…' : formatINR(lineTotal)}
+                </p>
               </li>
-            ))}
+              )
+            })}
           </ul>
+
+          {quoteError && (
+            <p className="text-xs text-red-500">{quoteError}</p>
+          )}
 
           <div className="border-t border-divider pt-4">
             <p className="text-xs uppercase tracking-widest text-ink-muted mb-2 flex items-center gap-1.5">
@@ -532,7 +595,7 @@ export function CheckoutClient() {
             ) : evaluatedCoupons.length === 0 ? (
               <p className="text-sm text-ink-faint">No offers available for this cart.</p>
             ) : (
-              <ul className="space-y-2 max-h-56 overflow-y-auto pr-0.5">
+              <ul className="space-y-2 max-h-36 sm:max-h-56 overflow-y-auto pr-0.5">
                 {evaluatedCoupons.map((c) => {
                   const selected = selectedCouponId === c.id
                   const disabled = !c.applicable
@@ -558,6 +621,9 @@ export function CheckoutClient() {
                           </span>
                         )}
                         <span className="font-mono font-semibold text-ink tracking-wide">{c.code}</span>
+                        <span className="block text-[0.65rem] uppercase tracking-wider text-ink-faint mt-0.5">
+                          {APPLIES_TO_LABELS[(c.applies_to as AppliesTo) ?? 'both']}
+                        </span>
                         {c.description && (
                           <span className="block text-xs text-ink-muted mt-0.5 line-clamp-2 pr-16">{c.description}</span>
                         )}
@@ -596,15 +662,15 @@ export function CheckoutClient() {
           </div>
 
           <div className="border-t border-divider pt-4 space-y-2 text-sm">
-            <div className="flex justify-between text-ink-muted"><span>Subtotal</span><span>{formatINR(subtotal)}</span></div>
+            <div className="flex justify-between text-ink-muted"><span>Subtotal</span><span>{loadingQuote ? '…' : formatINR(subtotal)}</span></div>
             {couponOff > 0 && (
               <div className="flex justify-between text-teal">
                 <span>Discount</span>
                 <span>−{formatINR(couponOff)}</span>
               </div>
             )}
-            <div className="flex justify-between text-ink-muted"><span>Shipping</span><span className={shipping === 0 ? 'text-teal font-medium' : ''}>{shipping === 0 ? 'FREE' : formatINR(shipping)}</span></div>
-            <div className="flex justify-between text-base font-semibold text-ink pt-2 border-t border-divider"><span>Total</span><span>{formatINR(grandTotal)}</span></div>
+            <div className="flex justify-between text-ink-muted"><span>Shipping</span><span className={shipping === 0 ? 'text-teal font-medium' : ''}>{loadingQuote ? '…' : shipping === 0 ? 'FREE' : formatINR(shipping)}</span></div>
+            <div className="flex justify-between text-base font-semibold text-ink pt-2 border-t border-divider"><span>Total</span><span>{loadingQuote ? '…' : formatINR(grandTotal)}</span></div>
           </div>
         </div>
       </div>
@@ -613,7 +679,14 @@ export function CheckoutClient() {
 }
 
 /* ── Small helper components ── */
-const inputCls = 'w-full px-3 py-2.5 text-sm bg-bg border border-divider rounded-lg text-ink placeholder-ink-faint focus:outline-none focus:ring-1 focus:ring-teal focus:border-teal transition-colors'
+const inputCls =
+  'w-full min-h-[44px] px-3 py-3 sm:py-2.5 text-base sm:text-sm bg-bg border border-divider rounded-lg text-ink placeholder-ink-faint focus:outline-none focus:ring-1 focus:ring-teal focus:border-teal transition-colors'
+
+const primaryBtnCls =
+  'flex w-full sm:w-auto sm:flex-1 items-center justify-center gap-2 bg-deep-teal text-cream px-6 sm:px-8 py-3.5 text-sm font-medium uppercase tracking-widest rounded-xl hover:bg-teal transition-colors disabled:opacity-50'
+
+const secondaryBtnCls =
+  'w-full sm:w-auto px-6 py-3.5 text-sm border border-divider rounded-xl hover:border-teal transition-colors text-center'
 
 function Field({ label, error, children, className = '' }: { label: string; error?: string; children: React.ReactNode; className?: string }) {
   return (

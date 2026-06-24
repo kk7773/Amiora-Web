@@ -9,10 +9,14 @@ export function getRazorpayServerCredentials(): {
     const sandboxKeyId =
       process.env.RAZORPAY_SANDBOX_KEY_ID?.trim() ||
       process.env.NEXT_PUBLIC_RAZORPAY_SANDBOX_KEY_ID?.trim() ||
+      process.env.RAZORPAY_KEY_ID?.trim() ||
+      process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID?.trim() ||
       undefined
     const sandboxKeySecret =
       process.env.RAZORPAY_SANDBOX_KEY_SECRET?.trim() ||
       process.env.NEXT_PUBLIC_RAZORPAY_SANDBOX_KEY_SECRET?.trim() ||
+      process.env.RAZORPAY_KEY_SECRET?.trim() ||
+      process.env.NEXT_PUBLIC_RAZORPAY_KEY_SECRET?.trim() ||
       undefined
 
     return {
@@ -21,8 +25,14 @@ export function getRazorpayServerCredentials(): {
     }
   }
 
-  const keyId = process.env.RAZORPAY_KEY_ID?.trim() || undefined
-  const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim() || undefined
+  const keyId =
+    process.env.RAZORPAY_KEY_ID?.trim() ||
+    process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID?.trim() ||
+    undefined
+  const keySecret =
+    process.env.RAZORPAY_KEY_SECRET?.trim() ||
+    process.env.NEXT_PUBLIC_RAZORPAY_KEY_SECRET?.trim() ||
+    undefined
 
   return { keyId, keySecret }
 }

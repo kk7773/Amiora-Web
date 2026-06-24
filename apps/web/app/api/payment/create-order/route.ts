@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
           error:
             process.env.NODE_ENV === 'production'
               ? 'Payment gateway not configured'
-              : 'Sandbox Razorpay credentials are not configured. Set RAZORPAY_SANDBOX_KEY_ID and RAZORPAY_SANDBOX_KEY_SECRET in .env.local, then restart the dev server.',
+              : 'Sandbox Razorpay credentials are not configured. Set RAZORPAY_SANDBOX_KEY_ID and RAZORPAY_SANDBOX_KEY_SECRET in .env.local, or use RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET, then restart the dev server.',
         },
         { status: 503 },
       )
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error: isAuthFailure
-            ? 'Razorpay authentication failed. Check RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in .env.local, then restart the dev server.'
+            ? 'Razorpay authentication failed. Check RAZORPAY_KEY_ID / NEXT_PUBLIC_RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in your env, then restart the server.'
             : razorpayError,
           details: data.error ?? null,
           debug:

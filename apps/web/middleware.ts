@@ -7,7 +7,7 @@ import {
   shopPriceListingPathRedirect,
 } from '@/lib/shop/priceListingSlugs'
 
-const PROTECTED_PREFIXES = ['/account', '/checkout']
+const PROTECTED_PREFIXES = ['/account']
 const AUTH_PREFIXES      = ['/login', '/register', '/forgot-password']
 
 function withCanonicalPath(request: NextRequest): Headers {

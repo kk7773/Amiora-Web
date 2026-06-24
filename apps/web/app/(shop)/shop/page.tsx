@@ -21,12 +21,10 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
   const params = await searchParams
   const initialPage = Math.max(1, parseInt(params['page'] ?? '1', 10))
   const initialSort = params['sort'] ?? 'newest'
-  const metal = params['metal']
+  const metal = params['metal']?.split(',').filter(Boolean) ?? []
   const purity = params['purity']?.split(',').filter(Boolean) ?? []
   const diamond = params['diamond'] === 'true'
   const catArr = params['category']?.split(',').filter(Boolean) ?? []
-
-  const filters = { metal, purity, diamond, category: catArr }
 
   const supabase = createServerClient()
   const { products, total } = await fetchShopListing(supabase, {
@@ -76,7 +74,12 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
               pageSize={SHOP_PAGE_SIZE}
               initialPage={initialPage}
               initialSort={initialSort}
-              filters={filters}
+              filters={{
+                metal,
+                purity,
+                diamond,
+                category: catArr,
+              }}
             />
           </Suspense>
         </div>

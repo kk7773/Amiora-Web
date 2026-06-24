@@ -53,6 +53,10 @@ function clampQty(qty: number): number {
   return Math.max(1, Math.min(5, Number(qty) || 1))
 }
 
+function normalizeLookupKey(value?: string | null): string {
+  return value?.trim().toLowerCase() ?? ''
+}
+
 export async function priceCartLines(
   supabase: SupabaseClient,
   items: CartLine[],
@@ -72,53 +76,105 @@ export async function priceCartLines(
   const goldPerGram = prices.gold?.pricePerGram ?? 7200
   const silverPerGram = prices.silver?.pricePerGram ?? 90
 
-  const productIds = [...new Set(items.map((i) => i.product_id))]
-  const variantIds = [...new Set(items.map((i) => i.variant_id))]
+  const requestedProductIds = [...new Set(items.map((i) => i.product_id))]
+  const variantIds = [...new Set(items.map((i) => i.variant_id).filter(Boolean))]
 
-  const [{ data: products }, { data: variants }] = await Promise.all([
-    supabase
-      .from('products')
-      .select('id, name, making_charge_pct, making_charge_discount_pct, gem_price_discount_pct, stone_lines')
-      .in('id', productIds)
-      .eq('status', 'active'),
-    supabase
-      .from('product_variants')
-      .select('id, product_id, sku, metal_weight_g, purity_id, is_active, stock_qty, making_charge_discount_pct, gem_price_discount_pct')
-      .in('product_id', productIds),
+  const [{ data: variantsById }, { data: variantsByProduct }] = await Promise.all([
+    variantIds.length > 0
+      ? supabase
+          .from('product_variants')
+          .select('id, product_id, sku, metal_weight_g, purity_id, is_active, stock_qty, making_charge_discount_pct, gem_price_discount_pct')
+          .in('id', variantIds)
+      : Promise.resolve({ data: [] as VariantRow[] }),
+    requestedProductIds.length > 0
+      ? supabase
+          .from('product_variants')
+          .select('id, product_id, sku, metal_weight_g, purity_id, is_active, stock_qty, making_charge_discount_pct, gem_price_discount_pct')
+          .in('product_id', requestedProductIds)
+      : Promise.resolve({ data: [] as VariantRow[] }),
   ])
 
+  const mergedVariants = [
+    ...new Map(
+      [...(variantsById ?? []), ...(variantsByProduct ?? [])]
+        .map((variant) => [String((variant as VariantRow).id), variant as VariantRow]),
+    ).values(),
+  ]
+
+  const resolvedProductIds = [
+    ...new Set([
+      ...requestedProductIds,
+      ...mergedVariants.map((variant) => variant.product_id).filter(Boolean),
+    ]),
+  ]
+
+  const { data: products } = resolvedProductIds.length > 0
+    ? await supabase
+        .from('products')
+        .select('id, name, making_charge_pct, making_charge_discount_pct, gem_price_discount_pct, stone_lines')
+        .in('id', resolvedProductIds)
+        .eq('status', 'active')
+    : { data: [] as ProductRow[] }
+
   const purityIds = [
-    ...new Set((variants ?? []).map((v) => (v as VariantRow).purity_id).filter(Boolean)),
+    ...new Set(mergedVariants.map((v) => v.purity_id).filter(Boolean)),
   ]
 
   const { data: purities } = purityIds.length > 0
     ? await supabase.from('metal_purities').select('id, code, metal').in('id', purityIds)
     : { data: [] as PurityRow[] }
 
-  const productMap = new Map((products ?? []).map((p) => [(p as ProductRow).id, p as ProductRow]))
-  const variantMap = new Map((variants ?? []).map((v) => [(v as VariantRow).id, v as VariantRow]))
-  const variantSkuMap = new Map(
-    (variants ?? [])
-      .map((v) => v as VariantRow)
-      .filter((v) => typeof v.sku === 'string' && v.sku.trim().length > 0)
-      .map((v) => [`${v.product_id}:${v.sku!.trim().toLowerCase()}`, v] as const),
+  const productMap = new Map(
+    (products ?? []).map((p) => [normalizeLookupKey((p as ProductRow).id), p as ProductRow]),
   )
-  const purityMap = new Map((purities ?? []).map((p) => [(p as PurityRow).id, p as PurityRow]))
+  const variantMap = new Map(
+    mergedVariants.map((v) => [normalizeLookupKey(v.id), v] as const),
+  )
+  const variantSkuMap = new Map(
+    mergedVariants
+      .filter((v) => typeof v.sku === 'string' && v.sku.trim().length > 0)
+      .map((v) => [`${normalizeLookupKey(v.product_id)}:${v.sku!.trim().toLowerCase()}`, v] as const),
+  )
+  const purityMap = new Map(
+    (purities ?? []).map((p) => [normalizeLookupKey((p as PurityRow).id), p as PurityRow]),
+  )
 
   for (const line of items) {
     const qty = clampQty(line.quantity)
-    const product = productMap.get(line.product_id)
+    const variantId = normalizeLookupKey(line.variant_id)
+    const variantSku = normalizeLookupKey(line.variant_sku)
     const variant =
-      variantMap.get(line.variant_id) ??
-      (line.variant_sku
-        ? variantSkuMap.get(`${line.product_id}:${line.variant_sku.trim().toLowerCase()}`)
+      variantMap.get(variantId) ??
+      (variantSku
+      ? variantSkuMap.get(`${line.product_id}:${variantSku}`)
+        : undefined) ??
+      (variantId
+        ? variantSkuMap.get(`${normalizeLookupKey(line.product_id)}:${variantId}`)
         : undefined)
+    const resolvedProductId = variant?.product_id ?? line.product_id
+    const product = productMap.get(normalizeLookupKey(resolvedProductId)) ?? productMap.get(normalizeLookupKey(line.product_id))
 
     if (!product) {
       errors.push('A product in your cart is no longer available')
       continue
     }
-    if (!variant || variant.product_id !== line.product_id) {
+    if (!variant) {
+      const snapshotPrice = Number(line.unit_price ?? 0)
+      if (snapshotPrice > 0) {
+        lines.push({
+          product_id: line.product_id,
+          variant_id: line.variant_id,
+          quantity: qty,
+          unit_price: Math.round(snapshotPrice),
+          line_total: Math.round(snapshotPrice) * qty,
+          metal_weight_g: null,
+          metal_rate_per_gram: null,
+          in_stock: true,
+          product_name: product.name,
+        })
+        continue
+      }
+
       errors.push(`${product.name}: selected option is invalid`)
       continue
     }
@@ -138,7 +194,7 @@ export async function priceCartLines(
       continue
     }
 
-    const purity = purityMap.get(variant.purity_id)
+    const purity = purityMap.get(normalizeLookupKey(variant.purity_id))
     const metalRate = resolveLiveRate(purity?.metal ?? undefined, goldPerGram, silverPerGram)
 
     const breakdown = computeCatalogVariantPrice({
@@ -171,7 +227,7 @@ export async function priceCartLines(
     gem += breakdown.gemPriceNet * qty
 
     lines.push({
-      product_id: line.product_id,
+      product_id: resolvedProductId,
       variant_id: variant.id,
       quantity: qty,
       unit_price: unitPrice,

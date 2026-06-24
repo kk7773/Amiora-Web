@@ -32,12 +32,18 @@ export function purityParamsToCodes(params: string[]): string[] {
 export type ShopListingFilters = {
   page?: number
   sort?: string
-  metal?: string
+  metal?: string[]
   purity?: string[]
   diamond?: boolean
   category?: string[]
   collection?: string
   price?: string | null
+}
+
+function normalizeList(values: string[] | string | undefined): string[] {
+  if (!values) return []
+  const list = Array.isArray(values) ? values : values.split(',')
+  return [...new Set(list.map((value) => value.trim().toLowerCase()).filter(Boolean))]
 }
 
 type RawProductRow = {
@@ -85,7 +91,7 @@ async function fetchShopListingImpl(
 ) {
   const page = Math.max(1, filters.page ?? 1)
   const sort = filters.sort ?? 'newest'
-  const metal = filters.metal
+  const metal = normalizeList(filters.metal)
   const purity = filters.purity ?? []
   const diamond = filters.diamond ?? false
   const catArr = filters.category ?? []
@@ -98,24 +104,48 @@ async function fetchShopListingImpl(
 
   const idSets: string[][] = []
 
-  if (metal || purity.length > 0) {
+  if (metal.length > 0 || purity.length > 0) {
     type VRow = { product_id: string }
     type PurityRow = { id: string }
-    let codes: string[] = []
-    if (purity.length > 0) {
-      codes = purityParamsToCodes(purity)
-    } else if (metal === 'gold') {
-      codes = ['18', '14', '09']
-    } else if (metal === 'silver') {
-      idSets.push([])
-      codes = []
+
+    const selectedCodes = new Set<string>()
+    for (const selectedMetal of metal) {
+      if (selectedMetal === 'gold') {
+        selectedCodes.add('18')
+        selectedCodes.add('14')
+        selectedCodes.add('09')
+      }
+      if (selectedMetal === 'silver') {
+        selectedCodes.add('92')
+      }
     }
 
-    if (codes.length === 0 && metal !== 'silver') {
-      /* no-op */
-    } else if (metal === 'silver') {
-      /* already pushed empty */
-    } else {
+    const metalIds = selectedCodes.size > 0
+      ? await (async () => {
+          const { data: prow } = await supabase
+            .from('metal_purities')
+            .select('id')
+            .eq('is_active', true)
+            .in('code', [...selectedCodes])
+
+          const pidList = ((prow ?? []) as PurityRow[]).map((r) => r.id)
+          if (pidList.length === 0) return [] as string[]
+          const { data } = await supabase
+            .from('product_variants')
+            .select('product_id')
+            .in('purity_id', pidList)
+          return [...new Set((data ?? [] as VRow[]).map((r: VRow) => r.product_id))]
+        })()
+      : metal.length > 0
+        ? []
+        : null
+
+    if (metalIds !== null) {
+      idSets.push(metalIds)
+    }
+
+    if (purity.length > 0) {
+      const codes = purityParamsToCodes(purity)
       const { data: prow } = await supabase
         .from('metal_purities')
         .select('id')

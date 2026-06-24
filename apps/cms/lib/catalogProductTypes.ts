@@ -23,8 +23,9 @@ export type CatalogProductPayload = {
     slug: string
     category_id: string
     collection_id?: string | null
-    product_number: number
+    product_number?: number
     design_number?: string | null
+    product_code?: string | null
     short_desc?: string | null
     description?: string | null
     diamond_shape?: string | null

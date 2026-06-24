@@ -5,6 +5,7 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 export interface CartItem {
   productId:    string
   variantId:    string
+  variantSku?:  string
   sizeLabel:    string
   productName:  string
   variantLabel: string
@@ -47,6 +48,7 @@ export const useCartStore = create<CartStore>()(
           ...items[existing]!,
           quantity:  Math.min((items[existing]!.quantity) + item.quantity, 5),
           unitPrice: item.unitPrice,
+          ...(item.variantSku ? { variantSku: item.variantSku } : {}),
           ...(item.productSlug ? { productSlug: item.productSlug } : {}),
           ...(item.collectionSlug !== undefined ? { collectionSlug: item.collectionSlug } : {}),
           ...(item.categorySlug !== undefined ? { categorySlug: item.categorySlug } : {}),
@@ -93,8 +95,21 @@ export const useCartStore = create<CartStore>()(
 }),
     {
       name: 'amiora-cart',
+      version: 4,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({ items: state.items }),
+      migrate: (persistedState, version) => {
+        if (version < 3) {
+          return { items: [] }
+        }
+        const state = persistedState as { items?: CartItem[] } | undefined
+        return {
+          items: (state?.items ?? []).map((item) => ({
+            ...item,
+            variantSku: item.variantSku ?? item.variantLabel ?? item.variantId,
+          })),
+        }
+      },
     }
   )
 )

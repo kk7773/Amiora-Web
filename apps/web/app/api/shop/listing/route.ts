@@ -7,13 +7,14 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const supabase = createServerClient()
 
+    const metalRaw = searchParams.get('metal')
     const purityRaw = searchParams.get('purity')
     const categoryRaw = searchParams.get('category')
 
     const result = await fetchShopListing(supabase, {
       page: Number.parseInt(searchParams.get('page') ?? '1', 10),
       sort: searchParams.get('sort') ?? 'newest',
-      metal: searchParams.get('metal') ?? undefined,
+      metal: metalRaw ? metalRaw.split(',').filter(Boolean) : [],
       purity: purityRaw ? purityRaw.split(',').filter(Boolean) : [],
       diamond: searchParams.get('diamond') === 'true',
       category: categoryRaw ? categoryRaw.split(',').filter(Boolean) : [],

@@ -9,7 +9,6 @@ type ProductRow = {
   slug: string
   is_featured: boolean
   status: 'draft' | 'active' | 'archived'
-  product_number: number
   design_number: string | null
   created_at: string
   collection_id: string | null
@@ -38,9 +37,7 @@ export default async function ProductsPage() {
   ] = await Promise.all([
     supabase
       .from('products')
-      .select(
-        'id, name, slug, is_featured, status, product_number, design_number, created_at, collection_id, category_id',
-      )
+      .select('id, name, slug, is_featured, status, design_number, created_at, collection_id, category_id')
       .order('created_at', { ascending: false }),
     supabase.from('collections').select('id, name').eq('is_active', true),
     supabase.from('categories').select('id, name'),

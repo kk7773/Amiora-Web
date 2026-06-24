@@ -7,6 +7,7 @@ import { Plus, Trash2, ChevronUp, ChevronDown, X, Film } from 'lucide-react'
 import { useCloudinaryUpload } from '@/hooks/useCloudinaryUpload'
 import { generateAmioraSKU, slugifyName } from '@/lib/sku'
 import { isBulkImportPlaceholder } from '@/lib/bulkImportConstants'
+import { buildProductCode } from '@/lib/productIdentity'
 
 type Category = { id: string; name: string; code: string | null }
 type Collection = { id: string; name: string }
@@ -70,8 +71,9 @@ type InitialData = {
     collection_id: string | null
     collection_ids?: string[]
     tag_ids?: string[]
-    product_number: number
+    product_number?: number
     design_number: string | null
+    product_code?: string | null
     short_desc: string | null
     description: string | null
     diamond_shape: string | null
@@ -242,46 +244,103 @@ function buildCellState(matrix: MatrixSeedCell[], fallbackWeightG?: number | nul
   ) as Record<string, CellState>
 }
 
-type StoneLineUi = {
-  key:      string
-  name:     string
+type StoneSizeUi = {
+  key: string
   cut_size: string
-  shape:    string
-  color:    string
-  count:    string
-  rate:     string
+  count: string
+  weight: string
+  rate: string
+}
+
+type StoneLineUi = {
+  key: string
+  name: string
+  shape: string
+  color: string
+  sizes: StoneSizeUi[]
+}
+
+function stoneSizeFromDb(raw: unknown, keyPrefix: string): StoneSizeUi[] {
+  if (!Array.isArray(raw) || raw.length === 0) return []
+  return raw.map((item, index) => {
+    const o = item as Record<string, unknown>
+    const cutSize = typeof o.cut_size === 'string' ? o.cut_size : ''
+    const rateRaw = o.rate_inr
+    const countRaw = o.count
+    const weightRaw = o.weight
+    const rate =
+      typeof rateRaw === 'number' && Number.isFinite(rateRaw)
+        ? String(rateRaw)
+        : typeof rateRaw === 'string' && rateRaw.trim() !== ''
+          ? rateRaw
+          : ''
+    const count =
+      typeof countRaw === 'number' && Number.isFinite(countRaw)
+        ? String(countRaw)
+        : typeof countRaw === 'string' && countRaw.trim() !== ''
+          ? countRaw
+          : ''
+    const weight =
+      typeof weightRaw === 'number' && Number.isFinite(weightRaw)
+        ? String(weightRaw)
+        : typeof weightRaw === 'string' && weightRaw.trim() !== ''
+          ? weightRaw
+          : ''
+    return {
+      key: `${keyPrefix}-size-${index}`,
+      cut_size: cutSize,
+      count,
+      weight,
+      rate,
+    }
+  })
 }
 
 function stoneLinesFromDb(raw: unknown): StoneLineUi[] {
   if (!Array.isArray(raw) || raw.length === 0) return []
   return raw.map((item, i) => {
     const o = item as Record<string, unknown>
-    const name     = typeof o.name     === 'string' ? o.name     : ''
-    const cut_size = typeof o.cut_size === 'string' ? o.cut_size : ''
-    const shape    = typeof o.shape    === 'string' ? o.shape    : ''
-    const color    = typeof o.color    === 'string' ? o.color    : ''
-    const rateRaw  = o.rate_inr
-    const rateStr  =
-      typeof rateRaw === 'number' && Number.isFinite(rateRaw)
-        ? String(rateRaw)
-        : typeof rateRaw === 'string' && rateRaw.trim() !== ''
-          ? rateRaw
-          : ''
-    const countRaw = o.count
-    const countStr =
-      typeof countRaw === 'number' && Number.isFinite(countRaw)
-        ? String(countRaw)
-        : typeof countRaw === 'string' && countRaw.trim() !== ''
-          ? countRaw
-          : ''
-    return { key: `st-${i}-${name.slice(0, 8)}`, name, cut_size, shape, color, count: countStr, rate: rateStr }
+    const name = typeof o.name === 'string' ? o.name : ''
+    const shape = typeof o.shape === 'string' ? o.shape : ''
+    const color = typeof o.color === 'string' ? o.color : ''
+    const sizes = stoneSizeFromDb(
+      Array.isArray(o.sizes)
+        ? o.sizes
+        : [{
+            cut_size: o.cut_size ?? '',
+            count: o.count ?? '',
+            rate_inr: o.rate_inr ?? '',
+            price_inr: o.price_inr ?? '',
+          }],
+      `st-${i}`,
+    )
+    return {
+      key: `st-${i}-${name.slice(0, 8)}`,
+      name,
+      shape,
+      color,
+      sizes: sizes.length > 0 ? sizes : [{ key: `st-${i}-size-0`, cut_size: '', count: '', weight: '', rate: '' }],
+    }
   })
 }
 
 function newStoneRow(): StoneLineUi {
   return {
     key: `st-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-    name: '', cut_size: '', shape: '', color: '', count: '', rate: '',
+    name: '',
+    shape: '',
+    color: '',
+    sizes: [newStoneSizeRow()],
+  }
+}
+
+function newStoneSizeRow(): StoneSizeUi {
+  return {
+    key: `ss-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    cut_size: '',
+    count: '',
+    weight: '',
+    rate: '',
   }
 }
 
@@ -396,6 +455,10 @@ export function ProductCatalogCreateForm({
   const [justPublished, setJustPublished] = useState(false)
 
   const categoryCode = categories.find((c) => c.id === categoryId)?.code ?? 'XX'
+  const productId = useMemo(() => {
+    if (!categoryCode || !designNumber.trim()) return ''
+    return buildProductCode(categoryCode, designNumber.trim())
+  }, [categoryCode, designNumber])
 
   function toggleCollection(colId: string) {
     setSelectedCollectionIds((prev) => {
@@ -600,6 +663,44 @@ export function ProductCatalogCreateForm({
     })
   }
 
+  function updateStoneRow(rowKey: string, updater: (row: StoneLineUi) => StoneLineUi) {
+    setStoneRows((prev) => prev.map((row) => (row.key === rowKey ? updater(row) : row)))
+  }
+
+  function addStoneRow() {
+    setStoneRows((prev) => [...prev, newStoneRow()])
+  }
+
+  function removeStoneRow(rowKey: string) {
+    setStoneRows((prev) => {
+      if (prev.length <= 1) return [newStoneRow()]
+      return prev.filter((row) => row.key !== rowKey)
+    })
+  }
+
+  function addStoneSize(rowKey: string) {
+    updateStoneRow(rowKey, (row) => ({
+      ...row,
+      sizes: [...row.sizes, newStoneSizeRow()],
+    }))
+  }
+
+  function updateStoneSize(rowKey: string, sizeKey: string, updater: (size: StoneSizeUi) => StoneSizeUi) {
+    updateStoneRow(rowKey, (row) => ({
+      ...row,
+      sizes: row.sizes.map((size) => (size.key === sizeKey ? updater(size) : size)),
+    }))
+  }
+
+  function removeStoneSize(rowKey: string, sizeKey: string) {
+    updateStoneRow(rowKey, (row) => {
+      if (row.sizes.length <= 1) {
+        return { ...row, sizes: [newStoneSizeRow()] }
+      }
+      return { ...row, sizes: row.sizes.filter((size) => size.key !== sizeKey) }
+    })
+  }
+
   async function submit(nextStatus: 'draft' | 'active' | 'archived') {
     if (!name.trim()) {
       toast.error('Product name required')
@@ -611,6 +712,10 @@ export function ProductCatalogCreateForm({
     }
     if (!categoryId) {
       toast.error('Category required')
+      return
+    }
+    if (!designNumber.trim()) {
+      toast.error('Design number required')
       return
     }
 
@@ -676,7 +781,8 @@ export function ProductCatalogCreateForm({
         category_id: categoryId,
         collection_id: primaryCollectionId || null,
         product_number: productNumber,
-        design_number: designNumber.trim() || null,
+        design_number: designNumber.trim().toUpperCase() || null,
+        product_code: productId || null,
         short_desc: shortDesc.trim() || null,
         description: description.trim() || null,
         diamond_shape: diamondShape.trim() || null,
@@ -695,21 +801,42 @@ export function ProductCatalogCreateForm({
         has_stone: hasStone,
         stone_lines: hasStone
           ? stoneRows
-              .map((r) => {
-                const rate_inr  = r.rate.trim()  !== '' ? (Number.isFinite(parseFloat(r.rate))  ? parseFloat(r.rate)  : null) : null
-                const count     = r.count.trim() !== '' ? (Number.isFinite(parseInt(r.count))   ? parseInt(r.count)   : null) : null
-                const price_inr = rate_inr != null && count != null ? rate_inr * count : null
+              .map((row) => {
+                const sizes = row.sizes
+                  .map((size) => {
+                    const cut_size = size.cut_size.trim()
+                    const rate_inr =
+                      size.rate.trim() !== '' && Number.isFinite(parseFloat(size.rate))
+                        ? parseFloat(size.rate)
+                        : null
+                    const count =
+                      size.count.trim() !== '' && Number.isFinite(parseInt(size.count, 10))
+                        ? parseInt(size.count, 10)
+                        : null
+                    const weight =
+                      size.weight.trim() !== '' && Number.isFinite(parseFloat(size.weight))
+                        ? parseFloat(size.weight)
+                        : null
+                    const price_inr =
+                      rate_inr != null && count != null ? rate_inr * count : null
+                    return { cut_size, count, weight, rate_inr, price_inr }
+                  })
+                  .filter((size) => size.cut_size !== '' || size.count != null || size.weight != null || size.rate_inr != null)
+
+                const price_inr = sizes.reduce((total, size) => total + (size.price_inr ?? 0), 0)
+
                 return {
-                  name:      r.name.trim(),
-                  cut_size:  r.cut_size.trim(),
-                  shape:     r.shape.trim(),
-                  color:     r.color.trim(),
-                  count,
-                  rate_inr,
-                  price_inr,
+                  name: row.name.trim(),
+                  shape: row.shape.trim(),
+                  color: row.color.trim(),
+                  sizes,
+                  total_weight: sizes.reduce((total, size) => total + (size.weight ?? 0), 0) > 0
+                    ? Math.round(sizes.reduce((total, size) => total + (size.weight ?? 0), 0) * 1000) / 1000
+                    : null,
+                  price_inr: price_inr > 0 ? price_inr : null,
                 }
               })
-              .filter((r) => r.name !== '' || r.cut_size !== '' || r.rate_inr != null)
+              .filter((row) => row.name !== '' || row.shape !== '' || row.color !== '' || row.sizes.length > 0)
           : [],
       }
 
@@ -885,26 +1012,25 @@ export function ProductCatalogCreateForm({
               <option value="silver">Silver</option>
             </select>
             {isEdit && (
-              <span className="text-[11px] text-ink-faint">Edit pe metal change nahi — naya product banao agar metal alag ho.</span>
+              <span className="text-[11px] text-ink-faint">Do not change the metal type through editing — create a new product whenever the metal is different.
+</span>
             )}
-          </label>
-          <label className="block space-y-1">
-            <span className="text-xs text-ink-muted">Design Number</span>
-            <input
-              type="number"
-              min={1}
-              value={productNumber}
-              onChange={(e) => setProductNumber(parseInt(e.target.value, 10) || 1)}
-              className="w-full border rounded-lg px-3 py-2 text-sm"
-            />
           </label>
           <label className="block space-y-1">
             <span className="text-xs text-ink-muted">Design number</span>
             <input
               value={designNumber}
-              onChange={(e) => setDesignNumber(e.target.value)}
+              onChange={(e) => setDesignNumber(e.target.value.toUpperCase())}
               placeholder="e.g. AMI-2041"
               className="w-full border rounded-lg px-3 py-2 text-sm font-mono uppercase"
+            />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-xs text-ink-muted">Product ID</span>
+            <input
+              value={productId || 'Auto-generated from category + design number'}
+              readOnly
+              className="w-full border rounded-lg px-3 py-2 text-sm font-mono bg-surface text-ink-muted"
             />
           </label>
           <label className="block space-y-1">
@@ -978,25 +1104,41 @@ export function ProductCatalogCreateForm({
         {hasStone && (
           <div className="space-y-4">
             {stoneRows.map((row, idx) => {
-              const rateNum  = parseFloat(row.rate)
-              const countNum = parseInt(row.count)
-              const price    = Number.isFinite(rateNum) && Number.isFinite(countNum) && countNum > 0
-                ? rateNum * countNum
-                : null
+              const rowTotalPcs = row.sizes.reduce((total, size) => {
+                const countNum = parseInt(size.count, 10)
+                if (!Number.isFinite(countNum) || countNum <= 0) return total
+                return total + countNum
+              }, 0)
+              const rowTotalWeight = row.sizes.reduce((total, size) => {
+                const weightNum = parseFloat(size.weight)
+                if (!Number.isFinite(weightNum) || weightNum <= 0) return total
+                return total + weightNum
+              }, 0)
+              const rowTotal = row.sizes.reduce((total, size) => {
+                const rateNum = parseFloat(size.rate)
+                const countNum = parseInt(size.count, 10)
+                if (!Number.isFinite(rateNum) || !Number.isFinite(countNum) || countNum <= 0) return total
+                return total + rateNum * countNum
+              }, 0)
               const stoneInp = 'w-full border rounded-lg px-3 py-2 text-sm'
-              const update = (field: Partial<typeof row>) =>
-                setStoneRows((prev) => prev.map((r) => r.key === row.key ? { ...r, ...field } : r))
+              const update = (field: Partial<Omit<StoneLineUi, 'key' | 'sizes'>>) =>
+                setStoneRows((prev) => prev.map((r) => (r.key === row.key ? { ...r, ...field } : r)))
               return (
-                <div key={row.key} className="border border-divider rounded-xl p-4 space-y-3 bg-surface/40">
-                  {/* Row header */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-ink-muted uppercase tracking-wide">
-                      Stone {idx + 1}
-                    </span>
+                <div key={row.key} className="border border-divider rounded-xl p-4 space-y-4 bg-surface/40">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <span className="text-xs font-medium text-ink-muted uppercase tracking-wide">
+                        Stone {idx + 1}
+                      </span>
+                      <p className="text-xs text-ink-faint mt-1">Add multiple cut / size rows under one stone.</p>
+                    </div>
                     <button
                       type="button"
                       onClick={() => {
-                        if (stoneRows.length <= 1) { setStoneRows([newStoneRow()]); return }
+                        if (stoneRows.length <= 1) {
+                          setStoneRows([newStoneRow()])
+                          return
+                        }
                         setStoneRows((prev) => prev.filter((r) => r.key !== row.key))
                       }}
                       className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
@@ -1006,7 +1148,6 @@ export function ProductCatalogCreateForm({
                     </button>
                   </div>
 
-                  {/* Row 1: Stone name + Cut/size */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <label className="block space-y-1">
                       <span className="text-xs text-ink-muted">Stone name</span>
@@ -1017,19 +1158,6 @@ export function ProductCatalogCreateForm({
                         placeholder="e.g. Ruby"
                       />
                     </label>
-                    <label className="block space-y-1">
-                      <span className="text-xs text-ink-muted">Cut / size</span>
-                      <input
-                        value={row.cut_size}
-                        onChange={(e) => update({ cut_size: e.target.value })}
-                        className={stoneInp}
-                        placeholder="e.g. Round 0.5 ct"
-                      />
-                    </label>
-                  </div>
-
-                  {/* Row 2: Shape + Color */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <label className="block space-y-1">
                       <span className="text-xs text-ink-muted">Shape</span>
                       <input
@@ -1048,40 +1176,102 @@ export function ProductCatalogCreateForm({
                         placeholder="e.g. D"
                       />
                     </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:col-span-2">
+                      <div className="w-full rounded-lg border border-divider bg-white px-3 py-2 text-sm text-ink-muted">
+                        Total pcs: {rowTotalPcs > 0 ? rowTotalPcs : '—'}
+                      </div>
+                      <div className="w-full rounded-lg border border-divider bg-white px-3 py-2 text-sm text-ink-muted">
+                        Total weight: {rowTotalWeight > 0 ? `${rowTotalWeight.toFixed(3)} ct` : '—'}
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Row 3: Count + Rate + Price */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    <label className="block space-y-1">
-                      <span className="text-xs text-ink-muted">Count</span>
-                      <input
-                        type="number"
-                        min={0}
-                        step={1}
-                        value={row.count}
-                        onChange={(e) => update({ count: e.target.value })}
-                        className={stoneInp}
-                        placeholder="0"
-                      />
-                    </label>
-                    <label className="block space-y-1">
-                      <span className="text-xs text-ink-muted">Rate (₹)</span>
-                      <input
-                        type="number"
-                        min={0}
-                        step={1}
-                        value={row.rate}
-                        onChange={(e) => update({ rate: e.target.value })}
-                        className={stoneInp}
-                        placeholder="0"
-                      />
-                    </label>
-                    <label className="block space-y-1">
-                      <span className="text-xs text-ink-muted">Price (₹) = Rate × Count</span>
-                      <div className={`${stoneInp} bg-surface text-ink-muted tabular-nums cursor-default select-none`}>
-                        {price != null ? `₹${price.toLocaleString('en-IN')}` : '—'}
-                      </div>
-                    </label>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <h4 className="text-xs font-medium uppercase tracking-wide text-ink-muted">Cut / size rows</h4>
+                      <button
+                        type="button"
+                        onClick={() => addStoneSize(row.key)}
+                        className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg border border-dashed border-teal text-teal hover:bg-teal/5 transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add size
+                      </button>
+                    </div>
+
+                    <div className="space-y-3">
+                      {row.sizes.map((size, sizeIndex) => {
+                        const rateNum = parseFloat(size.rate)
+                        const countNum = parseInt(size.count, 10)
+                        const price = Number.isFinite(rateNum) && Number.isFinite(countNum) && countNum > 0
+                          ? rateNum * countNum
+                          : null
+                        return (
+                          <div key={size.key} className="rounded-lg border border-divider bg-white p-3 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-medium text-ink-muted">Size {sizeIndex + 1}</span>
+                              <button
+                                type="button"
+                                onClick={() => removeStoneSize(row.key, size.key)}
+                                className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                aria-label="Remove size"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              <label className="block space-y-1">
+                                <span className="text-xs text-ink-muted">Cut / size</span>
+                                <input
+                                  value={size.cut_size}
+                                  onChange={(e) => updateStoneSize(row.key, size.key, (current) => ({ ...current, cut_size: e.target.value }))}
+                                  className={stoneInp}
+                                  placeholder="e.g. Round 0.5 ct"
+                                />
+                              </label>
+                              <label className="block space-y-1">
+                                <span className="text-xs text-ink-muted">Pcs</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={1}
+                                  value={size.count}
+                                  onChange={(e) => updateStoneSize(row.key, size.key, (current) => ({ ...current, count: e.target.value }))}
+                                  className={stoneInp}
+                                  placeholder="0"
+                                />
+                              </label>
+                              <label className="block space-y-1">
+                                <span className="text-xs text-ink-muted">Weight</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step="0.001"
+                                  value={size.weight}
+                                  onChange={(e) => updateStoneSize(row.key, size.key, (current) => ({ ...current, weight: e.target.value }))}
+                                  className={stoneInp}
+                                  placeholder="0.000"
+                                />
+                              </label>
+                              <label className="block space-y-1">
+                                <span className="text-xs text-ink-muted">Rate (₹)</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={1}
+                                  value={size.rate}
+                                  onChange={(e) => updateStoneSize(row.key, size.key, (current) => ({ ...current, rate: e.target.value }))}
+                                  className={stoneInp}
+                                  placeholder="0"
+                                />
+                              </label>
+                            </div>
+                            <div className="text-xs text-ink-muted">
+                              Size total: {price != null ? `₹${price.toLocaleString('en-IN')}` : '—'}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
                 </div>
               )
@@ -1199,7 +1389,7 @@ export function ProductCatalogCreateForm({
       <section className="bg-white rounded-xl border border-divider p-6 space-y-4 overflow-x-auto">
         <h3 className="font-display text-lg text-deep-teal">Weight &amp; stock matrix</h3>
         <p className="text-sm text-ink-muted">
-          Price is calculated automatically from today&apos;s gold/silver rate, weight, making charge %, and stone lines.
+          Price is calculated automatically from today&apos;s gold/silver rate, weight, making charge %, and stone lines. Each cell can hold multiple pcs.
         </p>
         {!hasMetalPurities ? (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -1259,7 +1449,7 @@ export function ProductCatalogCreateForm({
                             type="number"
                             min={0}
                             step={1}
-                            placeholder="Stock"
+                            placeholder="Pcs"
                             value={cell.stock_qty}
                             onChange={(e) => setCellValue(row.color_id, purity.id, (current) => ({ ...current, stock_qty: e.target.value }))}
                             className="w-full border rounded px-2 py-1 mb-2"

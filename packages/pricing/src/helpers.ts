@@ -42,9 +42,47 @@ export function sumStoneLinesPrice(stoneLines: unknown): number {
   let total = 0
   for (const row of stoneLines) {
     if (!row || typeof row !== 'object') continue
-    const price = (row as Record<string, unknown>).price_inr
+    const record = row as Record<string, unknown>
+    const sizes = record.sizes
+    if (Array.isArray(sizes)) {
+      for (const size of sizes) {
+        if (!size || typeof size !== 'object') continue
+        const price = (size as Record<string, unknown>).price_inr
+        if (typeof price === 'number' && Number.isFinite(price) && price > 0) {
+          total += price
+          continue
+        }
+        const rate = (size as Record<string, unknown>).rate_inr
+        const count = (size as Record<string, unknown>).count
+        if (
+          typeof rate === 'number' &&
+          Number.isFinite(rate) &&
+          rate > 0 &&
+          typeof count === 'number' &&
+          Number.isFinite(count) &&
+          count > 0
+        ) {
+          total += rate * count
+        }
+      }
+      continue
+    }
+    const price = record.price_inr
     if (typeof price === 'number' && Number.isFinite(price) && price > 0) {
       total += price
+      continue
+    }
+    const rate = record.rate_inr
+    const count = record.count
+    if (
+      typeof rate === 'number' &&
+      Number.isFinite(rate) &&
+      rate > 0 &&
+      typeof count === 'number' &&
+      Number.isFinite(count) &&
+      count > 0
+    ) {
+      total += rate * count
     }
   }
   return Math.round(total * 100) / 100

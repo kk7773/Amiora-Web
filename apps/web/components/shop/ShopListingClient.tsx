@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { ProductCard, type ProductCardProps } from '@/components/product/ProductCard'
@@ -15,7 +15,7 @@ const SORT_OPTIONS = [
 ] as const
 
 export type ShopListingFilters = {
-  metal?: string
+  metal?: string[]
   purity?: string[]
   diamond?: boolean
   category?: string[]
@@ -40,7 +40,7 @@ function buildListingQuery(
   const params = new URLSearchParams()
   params.set('page', String(page))
   params.set('sort', sort)
-  if (filters.metal) params.set('metal', filters.metal)
+  if (filters.metal?.length) params.set('metal', filters.metal.join(','))
   if (filters.diamond) params.set('diamond', 'true')
   if (filters.purity?.length) params.set('purity', filters.purity.join(','))
   if (filters.category?.length) params.set('category', filters.category.join(','))
@@ -59,6 +59,8 @@ export function ShopListingClient({
 }: ShopListingClientProps) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const filtersSignature = JSON.stringify(filters)
+  const previousFiltersSignatureRef = useRef(filtersSignature)
 
   const [page, setPage] = useState(initialPage)
   const [sort, setSort] = useState(initialSort)
@@ -93,6 +95,14 @@ export function ShopListingClient({
     },
     [filters],
   )
+
+  useEffect(() => {
+    if (previousFiltersSignatureRef.current === filtersSignature) {
+      return
+    }
+    previousFiltersSignatureRef.current = filtersSignature
+    void fetchPage(1, sort)
+  }, [filtersSignature, fetchPage, sort])
 
   const totalPages = Math.ceil(total / pageSize)
   const rangeStart = total ? Math.min((page - 1) * pageSize + 1, total) : 0

@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
 import { requireCmsAccess, writeAuditLog } from '@/lib/rbac'
+import { getStorefrontUrl } from '@/lib/storefrontUrl'
 
 export async function POST() {
   const perm = await requireCmsAccess('pricing', 'edit')
   if (perm.ok === false) return perm.response
   try {
-    const storefrontUrl = process.env.NEXT_PUBLIC_STOREFRONT_URL ?? 'http://localhost:3000'
+    const storefrontUrl = getStorefrontUrl()
     const res = await fetch(`${storefrontUrl}/api/pricing/refresh`, {
       method: 'POST',
       headers: { 'x-cms-secret': process.env.CMS_SECRET ?? '' },

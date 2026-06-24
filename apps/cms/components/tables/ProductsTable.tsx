@@ -6,12 +6,14 @@ import Link from 'next/link'
 import { Search, Filter, Edit2, Trash2, ExternalLink } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { toast } from 'sonner'
+import { getStorefrontUrl } from '@/lib/storefrontUrl'
 
 interface Product {
   id: string
   name: string
   slug: string
   design_number?: string | null
+  product_code?: string | null
   is_featured: boolean
   status: 'draft' | 'active' | 'archived'
   created_at: string
@@ -79,7 +81,8 @@ export function ProductsTable({ products, collections, categories }: Props) {
       q &&
       !p.name.toLowerCase().includes(q) &&
       !p.slug.includes(q) &&
-      !(p.design_number ?? '').toLowerCase().includes(q)
+      !(p.design_number ?? '').toLowerCase().includes(q) &&
+      !(p.product_code ?? '').toLowerCase().includes(q)
     ) {
       return false
     }
@@ -111,7 +114,7 @@ export function ProductsTable({ products, collections, categories }: Props) {
         <div className="flex items-center gap-2 bg-surface rounded-lg px-3 py-2 flex-1">
           <Search className="w-3.5 h-3.5 text-ink-faint" />
           <input
-            placeholder="Search by name, slug, or design #…"
+            placeholder="Search by name, slug, design #, or product ID…"
             value={search} onChange={e => setSearch(e.target.value)}
             className="bg-transparent outline-none text-sm flex-1 placeholder:text-ink-faint"
           />
@@ -173,7 +176,8 @@ export function ProductsTable({ products, collections, categories }: Props) {
                   <td className="px-5 py-3">
                     <p className="font-medium text-ink">{p.name}</p>
                     <p className="text-xs text-ink-faint">{p.slug}</p>
-                    {p.design_number && (
+                    {p.product_code && <p className="text-xs text-ink-muted font-mono mt-0.5">ID {p.product_code}</p>}
+                    {!p.product_code && p.design_number && (
                       <p className="text-xs text-ink-muted font-mono mt-0.5">Design {p.design_number}</p>
                     )}
                     {p.is_featured && <Badge variant="info" className="mt-1">Featured</Badge>}
@@ -195,7 +199,7 @@ export function ProductsTable({ products, collections, categories }: Props) {
                       <Link href={`/products/${p.id}`} className="p-1.5 rounded-lg hover:bg-surface text-ink-muted hover:text-teal transition-colors" title="Edit">
                         <Edit2 className="w-3.5 h-3.5" />
                       </Link>
-                      <a href={`${process.env.NEXT_PUBLIC_STOREFRONT_URL}/products/${p.slug}`} target="_blank" rel="noreferrer" className="p-1.5 rounded-lg hover:bg-surface text-ink-muted hover:text-teal transition-colors" title="View on storefront">
+                      <a href={`${getStorefrontUrl()}/products/${p.slug}`} target="_blank" rel="noreferrer" className="p-1.5 rounded-lg hover:bg-surface text-ink-muted hover:text-teal transition-colors" title="View on storefront">
                         <ExternalLink className="w-3.5 h-3.5" />
                       </a>
                       <button

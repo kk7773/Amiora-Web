@@ -15,6 +15,7 @@ type ProductRow = {
   name: string
   slug: string
   design_number: string | null
+  product_code: string | null
   product_number: number
   status: string
   image_url: string | null
@@ -25,6 +26,7 @@ type SearchHit = {
   id: string
   name: string
   design_number: string | null
+  product_code: string | null
   product_number: number
   status: string
   image_url: string | null
@@ -449,7 +451,7 @@ export function TaxonomyProductManager({
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-ink truncate">{hit.name}</p>
                       <p className="text-xs text-ink-faint font-mono">
-                        {hit.design_number ?? `#${hit.product_number}`}
+                        {hit.product_code ?? hit.design_number ?? `#${hit.product_number}`}
                       </p>
                     </div>
                     <StatusBadge status={hit.status} />
@@ -519,7 +521,7 @@ export function TaxonomyProductManager({
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-ink truncate">{product.name}</p>
                       <p className="text-xs text-ink-faint font-mono">
-                        {product.design_number ?? `#${product.product_number}`}
+                        {product.product_code ?? product.design_number ?? `#${product.product_number}`}
                       </p>
                     </div>
                     <StatusBadge status={product.status} />

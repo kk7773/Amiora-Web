@@ -30,7 +30,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 const FILTER_MAP: Record<string, Record<string, string>> = {
   all: {},
   gold: { metal: 'gold' },
-  silver: { metal: 'silver' },
   diamond: { diamond: 'true' },
   '18k': { purity: '18k' },
   '14k': { purity: '14k' },

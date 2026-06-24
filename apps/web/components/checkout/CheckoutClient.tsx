@@ -75,6 +75,7 @@ type OrderPayload = {
     product_name: string
     variant_label: string
     image_url: string | null
+    unit_price?: number
   }>
   delivery_method: DeliveryMethod
   payment_method: PaymentMethod
@@ -143,7 +144,8 @@ export function CheckoutClient() {
         product_id: i.productId,
         variant_id: i.variantId,
         quantity:   i.quantity,
-        variant_sku: i.variantLabel,
+        variant_sku: i.variantSku || i.variantLabel || i.variantId,
+        unit_price: i.unitPrice,
         size_label: i.sizeLabel,
         product_name: i.productName,
         variant_label: i.variantLabel,
@@ -158,7 +160,8 @@ export function CheckoutClient() {
         product_id: i.productId,
         variant_id: i.variantId,
         quantity:   i.quantity,
-        variant_sku: i.variantLabel,
+        variant_sku: i.variantSku || i.variantLabel || i.variantId,
+        unit_price: i.unitPrice,
       })),
     [items],
   )
@@ -381,8 +384,15 @@ export function CheckoutClient() {
       }),
     })
     if (!orderRes.ok) {
-      const err = (await orderRes.json().catch(() => ({}))) as { error?: string }
-      toast.error(err.error ?? 'Could not start payment.')
+      const err = (await orderRes.json().catch(() => ({}))) as { error?: string; details?: { code?: string; description?: string; field?: string; reason?: string } }
+      const extra =
+        err.details?.description ??
+        err.details?.reason ??
+        err.details?.code ??
+        ''
+      toast.error(err.error ?? 'Could not start payment.', {
+        description: extra ? String(extra) : undefined,
+      })
       return
     }
     const orderData = (await orderRes.json()) as { id: string; currency: string; grand_total: number }
@@ -472,6 +482,10 @@ export function CheckoutClient() {
             </div>
           ))}
         </div>
+
+        {/* <div className="mb-6 rounded-2xl border border-teal/15 bg-teal/5 px-4 py-3 text-sm text-ink-muted">
+          Checkout as guest is available. Sign in is only needed for wishlist and account features.
+        </div> */}
 
         <AnimatePresence mode="wait">
           {/* STEP 0 — Delivery Method */}

@@ -44,5 +44,13 @@ export function loadRazorpayCheckout(): Promise<void> {
 }
 
 export function getPublicRazorpayKeyId(): string | undefined {
+  if (process.env.NODE_ENV !== 'production') {
+    return (
+      process.env.NEXT_PUBLIC_RAZORPAY_SANDBOX_KEY_ID?.trim() ||
+      process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID?.trim() ||
+      undefined
+    )
+  }
+
   return process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID?.trim() || undefined
 }

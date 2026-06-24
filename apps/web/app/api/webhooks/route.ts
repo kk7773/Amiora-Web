@@ -1,14 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createHmac } from 'crypto'
+import { createHmac, timingSafeEqual } from 'crypto'
+import { getRazorpayWebhookSecret } from '@/lib/razorpay/serverConfig'
 
 export async function POST(req: NextRequest) {
   const body = await req.text()
   const signature = req.headers.get('x-razorpay-signature') ?? ''
-  const secret = process.env['RAZORPAY_KEY_SECRET'] ?? ''
+  const secret = getRazorpayWebhookSecret()
+
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 503 })
+    }
+    console.warn('[webhooks/razorpay] Missing webhook secret; accepting event for local/dev')
+    return NextResponse.json({ received: true })
+  }
 
   const expectedSignature = createHmac('sha256', secret).update(body).digest('hex')
 
-  if (signature !== expectedSignature) {
+  const expectedBuffer = Buffer.from(expectedSignature)
+  const signatureBuffer = Buffer.from(signature)
+
+  if (
+    expectedBuffer.length !== signatureBuffer.length ||
+    !timingSafeEqual(expectedBuffer, signatureBuffer)
+  ) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
   }
 

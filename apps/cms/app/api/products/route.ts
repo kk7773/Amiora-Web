@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@amiora/database'
 import { buildDbProductRow } from '@/lib/productPayload'
+import { normalizeStoneLines } from '@/lib/normalizeStoneLines'
 import { requireCmsAccess, writeAuditLog } from '@/lib/rbac'
 
 export async function POST(req: NextRequest) {
@@ -15,6 +16,9 @@ export async function POST(req: NextRequest) {
       ...rest,
       ...(full_description !== undefined && { description: full_description }),
       faqs: Array.isArray(faqs) ? faqs.filter((f: { question: string; answer: string }) => f.question && f.answer) : [],
+      ...(Array.isArray((rest as { stone_lines?: unknown }).stone_lines)
+        ? { stone_lines: normalizeStoneLines((rest as { stone_lines?: unknown }).stone_lines) }
+        : {}),
     }
 
     const dbProduct = buildDbProductRow(product as Record<string, unknown>)

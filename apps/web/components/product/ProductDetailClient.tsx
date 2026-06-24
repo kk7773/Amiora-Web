@@ -257,6 +257,7 @@ export function ProductDetailClient({
     addItem({
       productId:    product.id,
       variantId:    activeVariant.id,
+      variantSku:   activeVariant.sku,
       sizeLabel:    '',
       productName:  product.name,
       variantLabel: activeVariant.sku,

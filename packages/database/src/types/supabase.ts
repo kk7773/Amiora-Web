@@ -291,6 +291,7 @@ export interface Database {
           collection_id: string | null
           product_number: number
           design_number: string | null
+          product_code: string | null
           diamond_shape: string | null
           diamond_count: number | null
           total_diamond_wt: number | null
@@ -324,6 +325,7 @@ export interface Database {
           collection_id?: string | null
           product_number?: number
           design_number?: string | null
+          product_code?: string | null
           diamond_shape?: string | null
           diamond_count?: number | null
           total_diamond_wt?: number | null
@@ -1012,4 +1014,3 @@ export type TablesInsert<T extends keyof Database['public']['Tables']> =
 
 export type TablesUpdate<T extends keyof Database['public']['Tables']> =
   Database['public']['Tables'][T]['Update']
-

@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { Edit2, Trash2, Eye } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { toast } from 'sonner'
+import { getStorefrontUrl } from '@/lib/storefrontUrl'
 
 interface Blog {
   id: string; title: string; slug: string; is_published: boolean
@@ -59,7 +60,7 @@ export function BlogsListClient({ blogs: initial }: { blogs: Blog[] }) {
                   <Link href={`/blogs/${b.id}`} className="p-1.5 rounded hover:bg-surface text-ink-muted hover:text-teal" title="Edit">
                     <Edit2 className="w-3.5 h-3.5" />
                   </Link>
-                  <a href={`${process.env.NEXT_PUBLIC_STOREFRONT_URL}/blogs/${b.slug}`} target="_blank" rel="noreferrer"
+                  <a href={`${getStorefrontUrl()}/blogs/${b.slug}`} target="_blank" rel="noreferrer"
                     className="p-1.5 rounded hover:bg-surface text-ink-muted hover:text-teal" title="Preview">
                     <Eye className="w-3.5 h-3.5" />
                   </a>

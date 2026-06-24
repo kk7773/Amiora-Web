@@ -11,6 +11,7 @@ type CheckoutItem = {
   variant_id: string
   quantity: number
   variant_sku?: string | null
+  unit_price?: number | null
   size_label?: string
   product_name?: string
   variant_label?: string
@@ -116,6 +117,7 @@ export async function POST(req: NextRequest) {
       variant_id: item.variant_id,
       quantity: item.quantity,
       variant_sku: item.variant_sku ?? item.variant_label ?? null,
+      unit_price: item.unit_price ?? null,
     }))
 
     const quote = await computeCartQuote(adminClient, {

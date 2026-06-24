@@ -25,14 +25,20 @@ export async function PriceListingPage({ listing }: PriceListingPageProps) {
   const range = parsePriceRangeParam(listing.rangeId)
   if (!range) return null
 
+  const metal: string[] = []
+  const purity: string[] = []
+  const diamond = false
+  const categoryFilter = listing.scope === JEWELLERY_SCOPE ? [] : [listing.scope]
   const supabase = createServerClient()
-  const categoryFilter =
-    listing.scope === JEWELLERY_SCOPE ? [] : [listing.scope]
+  const catArr: string[] = []
 
   const { products, total } = await fetchShopListing(supabase, {
     page: listing.page,
     sort: listing.sort,
-    category: categoryFilter,
+    metal,
+    purity,
+    diamond,
+    category: [...new Set([...categoryFilter, ...catArr])],
     price: listing.rangeId,
   })
 
@@ -103,7 +109,10 @@ export async function PriceListingPage({ listing }: PriceListingPageProps) {
               initialPage={listing.page}
               initialSort={listing.sort}
               filters={{
-                category: categoryFilter,
+                category: [...new Set([...categoryFilter, ...catArr])],
+                metal,
+                purity,
+                diamond,
                 price: listing.rangeId,
               }}
             />

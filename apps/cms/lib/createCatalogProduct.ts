@@ -4,6 +4,7 @@ import { generateAmioraSKU } from '@/lib/sku'
 import { insertProductColorGroup } from '@/lib/productColorGroupsDb'
 import { normalizeStoneLines, parseOptionalGrams } from '@/lib/normalizeStoneLines'
 import type { CatalogProductPayload } from '@/lib/catalogProductTypes'
+import { fetchNextProductNumber } from '@/lib/productIdentity'
 
 export type CreateCatalogProductResult =
   | { ok: true; productId: string }
@@ -69,14 +70,23 @@ export async function createCatalogProduct(
   const purityCode = Object.fromEntries((purityRows ?? []).map((r) => [r.id, r.code]))
   const colorCodeMap = Object.fromEntries((colorRows ?? []).map((r) => [r.id, r.code]))
   const stoneLines = body.product.has_stone ? normalizeStoneLines(body.product.stone_lines) : []
+  const designNumber = body.product.design_number?.trim().toUpperCase() ?? ''
+  if (!designNumber) {
+    return { ok: false, error: 'Design number is required to generate product ID' }
+  }
+
+  const productNumber =
+    typeof body.product.product_number === 'number' && Number.isFinite(body.product.product_number)
+      ? Math.max(1, Math.floor(body.product.product_number))
+      : await fetchNextProductNumber(supabase, body.product.category_id)
 
   const prodInsert = {
     name: body.product.name.trim(),
     slug: body.product.slug.trim(),
     category_id: body.product.category_id,
     collection_id: body.product.collection_id ?? null,
-    product_number: Math.max(1, Math.floor(body.product.product_number)),
-    design_number: body.product.design_number?.trim() || null,
+    product_number: productNumber,
+    design_number: designNumber,
     short_desc: body.product.short_desc ?? null,
     description: body.product.description ?? null,
     diamond_shape: body.product.diamond_shape ?? null,

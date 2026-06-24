@@ -5,7 +5,6 @@ export type ProductCategory =
   | 'rings'
   | 'necklaces'
   | 'earrings'
-  | 'bracelets'
   | 'bangles'
   | 'pendants'
   | 'chains'

@@ -28,6 +28,7 @@ export function WishlistGrid({ products: initialProducts }: WishlistGridProps) {
     addItem({
       productId:    product.id,
       variantId:    variant.id,
+      variantSku:   variant.sku,
       sizeLabel:    '',
       productName:  product.name,
       variantLabel: variant.sku,

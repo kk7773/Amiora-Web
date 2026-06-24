@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@amiora/database'
 import { computeCatalogVariantPrice } from '@amiora/pricing'
 import { generateAmioraSKU } from '@/lib/sku'
+import { normalizeStoneLines } from '@/lib/normalizeStoneLines'
 import { requireCmsAccess, writeAuditLog } from '@/lib/rbac'
 import { insertProductColorGroup, updateProductColorGroup } from '@/lib/productColorGroupsDb'
 
@@ -10,41 +11,6 @@ function parseOptionalGrams(v: unknown): number | null {
   const n = typeof v === 'number' ? v : parseFloat(String(v))
   if (!Number.isFinite(n) || n < 0) return null
   return n
-}
-
-function normalizeStoneLines(input: unknown): Array<{
-  name: string; cut_size: string; shape: string; color: string;
-  count: number | null; rate_inr: number | null; price_inr: number | null
-}> {
-  if (!Array.isArray(input)) return []
-  const out: Array<{
-    name: string; cut_size: string; shape: string; color: string;
-    count: number | null; rate_inr: number | null; price_inr: number | null
-  }> = []
-  for (const row of input) {
-    if (!row || typeof row !== 'object') continue
-    const r        = row as Record<string, unknown>
-    const name     = typeof r.name     === 'string' ? r.name.trim()     : ''
-    const cut_size = typeof r.cut_size === 'string' ? r.cut_size.trim() : ''
-    const shape    = typeof r.shape    === 'string' ? r.shape.trim()    : ''
-    const color    = typeof r.color    === 'string' ? r.color.trim()    : ''
-    let rate_inr: number | null = null
-    if (typeof r.rate_inr === 'number' && Number.isFinite(r.rate_inr)) rate_inr = r.rate_inr
-    else if (r.rate_inr != null && r.rate_inr !== '') {
-      const n = parseFloat(String(r.rate_inr))
-      if (Number.isFinite(n)) rate_inr = n
-    }
-    let count: number | null = null
-    if (typeof r.count === 'number' && Number.isFinite(r.count)) count = Math.floor(r.count)
-    else if (r.count != null && r.count !== '') {
-      const n = parseInt(String(r.count))
-      if (Number.isFinite(n)) count = n
-    }
-    const price_inr = rate_inr != null && count != null ? rate_inr * count : null
-    if (!name && !cut_size && rate_inr == null) continue
-    out.push({ name, cut_size, shape, color, count, rate_inr, price_inr })
-  }
-  return out
 }
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -74,8 +40,9 @@ type Body = {
     slug: string
     category_id: string
     collection_id?: string | null
-    product_number: number
+    product_number?: number
     design_number?: string | null
+    product_code?: string | null
     short_desc?: string | null
     description?: string | null
     diamond_shape?: string | null
@@ -112,6 +79,9 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     if (!body.product?.name || !body.product.slug || !body.product.category_id) {
       return NextResponse.json({ error: 'Missing name, slug, or category' }, { status: 400 })
     }
+    if (!body.product.design_number?.trim()) {
+      return NextResponse.json({ error: 'Design number is required to generate product ID' }, { status: 400 })
+    }
     if (!Array.isArray(body.color_variants) || body.color_variants.length === 0) {
       return NextResponse.json({ error: 'Add at least one colour variant with images or videos' }, { status: 400 })
     }
@@ -131,6 +101,12 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       .select('code')
       .eq('id', body.product.category_id)
       .single()
+
+    const { data: existingProduct } = await supabase
+      .from('products')
+      .select('product_number')
+      .eq('id', id)
+      .maybeSingle()
 
     if (catErr || !catRow?.code) {
       return NextResponse.json({ error: 'Invalid category or missing category code' }, { status: 400 })
@@ -181,14 +157,18 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     const colorCode = Object.fromEntries((colorRes.data ?? []).map((row) => [row.id, row.code]))
     const existingGroups = existingGroupsRes.data ?? []
     const existingVariants = existingVariantsRes.data ?? []
+    const designNumber = body.product.design_number.trim().toUpperCase()
+    const productNumber =
+      typeof body.product.product_number === 'number' && Number.isFinite(body.product.product_number)
+        ? Math.max(1, Math.floor(body.product.product_number))
+        : Math.max(1, Math.floor(existingProduct?.product_number ?? 1))
 
     const productUpdate = {
       name: body.product.name.trim(),
       slug: body.product.slug.trim(),
       category_id: body.product.category_id,
       collection_id: body.product.collection_id ?? null,
-      product_number: Math.max(1, Math.floor(body.product.product_number)),
-      design_number: body.product.design_number?.trim() || null,
+      design_number: designNumber,
       short_desc: body.product.short_desc ?? null,
       description: body.product.description ?? null,
       diamond_shape: body.product.diamond_shape ?? null,
@@ -323,7 +303,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         color_group_id: groupId,
         color_id: cell.color_id,
         purity_id: cell.purity_id,
-        sku: generateAmioraSKU(String(catRow.code), productUpdate.product_number, String(purity), String(color)),
+        sku: generateAmioraSKU(String(catRow.code), productNumber, String(purity), String(color)),
         price: snapshotPrice,
         stock_qty: Math.max(0, Math.floor(cell.stock_qty ?? 0)),
         metal_weight_g: metalWeight,

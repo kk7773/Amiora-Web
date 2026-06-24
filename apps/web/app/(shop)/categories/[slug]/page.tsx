@@ -55,6 +55,10 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   const sp       = await searchParams
   const page     = parseInt(sp['page'] ?? '1', 10)
   const sort     = sp['sort'] ?? 'newest'
+  const metal    = sp['metal']?.split(',').filter(Boolean) ?? []
+  const purity   = sp['purity']?.split(',').filter(Boolean) ?? []
+  const diamond  = sp['diamond'] === 'true'
+  const catArr   = sp['category']?.split(',').filter(Boolean) ?? []
 
   const headersList = await headers()
   const canonicalPath = headersList.get('x-canonical-path') ?? ''
@@ -76,7 +80,10 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   const { products, total } = await fetchShopListing(supabase, {
     page,
     sort,
-    category: [slug],
+    metal,
+    purity,
+    diamond,
+    category: [...new Set([slug, ...catArr])],
   })
 
   const meta = CATEGORY_META[slug] ?? {
@@ -153,7 +160,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
                 pageSize={SHOP_PAGE_SIZE}
                 initialPage={page}
                 initialSort={sort}
-                filters={{ category: [slug] }}
+                filters={{ category: [...new Set([slug, ...catArr])], metal, purity, diamond }}
               />
             </Suspense>
           </div>

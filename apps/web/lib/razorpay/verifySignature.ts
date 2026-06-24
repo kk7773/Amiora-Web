@@ -10,8 +10,12 @@ export function verifyRazorpaySignature(input: {
     .update(`${input.orderId}|${input.paymentId}`)
     .digest('hex')
 
-  return timingSafeEqual(
-    Buffer.from(expected),
-    Buffer.from(input.signature),
-  )
+  const expectedBuffer = Buffer.from(expected)
+  const signatureBuffer = Buffer.from(input.signature)
+
+  if (expectedBuffer.length !== signatureBuffer.length) {
+    return false
+  }
+
+  return timingSafeEqual(expectedBuffer, signatureBuffer)
 }

@@ -112,6 +112,7 @@ export function ProductCard({ product, badgeLabel, className }: ProductCardProps
     addItem({
       productId:    product.id,
       variantId:    firstVariant.id,
+      variantSku:   firstVariant.sku,
       sizeLabel:    '',
       productName:  product.name,
       variantLabel: firstVariant.sku,

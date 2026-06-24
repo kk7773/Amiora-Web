@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { AuditLink, ResourceSnapshot } from '@/lib/auditLogTypes'
+import { getStorefrontUrl } from '@/lib/storefrontUrl'
 
 export type { AuditLink, ResourceSnapshot } from '@/lib/auditLogTypes'
 export { formatMetaEntries, META_FIELD_LABELS } from '@/lib/auditLogTypes'
@@ -11,11 +12,7 @@ export type EnrichedAuditLog = {
 }
 
 function storefrontBase(): string {
-  const base =
-    process.env.NEXT_PUBLIC_STOREFRONT_URL ??
-    process.env.NEXT_PUBLIC_WEB_URL ??
-    'http://localhost:3000'
-  return base.replace(/\/$/, '')
+  return getStorefrontUrl()
 }
 
 function adminClient(): SupabaseClient {

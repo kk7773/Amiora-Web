@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { computeCartQuote } from '@/lib/checkout/computeCartQuote'
-import { createServerClient } from '@/lib/supabase/server'
+import { createServerClient } from '@amiora/database'
 import type { CartLine } from '@/lib/coupons/evaluateCoupon'
 import { getRazorpayServerCredentials } from '@/lib/razorpay/serverConfig'
+
+function maskCredential(value: string): string {
+  if (value.length <= 8) return '****'
+  return `${value.slice(0, 4)}…${value.slice(-4)}`
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -29,6 +34,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: quote.errors[0] ?? 'Could not price cart' }, { status: 400 })
     }
 
+    if (!Number.isFinite(quote.grand_total) || quote.grand_total <= 0) {
+      return NextResponse.json({ error: 'Cart total is invalid' }, { status: 400 })
+    }
+
     if (body.coupon_code?.trim() && !quote.coupon) {
       return NextResponse.json(
         { error: quote.errors.find((e) => e.toLowerCase().includes('coupon')) ?? 'Coupon is not applicable' },
@@ -44,7 +53,20 @@ export async function POST(req: NextRequest) {
     const { keyId, keySecret } = getRazorpayServerCredentials()
 
     if (!keyId || !keySecret) {
-      return NextResponse.json({ error: 'Payment gateway not configured' }, { status: 503 })
+      return NextResponse.json(
+        {
+          error:
+            process.env.NODE_ENV === 'production'
+              ? 'Payment gateway not configured'
+              : 'Sandbox Razorpay credentials are not configured. Set RAZORPAY_SANDBOX_KEY_ID and RAZORPAY_SANDBOX_KEY_SECRET in .env.local, then restart the dev server.',
+        },
+        { status: 503 },
+      )
+    }
+
+    const amountInPaise = Math.round(quote.grand_total * 100)
+    if (!Number.isInteger(amountInPaise) || amountInPaise <= 0) {
+      return NextResponse.json({ error: 'Payment amount is invalid' }, { status: 400 })
     }
 
     const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64')
@@ -66,12 +88,36 @@ export async function POST(req: NextRequest) {
       }),
     })
 
-    const data = (await response.json()) as { id?: string; currency?: string; error?: { description?: string } }
+    const data = (await response.json()) as {
+      id?: string
+      currency?: string
+      error?: { description?: string; code?: string; field?: string }
+    }
 
     if (!response.ok || !data.id) {
+      const razorpayError =
+        data.error?.description ??
+        'Payment order creation failed'
+      const isAuthFailure =
+        response.status === 401 ||
+        response.status === 403 ||
+        /auth/i.test(razorpayError)
+
       return NextResponse.json(
-        { error: data.error?.description ?? 'Payment order creation failed' },
-        { status: 502 },
+        {
+          error: isAuthFailure
+            ? 'Razorpay authentication failed. Check RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in .env.local, then restart the dev server.'
+            : razorpayError,
+          details: data.error ?? null,
+          debug:
+            process.env.NODE_ENV === 'production'
+              ? undefined
+              : {
+                  key_id: maskCredential(keyId),
+                  key_secret_length: keySecret.length,
+                },
+        },
+        { status: isAuthFailure ? 401 : 502 },
       )
     }
 

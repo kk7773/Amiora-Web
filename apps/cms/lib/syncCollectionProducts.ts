@@ -217,6 +217,7 @@ export type TaxonomyProductSummary = {
   name: string
   slug: string
   design_number: string | null
+  product_code?: string | null
   product_number: number
   status: string
   image_url: string | null

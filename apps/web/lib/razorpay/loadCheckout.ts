@@ -1,5 +1,12 @@
 const RAZORPAY_SCRIPT_URL = 'https://checkout.razorpay.com/v1/checkout.js'
 
+function getPublicRazorpayMode(): 'live' | 'sandbox' {
+  const raw = process.env.NEXT_PUBLIC_RAZORPAY_MODE?.trim().toLowerCase()
+  if (raw === 'live' || raw === 'production') return 'live'
+  if (raw === 'sandbox' || raw === 'test') return 'sandbox'
+  return process.env.NODE_ENV === 'production' ? 'live' : 'sandbox'
+}
+
 declare global {
   interface Window {
     Razorpay?: new (options: Record<string, unknown>) => {
@@ -44,12 +51,8 @@ export function loadRazorpayCheckout(): Promise<void> {
 }
 
 export function getPublicRazorpayKeyId(): string | undefined {
-  if (process.env.NODE_ENV !== 'production') {
-    return (
-      process.env.NEXT_PUBLIC_RAZORPAY_SANDBOX_KEY_ID?.trim() ||
-      process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID?.trim() ||
-      undefined
-    )
+  if (getPublicRazorpayMode() === 'sandbox') {
+    return process.env.NEXT_PUBLIC_RAZORPAY_SANDBOX_KEY_ID?.trim() || undefined
   }
 
   return process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID?.trim() || undefined

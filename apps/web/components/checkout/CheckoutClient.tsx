@@ -93,13 +93,13 @@ const STORES = [
 
 const STEPS = ['Delivery', 'Details', 'Payment']
 
-export function CheckoutClient() {
+export function CheckoutClient({ razorpayKeyId: initialRazorpayKeyId }: { razorpayKeyId?: string }) {
   const router = useRouter()
   const { user } = useUser()
   const cartHydrated = useCartHydrated()
   const { items, clearCart } = useCartStore()
   const revalidateCouponCodeRef = useRef<string | null>(null)
-  const razorpayKeyId = getPublicRazorpayKeyId()
+  const razorpayKeyId = initialRazorpayKeyId ?? getPublicRazorpayKeyId()
 
   const [step,           setStep]           = useState(0)
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('online')

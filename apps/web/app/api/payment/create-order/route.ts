@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { computeCartQuote } from '@/lib/checkout/computeCartQuote'
 import { createServerClient } from '@amiora/database'
 import type { CartLine } from '@/lib/coupons/evaluateCoupon'
-import { getRazorpayServerCredentials } from '@/lib/razorpay/serverConfig'
+import { getRazorpayMode, getRazorpayServerCredentials } from '@/lib/razorpay/serverConfig'
 
 function maskCredential(value: string): string {
   if (value.length <= 8) return '****'
@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: itemErrors[0] }, { status: 400 })
     }
 
+    const mode = getRazorpayMode()
     const { keyId, keySecret } = getRazorpayServerCredentials()
 
     if (!keyId || !keySecret) {
@@ -58,7 +59,9 @@ export async function POST(req: NextRequest) {
           error:
             process.env.NODE_ENV === 'production'
               ? 'Payment gateway not configured'
-              : 'Sandbox Razorpay credentials are not configured. Set RAZORPAY_SANDBOX_KEY_ID and RAZORPAY_SANDBOX_KEY_SECRET in .env.local, or use RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET, then restart the dev server.',
+              : mode === 'sandbox'
+                ? 'Sandbox Razorpay credentials are not configured. Set RAZORPAY_MODE=sandbox, NEXT_PUBLIC_RAZORPAY_SANDBOX_KEY_ID and RAZORPAY_SANDBOX_KEY_SECRET, then restart the dev server.'
+                : 'Live Razorpay credentials are not configured. Set RAZORPAY_MODE=live, NEXT_PUBLIC_RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET, then restart the dev server.',
         },
         { status: 503 },
       )
@@ -106,13 +109,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error: isAuthFailure
-            ? 'Razorpay authentication failed. Check RAZORPAY_KEY_ID / NEXT_PUBLIC_RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in your env, then restart the server.'
+            ? mode === 'sandbox'
+              ? 'Razorpay sandbox authentication failed. Check RAZORPAY_MODE=sandbox, NEXT_PUBLIC_RAZORPAY_SANDBOX_KEY_ID and RAZORPAY_SANDBOX_KEY_SECRET, then restart the server.'
+              : 'Razorpay live authentication failed. Check RAZORPAY_MODE=live, NEXT_PUBLIC_RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET, then restart the server.'
             : razorpayError,
           details: data.error ?? null,
           debug:
             process.env.NODE_ENV === 'production'
               ? undefined
               : {
+                  mode,
                   key_id: maskCredential(keyId),
                   key_secret_length: keySecret.length,
                 },

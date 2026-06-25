@@ -43,7 +43,10 @@ CLOUDINARY_CLOUD_NAME             = dqayol6fn
 CLOUDINARY_API_KEY                = 465881383896453
 CLOUDINARY_API_SECRET             = i1kohYlAlodMEwWGCelItA4UPdI
 CMS_PRICING_SECRET                = amiora-cms-secret-2024
+RAZORPAY_MODE                     = live
+NEXT_PUBLIC_RAZORPAY_MODE         = live
 NEXT_PUBLIC_RAZORPAY_KEY_ID       = rzp_live_xxxxx
+RAZORPAY_KEY_ID                   = rzp_live_xxxxx
 RAZORPAY_KEY_SECRET               = your_live_secret
 ```
 

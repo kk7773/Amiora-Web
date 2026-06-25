@@ -27,7 +27,10 @@ module.exports = {
         CLOUDINARY_API_KEY: 'FILL_IN_CLOUDINARY_API_KEY',
         CLOUDINARY_API_SECRET: 'FILL_IN_CLOUDINARY_API_SECRET',
         // ── Razorpay ──────────────────────────────────────────────────────────
+        RAZORPAY_MODE: 'live',
+        NEXT_PUBLIC_RAZORPAY_MODE: 'live',
         NEXT_PUBLIC_RAZORPAY_KEY_ID: 'FILL_IN_RAZORPAY_KEY_ID',
+        RAZORPAY_KEY_ID: 'FILL_IN_RAZORPAY_KEY_ID',
         RAZORPAY_KEY_SECRET: 'FILL_IN_RAZORPAY_SECRET',
         // ── Misc ──────────────────────────────────────────────────────────────
         CMS_SECRET: 'FILL_IN_SAME_CMS_SECRET',

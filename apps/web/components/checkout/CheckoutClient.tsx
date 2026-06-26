@@ -85,15 +85,25 @@ type OrderPayload = {
   coupon_code?: string
 }
 
-const STORES = [
-  { id: 's1', name: 'AMIORA — Connaught Place', address: '23 Connaught Place, New Delhi 110001', phone: '+91 98765-43210', timings: 'Mon–Sat 10am–8pm' },
-  { id: 's2', name: 'AMIORA — Bandra West',      address: '14 Hill Road, Bandra West, Mumbai 400050', phone: '+91 98765-43211', timings: 'Mon–Sun 10am–9pm' },
-  { id: 's3', name: 'AMIORA — Johari Bazaar',    address: '45 Johari Bazaar, Jaipur 302003', phone: '+91 98765-43212', timings: 'Mon–Sat 10am–7pm' },
-]
+type CheckoutStore = {
+  id: string
+  name: string
+  address: string
+  city: string
+  state: string
+  pincode: string | null
+  phone: string | null
+}
 
 const STEPS = ['Delivery', 'Details', 'Payment']
 
-export function CheckoutClient({ razorpayKeyId: initialRazorpayKeyId }: { razorpayKeyId?: string }) {
+export function CheckoutClient({
+  razorpayKeyId: initialRazorpayKeyId,
+  stores,
+}: {
+  razorpayKeyId?: string
+  stores: CheckoutStore[]
+}) {
   const router = useRouter()
   const { user } = useUser()
   const cartHydrated = useCartHydrated()
@@ -104,7 +114,7 @@ export function CheckoutClient({ razorpayKeyId: initialRazorpayKeyId }: { razorp
   const [step,           setStep]           = useState(0)
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('online')
   const [paymentMethod,  setPaymentMethod]  = useState<PaymentMethod>('online')
-  const [selectedStore,  setSelectedStore]  = useState<string>(STORES[0]!.id)
+  const [selectedStore,  setSelectedStore]  = useState<string>(stores[0]?.id ?? '')
   const [pickupDate,     setPickupDate]     = useState('')
   const [loading,        setLoading]        = useState(false)
   const [loadingCoupons, setLoadingCoupons] = useState(true)
@@ -131,6 +141,12 @@ export function CheckoutClient({ razorpayKeyId: initialRazorpayKeyId }: { razorp
   const subtotalAfterCoupon = quote?.subtotal_after_coupon ?? 0
   const shipping = quote?.shipping ?? 0
   const grandTotal = quote?.grand_total ?? 0
+
+  useEffect(() => {
+    if (!stores.some((store) => store.id === selectedStore)) {
+      setSelectedStore(stores[0]?.id ?? '')
+    }
+  }, [selectedStore, stores])
 
   useEffect(() => {
     if (user?.email) {
@@ -329,6 +345,10 @@ export function CheckoutClient({ razorpayKeyId: initialRazorpayKeyId }: { razorp
       toast.error(quoteError)
       return
     }
+    if (deliveryMethod === 'pickup' && !selectedStore) {
+      toast.error('No pickup store is available right now.')
+      return
+    }
 
     setLoading(true)
     try {
@@ -356,7 +376,8 @@ export function CheckoutClient({ razorpayKeyId: initialRazorpayKeyId }: { razorp
           return
         }
         clearCart()
-        router.push(`/order-confirmation/${data.order_number}`)
+        toast.success(`Order ${data.order_number} placed successfully.`)
+        router.push('/shop')
       }
     } catch {
       toast.error('Order failed. Please try again.')
@@ -425,7 +446,8 @@ export function CheckoutClient({ razorpayKeyId: initialRazorpayKeyId }: { razorp
           return
         }
         clearCart()
-        router.push(`/order-confirmation/${data.order_number}`)
+        toast.success(`Payment successful. Order ${data.order_number} confirmed.`)
+        router.push('/shop')
       },
       prefill: {
         name: payload.shipping_address?.full_name ?? user?.user_metadata?.full_name ?? '',
@@ -505,9 +527,13 @@ export function CheckoutClient({ razorpayKeyId: initialRazorpayKeyId }: { razorp
                   title="Book & Pick Up"
                   sub="Visit our store, try before paying"
                   active={deliveryMethod === 'pickup'}
+                  disabled={stores.length === 0}
                   onClick={() => setDeliveryMethod('pickup')}
                 />
               </div>
+              {stores.length === 0 && (
+                <p className="text-sm text-ink-muted">Pickup is temporarily unavailable because no active store is configured.</p>
+              )}
               <button
                 onClick={() => setStep(1)}
                 className="mt-4 flex w-full sm:w-auto items-center justify-center gap-2 bg-deep-teal text-cream px-8 py-3.5 text-sm font-medium uppercase tracking-widest rounded-xl hover:bg-teal transition-colors"
@@ -574,15 +600,17 @@ export function CheckoutClient({ razorpayKeyId: initialRazorpayKeyId }: { razorp
             <motion.div key="step1-pickup" variants={fadeUp} initial="hidden" animate="visible" exit={{ opacity: 0 }}>
               <h2 className="font-display text-xl text-ink mb-6">Select Store & Date</h2>
               <div className="space-y-3 mb-6">
-                {STORES.map((store) => (
+                {stores.map((store) => (
                   <div
                     key={store.id}
                     onClick={() => setSelectedStore(store.id)}
                     className={`cursor-pointer rounded-xl p-4 border-2 transition-all ${selectedStore === store.id ? 'border-teal bg-teal/5' : 'border-divider hover:border-teal/50'}`}
                   >
                     <p className="font-medium text-ink">{store.name}</p>
-                    <p className="text-sm text-ink-muted mt-0.5">{store.address}</p>
-                    <p className="text-xs text-ink-faint mt-1">{store.timings} · {store.phone}</p>
+                    <p className="text-sm text-ink-muted mt-0.5">
+                      {[store.address, [store.city, store.state, store.pincode].filter(Boolean).join(' ')].filter(Boolean).join(', ')}
+                    </p>
+                    {store.phone && <p className="text-xs text-ink-faint mt-1">{store.phone}</p>}
                   </div>
                 ))}
               </div>
@@ -602,7 +630,7 @@ export function CheckoutClient({ razorpayKeyId: initialRazorpayKeyId }: { razorp
                 <button
                   type="button"
                   onClick={() => void placeOrder()}
-                  disabled={loading || !pickupDate}
+                  disabled={loading || !pickupDate || stores.length === 0 || !selectedStore}
                   className={primaryBtnCls}
                 >
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
@@ -768,12 +796,33 @@ function Field({ label, error, children, className = '' }: { label: string; erro
   )
 }
 
-function DeliveryCard({ icon, title, sub, active, onClick }: { icon: React.ReactNode; title: string; sub: string; active: boolean; onClick: () => void }) {
+function DeliveryCard({
+  icon,
+  title,
+  sub,
+  active,
+  disabled = false,
+  onClick,
+}: {
+  icon: React.ReactNode
+  title: string
+  sub: string
+  active: boolean
+  disabled?: boolean
+  onClick: () => void
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`text-left rounded-xl p-5 border-2 transition-all w-full ${active ? 'border-teal bg-teal/5' : 'border-divider hover:border-teal/50'}`}
+      disabled={disabled}
+      className={`text-left rounded-xl p-5 border-2 transition-all w-full ${
+        disabled
+          ? 'border-divider opacity-50 cursor-not-allowed'
+          : active
+            ? 'border-teal bg-teal/5'
+            : 'border-divider hover:border-teal/50'
+      }`}
     >
       <div className={`mb-3 ${active ? 'text-teal' : 'text-ink-muted'}`}>{icon}</div>
       <p className="font-medium text-ink">{title}</p>

@@ -6,8 +6,8 @@ export default async function OrdersPage() {
   const { data: orders } = await supabase
     .from('orders')
     .select(`
-      id, order_number, total_amount, discount_amount, coupon_code, status, payment_mode, created_at,
-      shipping_address, pickup_store_id, awb_code, courier_name, tracking_url,
+      id, order_number, total_amount, subtotal, shipping_amount, discount_amount, status, payment_mode, payment_status, payment_ref, guest_email, created_at,
+      shipping_address, pickup_store_id, pickup_date, delivery_method, awb_code, courier_name, tracking_url,
       user:user_profiles(full_name, phone),
       items:order_items(id, quantity, unit_price, variant_label,
         product:products(name, slug, images:product_images(url, is_primary))

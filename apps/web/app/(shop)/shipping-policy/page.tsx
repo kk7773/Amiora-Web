@@ -13,7 +13,7 @@ export default function ShippingPolicyPage() {
       lastUpdated="April 2025"
       intro="We want your jewellery to reach you safely and swiftly. Here's everything you need to know about our shipping process."
       sections={[
-        { heading: 'Free Shipping', body: 'Orders above ₹5,000 qualify for free standard shipping across India. Orders below ₹5,000 incur a flat ₹199 shipping fee.' },
+        { heading: 'Free Shipping', body: 'Orders above ₹5,000 qualify for free standard shipping across India. Orders below ₹5,000 incur a flat ₹1 shipping fee.' },
         { heading: 'Processing Time', body: 'Most orders are processed within 1–2 business days. Custom or made-to-order pieces may take 3–4 weeks. You will receive a confirmation email with expected timelines.' },
         { heading: 'Delivery Timelines', body: [
           'Metro cities (Delhi, Mumbai, Bangalore, Chennai): 2–4 business days',

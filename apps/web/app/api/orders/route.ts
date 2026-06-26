@@ -30,6 +30,13 @@ type ShippingAddressInput = {
   email?: string
 }
 
+type OrderInsertPayload = Record<string, unknown>
+
+const ORDER_OPTIONAL_COLUMNS = [
+  'coupon_id',
+  'coupon_code',
+]
+
 function normalizeAddress(address?: ShippingAddressInput | null) {
   if (!address) return null
 
@@ -81,6 +88,63 @@ function validateCheckoutBody(body: {
   return null
 }
 
+function buildOrderInsertPayload(params: {
+  userId: string | null
+  guestEmail: string | null
+  status: string
+  paymentMode: string
+  paymentStatus: string
+  paymentRef: string | null
+  subtotal: number
+  shippingAmount: number
+  discountAmount: number
+  totalAmount: number
+  shippingAddress: ShippingAddressInput | null
+  pickupStoreId: string | null
+  pickupDate: string | null
+  deliveryMethod: string
+  razorpayOrderId: string | null
+  razorpayPaymentId: string | null
+  razorpaySignature: string | null
+  couponId?: string | null
+  couponCode?: string | null
+}): OrderInsertPayload {
+  return {
+    user_id: params.userId,
+    guest_email: params.guestEmail,
+    status: params.status,
+    payment_mode: params.paymentMode,
+    payment_status: params.paymentStatus,
+    payment_ref: params.paymentRef,
+    subtotal: params.subtotal,
+    shipping_amount: params.shippingAmount,
+    discount_amount: params.discountAmount,
+    total_amount: params.totalAmount,
+    shipping_address: params.shippingAddress,
+    pickup_store_id: params.pickupStoreId,
+    pickup_date: params.pickupDate,
+    delivery_method: params.deliveryMethod,
+    razorpay_order_id: params.razorpayOrderId,
+    razorpay_payment_id: params.razorpayPaymentId,
+    razorpay_signature: params.razorpaySignature,
+    coupon_id: params.couponId ?? null,
+    coupon_code: params.couponCode ?? null,
+  }
+}
+
+function stripMissingOrderColumn(payload: OrderInsertPayload, errorMessage: string): OrderInsertPayload | null {
+  const match = errorMessage.match(/Could not find the '([^']+)' column of 'orders'/i)
+  if (!match?.[1]) return null
+
+  const column = match[1]
+  if (!ORDER_OPTIONAL_COLUMNS.includes(column)) return null
+  if (!(column in payload)) return null
+
+  const next = { ...payload }
+  delete next[column]
+  return next
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as {
@@ -111,6 +175,17 @@ export async function POST(req: NextRequest) {
     const deliveryMethod = body.delivery_method === 'pickup' ? 'pickup' : 'online'
     const paymentMode = body.payment_method === 'at_store' ? 'pay_at_store' : 'online'
     const shippingAddress = normalizeAddress(body.shipping_address)
+    let orderUserId: string | null = null
+
+    if (user?.id) {
+      const { data: userProfile } = await adminClient
+        .from('user_profiles')
+        .select('id')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      orderUserId = userProfile?.id ?? null
+    }
 
     const cartLines: CartLine[] = (body.items ?? []).map((item) => ({
       product_id: item.product_id,
@@ -173,34 +248,54 @@ export async function POST(req: NextRequest) {
         ? 'booked_for_pickup'
         : body.status ?? 'confirmed'
 
-    const { data: order, error } = await adminClient
-      .from('orders')
-      .insert({
-        user_id: user?.id ?? null,
-        guest_email: user?.email ?? shippingAddress?.email ?? null,
-        status: orderStatus,
-        payment_mode: paymentMode,
-        payment_status: paymentMode === 'online' ? 'paid' : 'pending',
-        payment_ref: body.payment_id ?? null,
-        subtotal: quote.subtotal,
-        shipping_amount: quote.shipping,
-        discount_amount: quote.discount_amount,
-        total_amount: quote.grand_total,
-        coupon_id: quote.coupon?.id ?? null,
-        coupon_code: quote.coupon?.code ?? null,
-        shipping_address: deliveryMethod === 'online' ? shippingAddress : null,
-        pickup_store_id: deliveryMethod === 'pickup' ? body.store_id ?? null : null,
-        pickup_date: deliveryMethod === 'pickup' ? body.pickup_date ?? null : null,
-        delivery_method: deliveryMethod,
-        razorpay_order_id: body.razorpay_order_id ?? null,
-        razorpay_payment_id: body.payment_id ?? null,
-        razorpay_signature: body.razorpay_signature ?? null,
-      })
-      .select('id, order_number')
-      .single()
+    const baseOrderPayload = buildOrderInsertPayload({
+      userId: orderUserId,
+      guestEmail: user?.email ?? shippingAddress?.email ?? null,
+      status: orderStatus,
+      paymentMode,
+      paymentStatus: paymentMode === 'online' ? 'paid' : 'pending',
+      paymentRef: body.payment_id ?? null,
+      subtotal: quote.subtotal,
+      shippingAmount: quote.shipping,
+      discountAmount: quote.discount_amount,
+      totalAmount: quote.grand_total,
+      shippingAddress: deliveryMethod === 'online' ? shippingAddress : null,
+      pickupStoreId: deliveryMethod === 'pickup' ? body.store_id ?? null : null,
+      pickupDate: deliveryMethod === 'pickup' ? body.pickup_date ?? null : null,
+      deliveryMethod,
+      razorpayOrderId: body.razorpay_order_id ?? null,
+      razorpayPaymentId: body.payment_id ?? null,
+      razorpaySignature: body.razorpay_signature ?? null,
+      couponId: quote.coupon?.id ?? null,
+      couponCode: quote.coupon?.code ?? null,
+    })
 
-    if (error || !order) {
-      throw error ?? new Error('Order creation failed')
+    let orderInsertPayload = baseOrderPayload
+    let order: { id: string; order_number: string } | null = null
+    let orderInsertError: { message?: string } | null = null
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const { data, error } = await adminClient
+        .from('orders')
+        .insert(orderInsertPayload)
+        .select('id, order_number')
+        .single()
+
+      if (!error && data) {
+        order = data
+        break
+      }
+
+      orderInsertError = error
+      if (!error?.message) break
+
+      const nextPayload = stripMissingOrderColumn(orderInsertPayload, error.message)
+      if (!nextPayload) break
+      orderInsertPayload = nextPayload
+    }
+
+    if (!order) {
+      throw orderInsertError ?? new Error('Order creation failed')
     }
 
     const orderItems = quote.lines.map((line) => {
@@ -222,6 +317,7 @@ export async function POST(req: NextRequest) {
 
     const { error: orderItemsError } = await adminClient.from('order_items').insert(orderItems)
     if (orderItemsError) {
+      await adminClient.from('orders').delete().eq('id', order.id)
       throw orderItemsError
     }
 

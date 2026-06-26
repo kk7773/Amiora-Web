@@ -18,11 +18,29 @@ type OrderItemRow = {
 type OrderRow = {
   id: string
   order_number: string
+  subtotal: number
+  shipping_amount: number
+  discount_amount: number
+  coupon_code: string | null
   total_amount: number
   status: string
+  payment_mode: string | null
+  payment_status: string | null
+  payment_ref: string | null
   created_at: string
   delivery_method: string
   pickup_date: string | null
+  shipping_address: {
+    full_name?: string
+    phone?: string
+    line1?: string
+    line2?: string
+    city?: string
+    district?: string
+    state?: string
+    pincode?: string
+    email?: string
+  } | null
   awb_code: string | null
   courier_name: string | null
   tracking_url: string | null
@@ -36,7 +54,7 @@ export default async function OrdersPage() {
 
   const { data: ordersRaw } = await supabase
     .from('orders')
-    .select('id, order_number, total_amount, status, created_at, delivery_method, pickup_date, awb_code, courier_name, tracking_url, order_items(id, product_id, quantity, unit_price, size_label, product:products(name,slug,product_images(url,is_primary)))')
+    .select('id, order_number, subtotal, shipping_amount, discount_amount, total_amount, status, payment_mode, payment_status, payment_ref, created_at, delivery_method, pickup_date, shipping_address, awb_code, courier_name, tracking_url, order_items(id, product_id, quantity, unit_price, size_label, product:products(name,slug,product_images(url,is_primary)))')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
 

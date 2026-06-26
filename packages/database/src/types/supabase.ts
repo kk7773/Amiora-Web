@@ -543,6 +543,8 @@ export interface Database {
           order_number: string
           user_id: string | null
           guest_email: string | null
+          coupon_id: string | null
+          coupon_code: string | null
           status: OrderStatus
           payment_mode: PaymentMode | null
           payment_status: PaymentStatus
@@ -564,6 +566,8 @@ export interface Database {
           order_number?: string
           user_id?: string | null
           guest_email?: string | null
+          coupon_id?: string | null
+          coupon_code?: string | null
           status?: OrderStatus
           payment_mode?: PaymentMode | null
           payment_status?: PaymentStatus

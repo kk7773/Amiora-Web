@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { Search, X, ChevronRight, Package, Loader2, Truck, ExternalLink } from 'lucide-react'
+import { Search, X, ChevronRight, Package, Loader2, Truck, ExternalLink, Download } from 'lucide-react'
 import { StatusBadge, Badge } from '@/components/ui/Badge'
 import { toast } from 'sonner'
 
@@ -14,9 +14,18 @@ interface OrderItem {
 }
 interface Order {
   id: string; order_number: string; total_amount: number; status: string
+  subtotal?: number
+  shipping_amount?: number
   discount_amount?: number; coupon_code?: string | null
-  payment_mode?: string; created_at: string; shipping_address?: Record<string, string>
+  payment_mode?: string
+  payment_status?: string | null
+  payment_ref?: string | null
+  guest_email?: string | null
+  created_at: string
+  shipping_address?: Record<string, string>
   pickup_store_id?: string
+  pickup_date?: string | null
+  delivery_method?: string
   awb_code?: string | null
   courier_name?: string | null
   tracking_url?: string | null
@@ -127,7 +136,7 @@ export function OrdersClient({ orders: initial, stores }: { orders: Order[]; sto
               {filtered.map(o => (
                 <tr key={o.id} className="hover:bg-surface/50 cursor-pointer" onClick={() => { setSelected(o); setNewStatus(o.status) }}>
                   <td className="px-5 py-3 font-mono text-xs text-teal">{o.order_number}</td>
-                  <td className="px-5 py-3 font-medium">{o.user?.full_name ?? 'Guest'}</td>
+                  <td className="px-5 py-3 font-medium">{o.user?.full_name ?? o.shipping_address?.full_name ?? 'Guest'}</td>
                   <td className="px-5 py-3 text-ink-muted text-xs">{new Date(o.created_at).toLocaleDateString('en-IN')}</td>
                   <td className="px-5 py-3 text-ink-muted">{o.items?.length ?? 0}</td>
                   <td className="px-5 py-3 font-medium">₹{o.total_amount?.toLocaleString()}</td>
@@ -146,33 +155,81 @@ export function OrdersClient({ orders: initial, stores }: { orders: Order[]; sto
       {selected && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
-            <div className="sticky top-0 bg-white px-6 py-4 border-b border-divider flex items-center justify-between">
-              <h3 className="font-display text-lg text-deep-teal">Order {selected.order_number}</h3>
+              <div className="sticky top-0 bg-white px-6 py-4 border-b border-divider flex items-center justify-between">
+              <div className="space-y-1">
+                <h3 className="font-display text-lg text-deep-teal">Order {selected.order_number}</h3>
+                <p className="text-xs text-ink-muted">Status, shipment, and download slips.</p>
+              </div>
               <button onClick={() => setSelected(null)}><X className="w-5 h-5 text-ink-muted" /></button>
-            </div>
+              </div>
             <div className="px-6 py-5 space-y-5">
               {/* Status Timeline */}
-              <div>
-                <p className="text-xs text-ink-faint uppercase tracking-wider mb-3">Status Timeline</p>
-                <div className="flex items-center gap-1">
-                  {STATUS_STEPS.map((s, i) => {
-                    const idx = STATUS_STEPS.indexOf(selected.status)
-                    const done = i <= idx
-                    return (
-                      <div key={s} className="flex items-center flex-1">
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-colors ${done ? 'bg-teal text-white' : 'bg-surface border-2 border-divider text-ink-faint'}`}>
-                          {i + 1}
-                        </div>
-                        <div className="flex-1 mx-1">
-                          <div className={`h-0.5 ${done && i < STATUS_STEPS.length - 1 ? 'bg-teal' : 'bg-divider'}`} />
-                        </div>
-                        <p className="hidden sm:block text-[10px] text-ink-faint capitalize absolute">{s}</p>
-                      </div>
-                    )
-                  })}
+              <div className="rounded-2xl border border-divider bg-gradient-to-br from-surface to-white p-4">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <p className="text-xs text-ink-faint uppercase tracking-wider">Status Timeline</p>
+                  <span className="text-xs text-ink-muted capitalize">{selected.status.replace(/_/g, ' ')}</span>
                 </div>
-                <div className="flex justify-between mt-1">
-                  {STATUS_STEPS.map(s => <p key={s} className="text-[10px] text-ink-faint capitalize flex-1 text-center">{s}</p>)}
+                <div className="overflow-x-auto pb-1">
+                  <div className="grid min-w-[560px] grid-cols-5 gap-2">
+                    {STATUS_STEPS.map((s, i) => {
+                      const idx = STATUS_STEPS.indexOf(selected.status)
+                      const done = i < idx
+                      const active = i === idx
+                      return (
+                        <div key={s} className="relative flex flex-col items-center gap-2">
+                          {i < STATUS_STEPS.length - 1 && (
+                            <div className={`absolute left-1/2 top-4 h-px w-full ${i < idx ? 'bg-teal' : 'bg-divider'}`} />
+                          )}
+                          <div className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-colors ${
+                            done ? 'bg-teal text-white' : active ? 'bg-deep-teal text-white ring-4 ring-teal/15' : 'bg-white border-2 border-divider text-ink-faint'
+                          }`}>
+                            {done ? '✓' : i + 1}
+                          </div>
+                          <p className={`text-center text-[10px] uppercase tracking-wider ${active ? 'text-ink font-semibold' : done ? 'text-teal' : 'text-ink-faint'}`}>
+                            {s.replace(/_/g, ' ')}
+                          </p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <a
+                  href={`/api/orders/${selected.id}/slip?kind=packing`}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-divider px-4 py-3 text-sm font-medium text-ink hover:border-teal hover:text-teal transition-colors"
+                >
+                  <Download className="h-4 w-4" />
+                  Download Packing Slip
+                </a>
+                <a
+                  href={`/api/orders/${selected.id}/slip?kind=order`}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-deep-teal px-4 py-3 text-sm font-medium text-cream hover:bg-teal transition-colors"
+                >
+                  <Download className="h-4 w-4" />
+                  Download Order Slip
+                </a>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="bg-surface rounded-lg p-4 space-y-1.5">
+                  <p className="text-xs text-ink-faint uppercase tracking-wider">Customer</p>
+                  <p className="text-sm font-medium text-ink">{selected.user?.full_name ?? selected.shipping_address?.full_name ?? 'Guest customer'}</p>
+                  {selected.user?.phone || selected.shipping_address?.phone ? (
+                    <p className="text-sm text-ink-muted">{selected.user?.phone ?? selected.shipping_address?.phone}</p>
+                  ) : null}
+                  {selected.guest_email || selected.shipping_address?.email ? (
+                    <p className="text-sm text-ink-muted break-all">{selected.guest_email ?? selected.shipping_address?.email}</p>
+                  ) : null}
+                </div>
+                <div className="bg-surface rounded-lg p-4 space-y-1.5">
+                  <p className="text-xs text-ink-faint uppercase tracking-wider">Payment</p>
+                  <p className="text-sm text-ink"><span className="text-ink-muted">Mode:</span> {selected.payment_mode ?? 'online'}</p>
+                  <p className="text-sm text-ink"><span className="text-ink-muted">Status:</span> {selected.payment_status ?? 'pending'}</p>
+                  {selected.payment_ref && (
+                    <p className="text-sm text-ink break-all"><span className="text-ink-muted">Ref:</span> {selected.payment_ref}</p>
+                  )}
                 </div>
               </div>
 
@@ -197,10 +254,22 @@ export function OrdersClient({ orders: initial, stores }: { orders: Order[]; sto
                   })}
                 </div>
                 <div className="mt-3 pt-3 border-t border-divider space-y-1">
+                  {selected.subtotal != null && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-ink-muted">Subtotal</span>
+                      <span className="text-ink">₹{selected.subtotal.toLocaleString()}</span>
+                    </div>
+                  )}
                   {selected.discount_amount != null && selected.discount_amount > 0 && (
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-ink-muted">Coupon {selected.coupon_code ? `(${selected.coupon_code})` : ''}</span>
                       <span className="text-teal">−₹{selected.discount_amount.toLocaleString()}</span>
+                    </div>
+                  )}
+                  {selected.shipping_amount != null && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-ink-muted">Shipping</span>
+                      <span className="text-ink">₹{selected.shipping_amount.toLocaleString()}</span>
                     </div>
                   )}
                   <div className="flex items-center justify-between">
@@ -215,6 +284,9 @@ export function OrdersClient({ orders: initial, stores }: { orders: Order[]; sto
                 <p className="text-xs text-ink-faint uppercase tracking-wider mb-2">Delivery Info</p>
                 {selected.shipping_address ? (
                   <div className="text-sm text-ink bg-surface rounded-lg p-3 space-y-1">
+                    {selected.shipping_address.full_name && <p>{selected.shipping_address.full_name}</p>}
+                    {selected.shipping_address.phone && <p>{selected.shipping_address.phone}</p>}
+                    {selected.shipping_address.email && <p className="break-all">{selected.shipping_address.email}</p>}
                     <p>{selected.shipping_address.line1}{selected.shipping_address.line2 && `, ${selected.shipping_address.line2}`}</p>
                     <p>
                       {selected.shipping_address.city}
@@ -225,7 +297,7 @@ export function OrdersClient({ orders: initial, stores }: { orders: Order[]; sto
                 ) : selected.pickup_store_id ? (
                   <p className="text-sm text-ink bg-surface rounded-lg p-3">
                     <Package className="inline w-4 h-4 mr-1 text-teal" />
-                    Pickup from store
+                    Pickup from store{selected.pickup_date ? ` on ${new Date(selected.pickup_date).toLocaleDateString('en-IN')}` : ''}
                   </p>
                 ) : null}
               </div>

@@ -106,6 +106,17 @@ export async function POST(req: NextRequest) {
         response.status === 403 ||
         /auth/i.test(razorpayError)
 
+      if (isAuthFailure) {
+        console.error('[payment/create-order] Razorpay auth failure', {
+          mode,
+          hasKeyId: Boolean(keyId),
+          hasKeySecret: Boolean(keySecret),
+          keyId: maskCredential(keyId),
+          razorpayStatus: response.status,
+          razorpayError,
+        })
+      }
+
       return NextResponse.json(
         {
           error: isAuthFailure

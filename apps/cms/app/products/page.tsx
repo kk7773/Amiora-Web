@@ -64,6 +64,11 @@ export default async function ProductsPage() {
   const products = (productsRes.data ?? []) as ProductRow[]
   const collections = collectionsRes.data ?? []
   const categories = categoriesRes.data ?? []
+  const statusCounts = {
+    active: products.filter((product) => product.status === 'active').length,
+    draft: products.filter((product) => product.status === 'draft').length,
+    archived: products.filter((product) => product.status === 'archived').length,
+  }
 
   const collectionById = new Map(collections.map((row) => [row.id, row]))
   const categoryById = new Map(categories.map((row) => [row.id, row]))
@@ -136,10 +141,24 @@ export default async function ProductsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-6">
         <div>
           <h2 className="font-display text-2xl text-deep-teal">Products</h2>
           <p className="text-sm text-ink-muted mt-0.5">{enrichedProducts.length} products total</p>
+        </div>
+        <div className="hidden lg:flex items-center gap-3 ml-auto">
+          <div className="rounded-xl border border-divider bg-white px-4 py-3 min-w-[9rem]">
+            <p className="text-[11px] uppercase tracking-widest text-ink-faint">Active Products</p>
+            <p className="mt-1 text-2xl font-semibold text-deep-teal">{statusCounts.active}</p>
+          </div>
+          <div className="rounded-xl border border-divider bg-white px-4 py-3 min-w-[9rem]">
+            <p className="text-[11px] uppercase tracking-widest text-ink-faint">Draft Products</p>
+            <p className="mt-1 text-2xl font-semibold text-deep-teal">{statusCounts.draft}</p>
+          </div>
+          <div className="rounded-xl border border-divider bg-white px-4 py-3 min-w-[9rem]">
+            <p className="text-[11px] uppercase tracking-widest text-ink-faint">Archived Products</p>
+            <p className="mt-1 text-2xl font-semibold text-deep-teal">{statusCounts.archived}</p>
+          </div>
         </div>
         <ProductsPageActions />
       </div>

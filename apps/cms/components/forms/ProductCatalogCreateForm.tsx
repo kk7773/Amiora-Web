@@ -454,6 +454,12 @@ export function ProductCatalogCreateForm({
   const [publishing, setPublishing] = useState(false)
   const [justPublished, setJustPublished] = useState(false)
 
+  useEffect(() => {
+    if (status !== 'active' && justPublished) {
+      setJustPublished(false)
+    }
+  }, [status, justPublished])
+
   const categoryCode = categories.find((c) => c.id === categoryId)?.code ?? 'XX'
   const productId = useMemo(() => {
     if (!categoryCode || !designNumber.trim()) return ''
@@ -1503,15 +1509,21 @@ export function ProductCatalogCreateForm({
           </button>
           <button
             type="button"
-            disabled={saving || justPublished}
-            onClick={() => void submit('active')}
+            disabled={saving || (status === 'active' && justPublished)}
+            onClick={() => void submit(status)}
             className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-              justPublished
+              status === 'active' && justPublished
                 ? 'bg-teal/80 text-white cursor-default'
                 : 'bg-teal text-white hover:bg-deep-teal'
             }`}
           >
-            {publishing && saving ? 'Publishing…' : justPublished ? 'Published' : 'Publish'}
+            {publishing && saving
+              ? 'Publishing…'
+              : status === 'active'
+                ? (justPublished ? 'Published' : 'Publish')
+                : status === 'archived'
+                  ? 'Archive Product'
+                  : 'Save as Draft'}
           </button>
         </div>
       </section>

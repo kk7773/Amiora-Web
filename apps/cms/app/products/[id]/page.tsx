@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { createServerClient } from '@amiora/database'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { ProductCatalogCreateForm } from '@/components/forms/ProductCatalogCreateForm'
+import { ensureGoldMetalPurities } from '@/lib/ensureMetalPurities'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -59,6 +60,7 @@ async function fetchProductColorGroups(
 export default async function EditProductPage({ params }: Props) {
   const { id } = await params
   const supabase = createServerClient()
+  await ensureGoldMetalPurities(supabase)
 
   const [{ data: product, error: productError }, { data: collections }, { data: categories }, { data: tags }, { data: metalColors }, { data: metalPurities }] =
     await Promise.all([

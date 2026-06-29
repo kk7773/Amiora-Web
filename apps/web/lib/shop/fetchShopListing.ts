@@ -111,6 +111,7 @@ async function fetchShopListingImpl(
     const selectedCodes = new Set<string>()
     for (const selectedMetal of metal) {
       if (selectedMetal === 'gold') {
+        selectedCodes.add('22')
         selectedCodes.add('18')
         selectedCodes.add('14')
         selectedCodes.add('09')

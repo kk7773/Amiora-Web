@@ -9,6 +9,12 @@ function maskCredential(value: string): string {
   return `${value.slice(0, 4)}…${value.slice(-4)}`
 }
 
+function isRazorpayKeyModeMismatch(mode: string, keyId: string): boolean {
+  if (mode === 'live') return keyId.startsWith('rzp_test_')
+  if (mode === 'sandbox') return keyId.startsWith('rzp_live_')
+  return false
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as {
@@ -62,6 +68,22 @@ export async function POST(req: NextRequest) {
               : mode === 'sandbox'
                 ? 'Sandbox Razorpay credentials are not configured. Set RAZORPAY_MODE=sandbox, NEXT_PUBLIC_RAZORPAY_SANDBOX_KEY_ID and RAZORPAY_SANDBOX_KEY_SECRET, then restart the dev server.'
                 : 'Live Razorpay credentials are not configured. Set RAZORPAY_MODE=live, NEXT_PUBLIC_RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET, then restart the dev server.',
+        },
+        { status: 503 },
+      )
+    }
+
+    if (isRazorpayKeyModeMismatch(mode, keyId)) {
+      return NextResponse.json(
+        {
+          error:
+            mode === 'live'
+              ? 'Razorpay mode is live but the key ID looks like a test key. Set RAZORPAY_KEY_ID to your live key and RAZORPAY_KEY_SECRET to the matching live secret.'
+              : 'Razorpay mode is sandbox but the key ID looks like a live key. Set RAZORPAY_SANDBOX_KEY_ID and RAZORPAY_SANDBOX_KEY_SECRET instead.',
+          details: {
+            mode,
+            key_id: maskCredential(keyId),
+          },
         },
         { status: 503 },
       )

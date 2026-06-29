@@ -301,9 +301,10 @@ ALTER TABLE public.order_items
 -- 7) Seed masters
 -- ---------------------------------------------------------------------------
 INSERT INTO public.metal_purities (label, code, display_order) VALUES
-  ('18Kt Gold', '18', 1),
-  ('14Kt Gold', '14', 2),
-  ('9Kt Gold',  '09', 3)
+  ('22Kt Gold', '22', 1),
+  ('18Kt Gold', '18', 2),
+  ('14Kt Gold', '14', 3),
+  ('9Kt Gold',  '09', 4)
 ON CONFLICT (code) DO UPDATE SET
   label         = EXCLUDED.label,
   display_order = EXCLUDED.display_order;

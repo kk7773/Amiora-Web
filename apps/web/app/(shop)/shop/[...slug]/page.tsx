@@ -31,6 +31,7 @@ const FILTER_MAP: Record<string, Record<string, string>> = {
   all: {},
   gold: { metal: 'gold' },
   diamond: { diamond: 'true' },
+  '22k': { purity: '22k' },
   '18k': { purity: '18k' },
   '14k': { purity: '14k' },
   '9k': { purity: '9k' },

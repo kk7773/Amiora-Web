@@ -1,7 +1,7 @@
 'use client'
 
 import { usePathname, useRouter } from 'next/navigation'
-import { Bell, Search, User } from 'lucide-react'
+import { Bell, PanelLeftOpen, Search, User } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useNotificationStore } from '@/stores/notificationStore'
 
@@ -23,7 +23,13 @@ function initials(name: string) {
   return name.split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('')
 }
 
-export function TopBar() {
+export function TopBar({
+  sidebarCollapsed,
+  onToggleSidebar,
+}: {
+  sidebarCollapsed: boolean
+  onToggleSidebar: () => void
+}) {
   const pathname  = usePathname()
   const router    = useRouter()
   const [notifOpen, setNotifOpen] = useState(false)
@@ -42,7 +48,16 @@ export function TopBar() {
     ?? (pathname === '/profile' ? 'My Profile' : 'CMS')
 
   return (
-    <header className="fixed top-0 left-60 right-0 z-20 h-14 bg-white border-b border-divider flex items-center px-6 gap-4">
+    <header className={`fixed top-0 right-0 z-20 h-14 bg-white border-b border-divider flex items-center px-6 gap-4 transition-[left] duration-200 ${sidebarCollapsed ? 'left-0' : 'left-60'}`}>
+      <button
+        type="button"
+        onClick={onToggleSidebar}
+        className="hidden md:inline-flex items-center justify-center h-9 w-9 rounded-lg border border-divider text-ink-muted hover:text-deep-teal hover:border-teal hover:bg-surface transition-colors"
+        aria-label={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
+        title={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
+      >
+        <PanelLeftOpen className="w-4 h-4" />
+      </button>
       <h1 className="font-display text-lg text-deep-teal">{title}</h1>
 
       <div className="ml-auto flex items-center gap-3">

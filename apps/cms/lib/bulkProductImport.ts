@@ -70,8 +70,9 @@ const COLUMN_ALIASES: Record<string, string> = {
   remarks: 'short_desc',
 }
 
-/** Vendor sheets: one row with 14K Net / 18K Net columns → multiple variants */
+/** Vendor sheets: one row with 14K / 18K / 22K net columns → multiple variants */
 const PURITY_NET_COLUMNS: Record<string, string> = {
+  '22k_net': '22',
   '09k_net': '09',
   '9k_net': '09',
   '14k_net': '14',
@@ -509,7 +510,7 @@ function buildPayloadForGroup(
       errors.push({
         row: rowNum,
         design_number: design,
-        message: 'Net weight required — add metal_weight_g or 14K Net / 18K Net column with a positive value',
+        message: 'Net weight required — add metal_weight_g or 14K Net / 18K Net / 22K Net column with a positive value',
       })
       continue
     }
@@ -551,7 +552,7 @@ function buildPayloadForGroup(
       warnings.push({
         row: rowNum,
         design_number: design,
-        message: 'Using 14K Net / 18K Net columns — one variant per purity column',
+        message: 'Using 14K Net / 18K Net / 22K Net columns — one variant per purity column',
       })
     }
 
@@ -623,7 +624,7 @@ function buildPayloadForGroup(
     errors.push({
       row: firstRowNum,
       design_number: design,
-      message: 'No valid variants — add metal_weight_g or 14K Net / 18K Net with positive weight',
+      message: 'No valid variants — add metal_weight_g or 14K Net / 18K Net / 22K Net with positive weight',
     })
     return { payload: null, errors, warnings, slug: '' }
   }

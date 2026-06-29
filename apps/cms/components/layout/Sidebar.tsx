@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import {
   LayoutDashboard, Package, Layers, ShoppingBag, Users, MessageSquare,
-  Star, FileText, Quote, MapPin, Settings, ChevronRight, LogOut,
+  Star, FileText, Quote, MapPin, Settings, ChevronRight, LogOut, PanelLeftClose,
   TrendingUp, Ticket, HelpCircle, ShieldCheck, ClipboardList,
 } from 'lucide-react'
 import { createBrowserClient } from '@/lib/supabase/client'
@@ -31,7 +31,13 @@ const ALL_NAV_ITEMS = [
   { href: '/audit-logs',       slug: 'audit-logs',       label: 'Audit Logs',       icon: ClipboardList,  superAdminOnly: true },
 ]
 
-export function Sidebar() {
+export function Sidebar({
+  collapsed,
+  onToggle,
+}: {
+  collapsed: boolean
+  onToggle: () => void
+}) {
   const pathname   = usePathname()
   const { counts } = useNotificationStore()
 
@@ -67,16 +73,27 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 flex flex-col bg-sidebar-bg w-60">
+    <aside className={`fixed inset-y-0 left-0 z-30 hidden md:flex flex-col bg-sidebar-bg transition-transform duration-200 w-60 ${collapsed ? '-translate-x-full' : 'translate-x-0'}`}>
       {/* Brand */}
-      <div className="flex items-center gap-2 px-5 py-5 border-b border-white/10">
-        <div className="w-8 h-8 rounded-full bg-teal flex items-center justify-center text-white text-xs font-display font-bold">A</div>
-        <div>
-          <p className="text-cream font-display text-base leading-tight">AMIORA</p>
-          <p className="text-sidebar-text text-[10px] tracking-widest uppercase">
-            {cmsRole === 'super_admin' ? 'Super Admin' : 'Admin CMS'}
-          </p>
+      <div className="flex items-center gap-3 px-5 py-5 border-b border-white/10">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-8 h-8 rounded-full bg-teal flex items-center justify-center text-white text-xs font-display font-bold">A</div>
+          <div>
+            <p className="text-cream font-display text-base leading-tight">AMIORA</p>
+            <p className="text-sidebar-text text-[10px] tracking-widest uppercase">
+              {cmsRole === 'super_admin' ? 'Super Admin' : 'Admin CMS'}
+            </p>
+          </div>
         </div>
+        <button
+          type="button"
+          onClick={onToggle}
+          className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-sidebar-text hover:bg-sidebar-hover hover:text-cream transition-colors"
+          aria-label="Hide sidebar"
+          title="Hide sidebar"
+        >
+          <PanelLeftClose className="w-4 h-4" />
+        </button>
       </div>
 
       {/* Nav */}

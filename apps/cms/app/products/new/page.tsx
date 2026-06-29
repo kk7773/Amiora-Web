@@ -1,8 +1,10 @@
 import { createServerClient } from '@amiora/database'
 import { ProductCatalogCreateForm } from '@/components/forms/ProductCatalogCreateForm'
+import { ensureGoldMetalPurities } from '@/lib/ensureMetalPurities'
 
 export default async function NewProductPage() {
   const supabase = createServerClient()
+  await ensureGoldMetalPurities(supabase)
 
   const [{ data: collections }, { data: categories }, { data: tags }, { data: metalColors }, { data: metalPurities }] =
     await Promise.all([

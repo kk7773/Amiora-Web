@@ -1002,7 +1002,7 @@ export function ProductCatalogCreateForm({
                 setProductMetalType(next)
                 toast.message(
                   next === 'gold'
-                    ? 'Matrix columns: gold purities (e.g. 18Kt / 14Kt / 9Kt)'
+                    ? 'Matrix columns: gold purities (e.g. 22Kt / 18Kt / 14Kt / 9Kt)'
                     : 'Matrix columns: silver purities (925 / 835)',
                 )
               }}
@@ -1393,7 +1393,7 @@ export function ProductCatalogCreateForm({
         </p>
         {!hasMetalPurities ? (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            `metal_purities` table empty hai. Supabase me seed / migration chalao — gold (18/14/09) aur silver (925/835) columns yahan dikhenge.
+            `metal_purities` table empty hai. Supabase me seed / migration chalao — gold (22/18/14/09) aur silver (925/835) columns yahan dikhenge.
           </div>
         ) : puritiesForProduct.length === 0 ? (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">

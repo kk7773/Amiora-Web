@@ -2,7 +2,7 @@ import { createServerClient } from '@amiora/database'
 import { parseShopSegments } from '@/lib/shop/paths'
 import { PRODUCT_CATEGORY_EMBED, PRODUCT_COLLECTION_EMBED } from '@/lib/shop/mapProductForCard'
 
-const FILTER_SCOPES = new Set(['all', 'gold', 'silver', 'diamond', '18k', '14k', '9k'])
+const FILTER_SCOPES = new Set(['all', 'gold', 'silver', 'diamond', '22k', '18k', '14k', '9k'])
 
 function shopScopePath(scopeSlug: string | null) {
   return scopeSlug && scopeSlug !== 'all' ? `/shop/${scopeSlug}` : '/shop'

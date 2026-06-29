@@ -13,7 +13,14 @@ ALTER TABLE public.metal_purities DROP CONSTRAINT IF EXISTS metal_purities_metal
 ALTER TABLE public.metal_purities ADD CONSTRAINT metal_purities_metal_check
   CHECK (metal IN ('gold', 'silver', 'platinum'));
 
-UPDATE public.metal_purities SET metal = 'gold' WHERE code IN ('18', '14', '09');
+UPDATE public.metal_purities SET metal = 'gold' WHERE code IN ('22', '18', '14', '09');
+
+INSERT INTO public.metal_purities (label, code, display_order, metal) VALUES
+  ('22Kt Gold', '22', 1, 'gold')
+ON CONFLICT (code) DO UPDATE SET
+  label         = EXCLUDED.label,
+  display_order = EXCLUDED.display_order,
+  metal         = EXCLUDED.metal;
 
 INSERT INTO public.metal_purities (label, code, display_order, metal) VALUES
   ('925 Silver', '925', 10, 'silver'),

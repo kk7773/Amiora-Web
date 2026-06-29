@@ -81,7 +81,7 @@ export function BulkProductUploadClient() {
           <div>
             <h3 className="font-display text-lg text-deep-teal">Upload spreadsheet</h3>
             <p className="text-sm text-ink-muted mt-1 max-w-2xl">
-              <strong>Required:</strong> Product Name, Design Number, and net weight (14K Net / 18K Net columns, or metal_weight_g).
+              <strong>Required:</strong> Product Name, Design Number, and net weight (14K Net / 18K Net / 22K Net columns, or metal_weight_g).
               Known optional columns are used when filled; blanks get safe defaults.
               Jo columns system mein defined nahi hain (S.No., Image, C.S. Shape, etc.), wo automatically ignore ho jayenge.
               Embedded Excel photos/images bhi import mein use nahi hote — sirf text/number data read hota hai.

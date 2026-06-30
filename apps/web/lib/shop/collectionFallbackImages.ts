@@ -1,8 +1,11 @@
 const COLLECTION_FALLBACK_IMAGES: Record<string, string> = {
-  bridal: 'https://images.unsplash.com/photo-1611652022419-a9419f74343d?auto=format&fit=crop&w=1200&q=80',
-  everyday: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=1200&q=80',
-  'office-wear': 'https://images.unsplash.com/photo-1627293509201-cd0a9fce9fca?auto=format&fit=crop&w=1200&q=80',
-  'gift-sets': 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=1200&q=80',
+  bridal: 'https://res.cloudinary.com/dqayol6fn/image/upload/v1782816050/website_aecwsj.png',
+  everyday: 'https://res.cloudinary.com/dqayol6fn/image/upload/v1782816150/Website_d2no5r.png',
+  gift: 'https://res.cloudinary.com/dqayol6fn/image/upload/v1782816358/Website_ee2ep2.png',
+  'gift-sets': 'https://res.cloudinary.com/dqayol6fn/image/upload/v1782816358/Website_ee2ep2.png',
+  'office-wear': 'https://res.cloudinary.com/dqayol6fn/image/upload/v1782816613/ChatGPT_Image_Jun_29_2026_06_39_56_PM_pgeint.png',
+  all: 'https://res.cloudinary.com/dqayol6fn/image/upload/v1782816698/ChatGPT_Image_Jun_29_2026_06_35_54_PM_gbszzb.png',
+  'all-collections': 'https://res.cloudinary.com/dqayol6fn/image/upload/v1782816698/ChatGPT_Image_Jun_29_2026_06_35_54_PM_gbszzb.png',
 }
 
 export function normCollectionKey(input: string) {
@@ -20,14 +23,21 @@ export function resolveCollectionImageUrl(
   slug: string,
   name?: string,
 ): string | null {
-  if (bannerOrThumbUrl?.trim()) return bannerOrThumbUrl.trim()
-
   const slugKey = normCollectionKey(slug)
   const nameKey = name ? normCollectionKey(name) : ''
+  const curatedImage =
+    COLLECTION_FALLBACK_IMAGES[slugKey] ??
+    COLLECTION_FALLBACK_IMAGES[nameKey] ??
+    (nameKey.includes('office') ? COLLECTION_FALLBACK_IMAGES['office-wear'] : null) ??
+    (nameKey.includes('gift') ? COLLECTION_FALLBACK_IMAGES['gift-sets'] : null)
+
+  if (curatedImage) return curatedImage
+  if (bannerOrThumbUrl?.trim()) return bannerOrThumbUrl.trim()
 
   return (
     COLLECTION_FALLBACK_IMAGES[slugKey] ??
     COLLECTION_FALLBACK_IMAGES[nameKey] ??
-    (nameKey.includes('office') ? COLLECTION_FALLBACK_IMAGES['office-wear'] : null)
+    (nameKey.includes('office') ? COLLECTION_FALLBACK_IMAGES['office-wear'] : null) ??
+    (nameKey.includes('gift') ? COLLECTION_FALLBACK_IMAGES['gift-sets'] : null)
   )
 }

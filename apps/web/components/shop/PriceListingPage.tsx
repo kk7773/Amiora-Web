@@ -112,7 +112,6 @@ export async function PriceListingPage({ listing }: PriceListingPageProps) {
                 category: [...new Set([...categoryFilter, ...catArr])],
                 metal,
                 purity,
-                diamond,
                 price: listing.rangeId,
               }}
             />

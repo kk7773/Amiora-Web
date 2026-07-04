@@ -52,6 +52,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
   const metal    = sp['metal']?.split(',').filter(Boolean) ?? []
   const purity   = sp['purity']?.split(',').filter(Boolean) ?? []
   const diamond  = sp['diamond'] === 'true'
+  const diamondShape = sp['diamond_shape']?.split(',').filter(Boolean) ?? []
   const catArr   = sp['category']?.split(',').filter(Boolean) ?? []
 
   const headersList = await headers()
@@ -70,6 +71,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
     metal,
     purity,
     diamond,
+    diamondShape,
     category: catArr,
     collection: slug,
   })
@@ -151,7 +153,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
                 pageSize={SHOP_PAGE_SIZE}
               initialPage={page}
               initialSort={sort}
-              filters={{ collection: slug, category: catArr, metal, purity, diamond }}
+              filters={{ collection: slug, category: catArr, metal, purity, diamondShape }}
             />
             </Suspense>
           )}

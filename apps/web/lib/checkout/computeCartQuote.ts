@@ -7,7 +7,7 @@ import {
 import { evaluateAllCoupons, type EvaluatedCouponResult } from '@/lib/coupons/evaluateAllCoupons'
 import { priceCartLines, type PriceCartLinesResult, type PricedCartLine } from '@/lib/checkout/priceCartLines'
 
-export const SHIPPING_FEE = 1
+export const SHIPPING_FEE = 200
 export const FREE_SHIPPING_THRESHOLD = 5000
 
 export type CartQuoteCoupon = {

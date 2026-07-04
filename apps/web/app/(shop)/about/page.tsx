@@ -44,8 +44,8 @@ export default function AboutPage() {
         <div className="absolute inset-0 section-x flex items-center">
           <div className="max-w-xl space-y-4">
             <p className="text-2xs uppercase tracking-widest2 text-light-teal">Our Story</p>
-            <h1 className="font-display text-display-2xl text-white">Jewellery as an Art Form</h1>
-            <p className="text-base text-cream/80 leading-relaxed">Founded in 1998 in Jaipur, AMIORA has grown from a single workshop into India&apos;s most trusted fine jewellery brand — without ever compromising on craft.</p>
+            <h1 className="font-display text-display-2xl text-white">Where Innovation Meets Timeless Elegance</h1>
+            <p className="text-base text-cream/80 leading-relaxed">AMIORA was born from a passion for redefining fine jewellery for the modern world. Based in Kolkata, we bring together master craftsmanship, precious gold, and brilliant lab-grown diamonds to create jewellery that is elegant, meaningful, and responsibly made.</p>
           </div>
         </div>
       </div>
@@ -71,15 +71,15 @@ export default function AboutPage() {
         <div className="grid gap-12 lg:grid-cols-2 items-center">
           <div className="space-y-6">
             <p className="text-2xs uppercase tracking-widest2 text-teal">Our Heritage</p>
-            <h2 className="font-display text-display-xl text-ink">Three Generations of Craft</h2>
+            <h2 className="font-display text-display-xl text-ink">Crafted for the Modern Generation</h2>
             <p className="text-base text-ink-muted leading-relaxed">
-              AMIORA was born from a simple belief: that beautiful jewellery should be honest.
-              From our grandfather&apos;s workshop in Johari Bazaar to our modern studios in Delhi, Mumbai
-              and Jaipur, the ethos remains the same — let the metal and the stone speak.
+              AMIORA was founded on a simple belief: luxury should be timeless, transparent, and accessible. We combine the artistry of fine jewellery with the innovation of certified lab-grown diamonds, creating pieces that celebrate life's most meaningful moments.
             </p>
             <p className="text-base text-ink-muted leading-relaxed">
-              Today we serve over 50,000 customers across India, with live gold and diamond pricing
-              that ensures every purchase is fair and transparent.
+              Every AMIORA creation is thoughtfully designed by skilled artisans and meticulously crafted in precious gold, blending contemporary elegance with enduring craftsmanship. Our commitment goes beyond beauty, we believe in ethical sourcing, honest pricing, and uncompromising quality, ensuring every piece reflects exceptional value.
+            </p>
+            <p className="text-base text-ink-muted leading-relaxed">
+              Today, AMIORA is redefining fine jewellery for a new generation, offering luxurious designs that honour tradition while embracing the future of sustainable brilliance. 
             </p>
           </div>
           <div className="relative aspect-square rounded-2xl overflow-hidden">

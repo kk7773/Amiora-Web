@@ -119,7 +119,7 @@ Height: 40px, --text-sm
 ```
 - Single row banner: "Visit Us In Store"
 - Store count badge (e.g., "3 Stores")
-- City chips (Delhi · Mumbai · Jaipur)
+- City chips (Kolkata)
 - CTA: "Find Your Nearest Store"
 - Background: --color-cream
 ```

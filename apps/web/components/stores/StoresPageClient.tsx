@@ -54,6 +54,11 @@ function openFallback(store: Store) {
   window.open(url, '_blank', 'noopener,noreferrer')
 }
 
+function buildEmbedSrc(store: Store) {
+  if (store.lat && store.lng) return `https://www.google.com/maps?q=${store.lat},${store.lng}&z=17&output=embed`
+  return `https://www.google.com/maps?q=${buildDestination(store)}&z=17&output=embed`
+}
+
 export function StoresPageClient({ stores }: { stores: Store[] }) {
   const searchParams               = useSearchParams()
   const [search, setSearch]        = useState(searchParams.get('city') ?? '')
@@ -96,6 +101,8 @@ export function StoresPageClient({ stores }: { stores: Store[] }) {
     [stores, search]
   )
 
+  const featuredStore = filtered[0] ?? stores[0] ?? null
+
   return (
     <div>
       {/* Hero */}
@@ -106,17 +113,32 @@ export function StoresPageClient({ stores }: { stores: Store[] }) {
           Experience AMIORA jewellery in person. Try before you buy, meet our experts, book a private appointment.
         </p>
 
-        {/* Search */}
-        <div className="relative max-w-sm mx-auto mt-4">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-faint" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by city or pincode"
-            className="w-full pl-9 pr-4 py-3 text-sm bg-bg border border-divider rounded-xl text-ink placeholder-ink-faint focus:outline-none focus:ring-1 focus:ring-teal transition-colors"
-          />
-        </div>
+        {stores.length > 1 && (
+          <div className="relative max-w-sm mx-auto mt-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-faint" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by city or pincode"
+              className="w-full pl-9 pr-4 py-3 text-sm bg-bg border border-divider rounded-xl text-ink placeholder-ink-faint focus:outline-none focus:ring-1 focus:ring-teal transition-colors"
+            />
+          </div>
+        )}
       </div>
+
+      {featuredStore && (
+        <div className="section-x pt-10">
+          <div className="overflow-hidden rounded-3xl border border-divider bg-surface">
+            <iframe
+              title={`${featuredStore.name} map`}
+              src={buildEmbedSrc(featuredStore)}
+              className="h-[320px] w-full border-0"
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Store cards */}
       <motion.div

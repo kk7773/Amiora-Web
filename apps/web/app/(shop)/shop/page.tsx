@@ -24,6 +24,7 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
   const metal = params['metal']?.split(',').filter(Boolean) ?? []
   const purity = params['purity']?.split(',').filter(Boolean) ?? []
   const diamond = params['diamond'] === 'true'
+  const diamondShape = params['diamond_shape']?.split(',').filter(Boolean) ?? []
   const catArr = params['category']?.split(',').filter(Boolean) ?? []
 
   const supabase = createServerClient()
@@ -33,6 +34,7 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
     metal,
     purity,
     diamond,
+    diamondShape,
     category: catArr,
   })
 
@@ -77,7 +79,7 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
               filters={{
                 metal,
                 purity,
-                diamond,
+                diamondShape,
                 category: catArr,
               }}
             />

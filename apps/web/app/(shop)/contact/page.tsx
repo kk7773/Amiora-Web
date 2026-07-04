@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z }          from 'zod'
 import { toast }      from 'sonner'
 import { Loader2, Phone, Mail, MapPin, CheckCircle } from 'lucide-react'
+import { AMIORA_STORE } from '@/lib/storefrontStore'
 
 const schema = z.object({
   name:    z.string().min(2, 'Name required'),
@@ -14,12 +15,6 @@ const schema = z.object({
   message: z.string().min(10, 'Message required'),
 })
 type FormData = z.infer<typeof schema>
-
-const STORES = [
-  { city: 'Delhi',  address: '23 Connaught Place, New Delhi 110001',     phone: '+91 98765-43210' },
-  { city: 'Mumbai', address: '14 Hill Road, Bandra West, Mumbai 400050', phone: '+91 98765-43211' },
-  { city: 'Jaipur', address: '45 Johari Bazaar, Jaipur 302003',          phone: '+91 98765-43212' },
-]
 
 export default function ContactPage() {
   const [loading,   setLoading]   = useState(false)
@@ -87,28 +82,40 @@ export default function ContactPage() {
         {/* Info */}
         <div className="space-y-8">
           <div>
-            <h2 className="font-display text-xl text-ink mb-4">Our Stores</h2>
-            <div className="space-y-4">
-              {STORES.map((s) => (
-                <div key={s.city} className="flex gap-3">
-                  <div className="p-2 bg-teal/10 rounded-lg shrink-0 h-fit"><MapPin className="h-4 w-4 text-teal" /></div>
-                  <div>
-                    <p className="font-medium text-ink">{s.city}</p>
-                    <p className="text-sm text-ink-muted">{s.address}</p>
-                    <p className="text-sm text-teal mt-0.5">{s.phone}</p>
-                  </div>
-                </div>
-              ))}
+            <h2 className="font-display text-xl text-ink mb-4">Our Store</h2>
+            <div className="flex gap-3">
+              <div className="p-2 bg-teal/10 rounded-lg shrink-0 h-fit"><MapPin className="h-4 w-4 text-teal" /></div>
+              <div>
+                <p className="font-medium text-ink">{AMIORA_STORE.name}</p>
+                <p className="text-sm text-ink-muted">{AMIORA_STORE.fullAddress}</p>
+                <a
+                  href={AMIORA_STORE.mapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-teal mt-0.5 inline-block hover:text-deep-teal transition-colors"
+                >
+                  View on Google Maps
+                </a>
+              </div>
+            </div>
+            <div className="mt-5 overflow-hidden rounded-2xl border border-divider">
+              <iframe
+                title="Amiora Diamonds location"
+                src={AMIORA_STORE.embedUrl}
+                className="h-72 w-full border-0"
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
             </div>
           </div>
           <div className="space-y-3">
             <div className="flex items-center gap-3 text-sm text-ink-muted">
               <Phone className="h-4 w-4 text-teal" />
-              <a href="tel:+919876543210" className="hover:text-teal transition-colors">+91 98765-43210</a>
+              <a href={`tel:${AMIORA_STORE.phone.replace(/\s+/g, '')}`} className="hover:text-teal transition-colors">{AMIORA_STORE.phone}</a>
             </div>
             <div className="flex items-center gap-3 text-sm text-ink-muted">
               <Mail className="h-4 w-4 text-teal" />
-              <a href="mailto:hello@amioradiamonds.com" className="hover:text-teal transition-colors">hello@amioradiamonds.com</a>
+              <a href={`mailto:${AMIORA_STORE.email}`} className="hover:text-teal transition-colors">{AMIORA_STORE.email}</a>
             </div>
           </div>
         </div>

@@ -8,7 +8,16 @@ import { PRICE_RANGE_BUCKETS, type PriceRangeId } from '@/lib/shop/priceRanges'
 const METALS = ['gold'] as const
 const PURITIES = ['22k', '18k', '14k', '9k'] as const
 const CATEGORIES = ['rings', 'necklaces', 'earrings', 'bangles', 'pendants', 'chains', 'sets'] as const
-const CUTS = ['Round Brilliant', 'Princess', 'Emerald', 'Oval', 'Cushion']
+const DIAMOND_SHAPES = [
+  { value: 'round', label: 'Round' },
+  { value: 'oval', label: 'Oval' },
+  { value: 'princess', label: 'Princess' },
+  { value: 'tear', label: 'Tear' },
+  { value: 'emerald', label: 'Emerald' },
+  { value: 'pear', label: 'Pear' },
+  { value: 'heart', label: 'Heart' },
+  { value: 'marquis', label: 'Marquis' },
+] as const
 
 interface FilterSidebarProps {
   className?: string
@@ -25,7 +34,7 @@ export function FilterSidebar({ className = '', onClose }: FilterSidebarProps) {
   const selectedMetals = readListParam(searchParams, 'metal')
   const selectedPurities = readListParam(searchParams, 'purity')
   const selectedCategories = readListParam(searchParams, 'category')
-  const diamond = searchParams.get('diamond') === 'true'
+  const selectedDiamondShapes = readListParam(searchParams, 'diamond_shape')
 
   const navigateToPrice = (rangeId: PriceRangeId) => {
     router.push(buildPriceListingHref(priceScope, rangeId), { scroll: false })
@@ -37,7 +46,7 @@ export function FilterSidebar({ className = '', onClose }: FilterSidebarProps) {
     onClose?.()
   }
 
-  const updateQueryList = (key: 'metal' | 'purity' | 'category', value: string) => {
+  const updateQueryList = (key: 'metal' | 'purity' | 'category' | 'diamond_shape', value: string) => {
     const next = new URLSearchParams(searchParams.toString())
     const normalizedValue = value.trim().toLowerCase()
     const currentValues = readListParam(searchParams, key)
@@ -56,20 +65,11 @@ export function FilterSidebar({ className = '', onClose }: FilterSidebarProps) {
     onClose?.()
   }
 
-  const toggleDiamond = () => {
-    const next = new URLSearchParams(searchParams.toString())
-    if (next.get('diamond') === 'true') next.delete('diamond')
-    else next.set('diamond', 'true')
-    next.delete('page')
-    router.push(`${pathname}${next.toString() ? `?${next.toString()}` : ''}`, { scroll: false })
-    onClose?.()
-  }
-
   const hasFilters =
     selectedMetals.length > 0 ||
     selectedPurities.length > 0 ||
     selectedCategories.length > 0 ||
-    diamond ||
+    selectedDiamondShapes.length > 0 ||
     !!priceListing
 
   return (
@@ -130,23 +130,14 @@ export function FilterSidebar({ className = '', onClose }: FilterSidebarProps) {
       </FilterGroup>
 
       <FilterGroup label="Gemstone">
-        <CheckOption
-          label="With Diamond"
-          checked={diamond}
-          onChange={toggleDiamond}
-        />
-        {diamond && (
-          <div className="ml-4 mt-2 space-y-2">
-            {CUTS.map((cut) => (
-              <CheckOption
-                key={cut}
-                label={cut}
-                checked={false}
-                onChange={() => undefined}
-              />
-            ))}
-          </div>
-        )}
+        {DIAMOND_SHAPES.map((shape) => (
+          <CheckOption
+            key={shape.value}
+            label={shape.label}
+            checked={selectedDiamondShapes.includes(shape.value)}
+            onChange={() => updateQueryList('diamond_shape', shape.value)}
+          />
+        ))}
       </FilterGroup>
 
       <FilterGroup label="Category">
@@ -163,7 +154,7 @@ export function FilterSidebar({ className = '', onClose }: FilterSidebarProps) {
   )
 }
 
-function readListParam(searchParams: ReturnType<typeof useSearchParams>, key: 'metal' | 'purity' | 'category'): string[] {
+function readListParam(searchParams: ReturnType<typeof useSearchParams>, key: 'metal' | 'purity' | 'category' | 'diamond_shape'): string[] {
   const raw = searchParams.get(key)
   if (!raw) return []
   return [...new Set(raw.split(',').map((entry) => entry.trim().toLowerCase()).filter(Boolean))]

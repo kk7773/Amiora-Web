@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
     const metalRaw = searchParams.get('metal')
     const purityRaw = searchParams.get('purity')
     const categoryRaw = searchParams.get('category')
+    const diamondShapeRaw = searchParams.get('diamond_shape')
 
     const result = await fetchShopListing(supabase, {
       page: Number.parseInt(searchParams.get('page') ?? '1', 10),
@@ -17,6 +18,7 @@ export async function GET(req: NextRequest) {
       metal: metalRaw ? metalRaw.split(',').filter(Boolean) : [],
       purity: purityRaw ? purityRaw.split(',').filter(Boolean) : [],
       diamond: searchParams.get('diamond') === 'true',
+      diamondShape: diamondShapeRaw ? diamondShapeRaw.split(',').filter(Boolean) : [],
       category: categoryRaw ? categoryRaw.split(',').filter(Boolean) : [],
       collection: searchParams.get('collection') ?? undefined,
       price: searchParams.get('price'),

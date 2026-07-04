@@ -3,6 +3,7 @@ import { StoresPageClient } from '@/components/stores/StoresPageClient'
 import { createServerClient } from '@amiora/database'
 import { JsonLd } from '@/components/seo/JsonLd'
 import { buildJewelryStoreJsonLd, buildWebPageJsonLd } from '@/lib/seo/jsonLd'
+import { pickVisibleStores } from '@/lib/storefrontStore'
 
 export const metadata: Metadata = {
   title: 'Our Stores',
@@ -19,6 +20,8 @@ export default async function StoresPage() {
     .eq('is_active', true)
     .order('name')
 
+  const visibleStores = pickVisibleStores(stores ?? [])
+
   return (
     <>
       <JsonLd
@@ -28,10 +31,10 @@ export default async function StoresPage() {
             description: 'Find an Amiora Diamonds store near you.',
             path: '/stores',
           }),
-          buildJewelryStoreJsonLd(stores ?? []),
+          buildJewelryStoreJsonLd(visibleStores),
         ]}
       />
-      <StoresPageClient stores={stores ?? []} />
+      <StoresPageClient stores={visibleStores} />
     </>
   )
 }

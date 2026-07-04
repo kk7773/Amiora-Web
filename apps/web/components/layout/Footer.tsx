@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { AMIORA_STORE } from '@/lib/storefrontStore'
 
 const SOCIAL = [
   {
@@ -120,19 +121,20 @@ export function Footer() {
         <div className="sm:col-span-2 lg:col-span-1 text-center lg:text-left">
           <h4 className="mb-4 text-2xs uppercase tracking-widest2 text-gold">Contact</h4>
           <address className="not-italic space-y-3 text-sm text-cream/60">
-            <p>+91 98765-43210</p>
-            <p>hello@amioradiamonds.com</p>
+            <p>{AMIORA_STORE.phone}</p>
+            <p>{AMIORA_STORE.email}</p>
             <p className="leading-relaxed">
-              123 Jewellery District,<br />
-              New Delhi — 110001, India
+              {AMIORA_STORE.fullAddress}
             </p>
           </address>
-          <Link
-            href="/stores"
+          <a
+            href={AMIORA_STORE.mapsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
             className="mt-4 inline-block text-xs uppercase tracking-widest text-gold hover:text-gold-light transition-colors"
           >
-            Find Our Stores →
-          </Link>
+            Open In Google Maps →
+          </a>
         </div>
 
       </div>

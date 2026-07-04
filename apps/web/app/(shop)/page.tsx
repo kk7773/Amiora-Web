@@ -38,6 +38,7 @@ import { getLatestPrices } from '@/lib/pricing/engine'
 import { resolveProductCardImages } from '@/lib/shop/resolveProductCardImages'
 import { fetchActiveProductCards } from '@/lib/shop/fetchProductCards'
 import { JsonLd } from '@/components/seo/JsonLd'
+import { pickVisibleStores } from '@/lib/storefrontStore'
 import {
   buildCollectionListJsonLd,
   buildFaqPageJsonLd,
@@ -78,7 +79,11 @@ export default async function HomePage() {
     }),
     supabase.from('testimonials').select('id,name,location,quote,rating').eq('is_featured', true).order('sort_order').limit(8),
     supabase.from('blogs').select('id,title,slug,excerpt,cover_url,tags,published_at').eq('is_published', true).order('published_at', { ascending: false }).limit(3),
-    supabase.from('stores').select('id, city, image_url').eq('is_active', true).order('city'),
+    supabase
+      .from('stores')
+      .select('id, name, address, city, state, pincode, maps_url, lat, lng, image_url')
+      .eq('is_active', true)
+      .order('city'),
     supabase.from('site_faqs').select('id, question, answer').eq('is_active', true).order('sort_order').order('created_at'),
     getLatestPrices(),
   ])
@@ -163,8 +168,19 @@ export default async function HomePage() {
   )
 
   // Group stores by city for the city cards section
-  type StoreRow = { id: string; city: string; image_url: string | null }
-  const storeRows   = (stores ?? []) as StoreRow[]
+  type StoreRow = {
+    id: string
+    name?: string | null
+    address?: string | null
+    city: string
+    state?: string | null
+    pincode?: string | null
+    maps_url?: string | null
+    lat?: number | null
+    lng?: number | null
+    image_url: string | null
+  }
+  const storeRows   = pickVisibleStores((stores ?? []) as StoreRow[])
   const storeCount  = storeRows.length
 
   const cityMap = new Map<string, { count: number; image_url: string | null }>()
@@ -255,7 +271,7 @@ export default async function HomePage() {
       <BlogPreview posts={blogs ?? []} />
       <FaqSection faqs={displayFaqs} />
       <StoreCitiesSection cities={citiesData} />
-      <StoreLocatorTeaser storeCount={storeCount} />
+      <StoreLocatorTeaser storeCount={storeCount} cities={citiesData.map((city) => city.city)} />
     </>
   )
 }

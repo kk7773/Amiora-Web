@@ -37,7 +37,7 @@ export function CartPageClient() {
   }, [items.length])
 
   const subtotal  = total()
-  const shipping  = subtotal >= 5000 ? 0 : 1
+  const shipping  = subtotal >= 5000 ? 0 : 200
   const grandTotal = subtotal + shipping
 
   if (!cartHydrated) {

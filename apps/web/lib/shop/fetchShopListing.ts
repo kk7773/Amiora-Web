@@ -35,6 +35,7 @@ export type ShopListingFilters = {
   metal?: string[]
   purity?: string[]
   diamond?: boolean
+  diamondShape?: string[]
   category?: string[]
   collection?: string
   price?: string | null
@@ -44,6 +45,31 @@ function normalizeList(values: string[] | string | undefined): string[] {
   if (!values) return []
   const list = Array.isArray(values) ? values : values.split(',')
   return [...new Set(list.map((value) => value.trim().toLowerCase()).filter(Boolean))]
+}
+
+function normalizeDiamondShape(value: string | null | undefined) {
+  return (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function matchesDiamondShapeFilter(value: string | null | undefined, selectedShapes: string[]) {
+  const normalized = normalizeDiamondShape(value)
+  if (!normalized) return false
+
+  const aliases: Record<string, string[]> = {
+    round: ['round', 'round brilliant'],
+    oval: ['oval'],
+    princess: ['princess'],
+    tear: ['tear', 'teardrop', 'tear drop'],
+    emerald: ['emerald', 'emarald'],
+    pear: ['pear'],
+    heart: ['heart'],
+    marquis: ['marquis', 'marquise'],
+  }
+
+  return selectedShapes.some((shape) => {
+    const variants = aliases[shape] ?? [shape]
+    return variants.some((variant) => normalized === variant || normalized.includes(variant))
+  })
 }
 
 type RawProductRow = {
@@ -94,6 +120,7 @@ async function fetchShopListingImpl(
   const metal = normalizeList(filters.metal)
   const purity = filters.purity ?? []
   const diamond = filters.diamond ?? false
+  const diamondShape = normalizeList(filters.diamondShape)
   const catArr = filters.category ?? []
   const collectionSlug = filters.collection
   const priceBucket = parsePriceRangeParam(filters.price ?? null)
@@ -173,6 +200,22 @@ async function fetchShopListingImpl(
       .eq('status', 'active')
       .or('diamond_count.gt.0,total_diamond_wt.gt.0')
     idSets.push((data ?? []).map((r: { id: string }) => r.id))
+  }
+
+  if (diamondShape.length > 0) {
+    const { data } = await supabase
+      .from('products')
+      .select('id, diamond_shape')
+      .eq('status', 'active')
+      .not('diamond_shape', 'is', null)
+
+    const matchedIds = (data ?? [])
+      .filter((row: { id: string; diamond_shape: string | null }) =>
+        matchesDiamondShapeFilter(row.diamond_shape, diamondShape),
+      )
+      .map((row: { id: string }) => row.id)
+
+    idSets.push(matchedIds)
   }
 
   const validIds: string[] | null = idSets.length > 0

@@ -21,6 +21,22 @@ type MetalPurity = {
   metal?: 'gold' | 'silver' | 'platinum' | string
 }
 
+const DIAMOND_SHAPE_OPTIONS = [
+  'Round',
+  'Oval',
+  'Princess',
+  'Tear',
+  'Emerald',
+  'Pear',
+  'Heart',
+  'Marquis',
+] as const
+
+function normalizeDiamondShape(value: string) {
+  const normalized = value.trim().toLowerCase()
+  return DIAMOND_SHAPE_OPTIONS.find((shape) => shape.toLowerCase() === normalized) ?? value.trim()
+}
+
 function inferProductMetal(metalPuritiesList: MetalPurity[], initial?: InitialData): 'gold' | 'silver' {
   const pid = initial?.matrix?.[0]?.purity_id
   if (!pid) return 'gold'
@@ -301,7 +317,7 @@ function stoneLinesFromDb(raw: unknown): StoneLineUi[] {
   return raw.map((item, i) => {
     const o = item as Record<string, unknown>
     const name = typeof o.name === 'string' ? o.name : ''
-    const shape = typeof o.shape === 'string' ? o.shape : ''
+    const shape = typeof o.shape === 'string' ? normalizeDiamondShape(o.shape) : ''
     const color = typeof o.color === 'string' ? o.color : ''
     const sizes = stoneSizeFromDb(
       Array.isArray(o.sizes)
@@ -1166,12 +1182,18 @@ export function ProductCatalogCreateForm({
                     </label>
                     <label className="block space-y-1">
                       <span className="text-xs text-ink-muted">Shape</span>
-                      <input
+                      <select
                         value={row.shape}
                         onChange={(e) => update({ shape: e.target.value })}
                         className={stoneInp}
-                        placeholder="e.g. Oval"
-                      />
+                      >
+                        <option value="">Select shape</option>
+                        {DIAMOND_SHAPE_OPTIONS.map((shape) => (
+                          <option key={shape} value={shape}>
+                            {shape}
+                          </option>
+                        ))}
+                      </select>
                     </label>
                     <label className="block space-y-1">
                       <span className="text-xs text-ink-muted">Color</span>

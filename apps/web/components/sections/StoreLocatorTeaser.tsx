@@ -4,10 +4,9 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { MapPin } from 'lucide-react'
 import { fadeUp } from '@/lib/animations'
+import { AMIORA_STORE } from '@/lib/storefrontStore'
 
-const CITIES = ['Delhi', 'Mumbai', 'Jaipur']
-
-export function StoreLocatorTeaser({ storeCount = 3 }: { storeCount?: number }) {
+export function StoreLocatorTeaser({ storeCount = 1, cities = [AMIORA_STORE.city] }: { storeCount?: number; cities?: string[] }) {
   return (
     <motion.section
       className="bg-cream"
@@ -31,7 +30,7 @@ export function StoreLocatorTeaser({ storeCount = 3 }: { storeCount?: number }) 
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {CITIES.map((city) => (
+          {cities.map((city) => (
             <span
               key={city}
               className="px-4 py-1.5 rounded-full border border-sand/40 text-sm text-sand hover:border-sand hover:bg-sand/10 transition-colors cursor-default"

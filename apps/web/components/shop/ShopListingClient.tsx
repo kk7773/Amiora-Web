@@ -17,7 +17,7 @@ const SORT_OPTIONS = [
 export type ShopListingFilters = {
   metal?: string[]
   purity?: string[]
-  diamond?: boolean
+  diamondShape?: string[]
   category?: string[]
   collection?: string
   price?: string
@@ -41,7 +41,7 @@ function buildListingQuery(
   params.set('page', String(page))
   params.set('sort', sort)
   if (filters.metal?.length) params.set('metal', filters.metal.join(','))
-  if (filters.diamond) params.set('diamond', 'true')
+  if (filters.diamondShape?.length) params.set('diamond_shape', filters.diamondShape.join(','))
   if (filters.purity?.length) params.set('purity', filters.purity.join(','))
   if (filters.category?.length) params.set('category', filters.category.join(','))
   if (filters.collection) params.set('collection', filters.collection)

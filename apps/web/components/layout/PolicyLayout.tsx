@@ -44,12 +44,12 @@ export function PolicyLayout({ title, lastUpdated, intro, sections }: PolicyLayo
 
       <div className="bg-surface rounded-2xl p-6 text-sm text-ink-muted">
         Questions? Email us at{' '}
-        <a href="mailto:hello@amioradiamonds.com" className="text-teal hover:text-deep-teal transition-colors">
-          hello@amioradiamonds.com
+        <a href="mailto:info@amioradiamonds.com" className="text-teal hover:text-deep-teal transition-colors">
+          info@amioradiamonds.com
         </a>
         {' '}or call{' '}
-        <a href="tel:+919876543210" className="text-teal hover:text-deep-teal transition-colors">
-          +91 98765-43210
+        <a href="tel:+919088989888" className="text-teal hover:text-deep-teal transition-colors">
+          +91 90889 89888
         </a>
       </div>
     </div>

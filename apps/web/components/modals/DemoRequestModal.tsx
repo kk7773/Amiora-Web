@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z }          from 'zod'
 import { toast }      from 'sonner'
 import { Loader2, X, CalendarDays } from 'lucide-react'
+import { AMIORA_STORE } from '@/lib/storefrontStore'
 
 const schema = z.object({
   type:             z.enum(['store', 'home']),
@@ -19,9 +20,7 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>
 
 const STORES = [
-  { id: 's1', name: 'AMIORA — Connaught Place, Delhi' },
-  { id: 's2', name: 'AMIORA — Bandra West, Mumbai' },
-  { id: 's3', name: 'AMIORA — Johari Bazaar, Jaipur' },
+  { id: AMIORA_STORE.id, name: `${AMIORA_STORE.name} — ${AMIORA_STORE.city}` },
 ]
 
 interface DemoRequestModalProps {

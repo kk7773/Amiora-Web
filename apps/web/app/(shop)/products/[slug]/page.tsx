@@ -248,7 +248,7 @@ async function fetchPdpProductImpl(
     .from('products')
     .select(PDP_PRODUCT_LEGACY_SELECT)
     .eq('slug', slug)
-    .eq('is_active', true)
+    .eq('status', 'active')
     .single()
 
   if (leg.error || !leg.data) {

@@ -58,6 +58,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   const metal    = sp['metal']?.split(',').filter(Boolean) ?? []
   const purity   = sp['purity']?.split(',').filter(Boolean) ?? []
   const diamond  = sp['diamond'] === 'true'
+  const diamondShape = sp['diamond_shape']?.split(',').filter(Boolean) ?? []
   const catArr   = sp['category']?.split(',').filter(Boolean) ?? []
 
   const headersList = await headers()
@@ -83,6 +84,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
     metal,
     purity,
     diamond,
+    diamondShape,
     category: [...new Set([slug, ...catArr])],
   })
 
@@ -160,7 +162,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
                 pageSize={SHOP_PAGE_SIZE}
                 initialPage={page}
                 initialSort={sort}
-                filters={{ category: [...new Set([slug, ...catArr])], metal, purity, diamond }}
+                filters={{ category: [...new Set([slug, ...catArr])], metal, purity, diamondShape }}
               />
             </Suspense>
           </div>

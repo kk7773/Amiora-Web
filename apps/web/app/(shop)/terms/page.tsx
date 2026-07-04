@@ -20,7 +20,7 @@ export default function TermsPage() {
         { heading: 'Limitation of Liability', body: 'AMIORA Diamonds is not liable for indirect or consequential losses arising from the use of our products or services beyond the purchase value of the item in question.' },
         { heading: 'Privacy', body: 'We collect and process personal data as described in our Privacy Policy. We never sell your data to third parties.' },
         { heading: 'Governing Law', body: 'These terms are governed by the laws of India. All disputes shall be subject to the exclusive jurisdiction of courts in New Delhi.' },
-        { heading: 'Contact', body: 'For any questions, contact legal@amioradiamonds.com or call +91 98765-43210.' },
+        { heading: 'Contact', body: 'For any questions, contact support@amioradiamonds.com or call +91 90889 89888.' },
       ]}
     />
     </>

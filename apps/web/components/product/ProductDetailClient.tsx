@@ -58,7 +58,7 @@ interface ProductDetailClientProps {
 }
 
 const SERVICE_BADGES = [
-  { icon: RefreshCw, label: '100-Day Easy Returns' },
+  { icon: RefreshCw, label: '15-Day Easy Returns' },
   { icon: Truck,     label: 'Free Shipping ₹5K+' },
   { icon: Award,     label: 'BIS Hallmarked' },
   { icon: Gift,      label: 'Free Gift Wrap' },
@@ -277,7 +277,7 @@ export function ProductDetailClient({
     toast.success('Added to cart!', { description: product.name })
   }
 
-  const TABS = ['Description', 'Diamond details', 'Metal & Purity', 'Price Breakup', 'Care Guide']
+  const TABS = ['Metal & Purity', 'Price Breakup', 'Care Guide']
   const liveBreakupRows = useMemo(() => {
     if (!activeBreakdown) return null
     return breakdownToDisplayRows(activeBreakdown, product.making_charge_pct)
@@ -420,30 +420,6 @@ export function ProductDetailClient({
             </div>
             <div className="py-4 text-sm text-ink-muted leading-relaxed space-y-3">
               {activeTab === 0 && (
-                <p>{product.description ?? product.short_desc ?? 'Details will appear here.'}</p>
-              )}
-              {activeTab === 1 && (
-                <table className="w-full text-sm border-collapse">
-                  <tbody>
-                    {[
-                      ['Shape', product.diamond_shape],
-                      ['Stone count', product.diamond_count != null ? String(product.diamond_count) : null],
-                      ['Total weight (ct)', product.total_diamond_wt != null ? String(product.total_diamond_wt) : null],
-                      ['Diamond colour', product.diamond_color],
-                      ['Clarity', product.diamond_clarity],
-                      ['Size / length', product.size_range],
-                    ]
-                      .filter(([, v]) => v)
-                      .map(([k, v]) => (
-                        <tr key={String(k)} className="border-b border-divider/60">
-                          <td className="py-2 pr-4 text-ink-faint">{k}</td>
-                          <td className="py-2 text-ink">{v}</td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              )}
-              {activeTab === 2 && (
                 <MetalPurityTable
                   colorId={sel.colorId}
                   selectedPurityId={activeVariant?.purity_id ?? null}
@@ -452,7 +428,7 @@ export function ProductDetailClient({
                   computedPrices={computedPrices}
                 />
               )}
-              {activeTab === 3 && (
+              {activeTab === 1 && (
                 liveBreakupRows ? (
                   <div className="space-y-3">
                     <h4 className="font-display text-lg text-ink">Price Breakup</h4>
@@ -495,7 +471,7 @@ export function ProductDetailClient({
                   <p>Set metal weight per purity in admin to see price breakup.</p>
                 )
               )}
-              {activeTab === 4 && (
+              {activeTab === 2 && (
                 <p>Store in a dry place. Clean with a soft cloth. Avoid contact with chemicals.</p>
               )}
             </div>

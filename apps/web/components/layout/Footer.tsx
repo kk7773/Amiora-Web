@@ -142,7 +142,7 @@ export function Footer() {
       {/* Bottom bar */}
       <div className="border-t border-cream/10 section-x py-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-cream/40">
         <p>© {new Date().getFullYear()} Amiora Diamonds. All rights reserved.</p>
-        <p>Designed with ♥ in India · BIS Hallmarked · 100-Day Returns</p>
+        <p>Designed with ♥ in India · BIS Hallmarked</p>
       </div>
     </footer>
   )

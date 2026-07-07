@@ -94,14 +94,14 @@ export default function ReturnPolicyPage() {
             heading: 'Policy Changes',
             body: 'Amiora reserves the right to modify these policies at any time. Changes take effect immediately, so please review this policy periodically.',
           },
-          {
-            heading: 'Registered Office',
-            body: [
-              '3N Ram Krishna Naskar Lane',
-              'Beliaghata, Kolkata, West Bengal 700010',
-              'Phone: +91-98300-14477 / +91-90889-89888',
-            ],
-          },
+          // {
+          //   heading: 'Registered Office',
+          //   body: [
+          //     '3N Ram Krishna Naskar Lane',
+          //     'Beliaghata, Kolkata, West Bengal 700010',
+          //     'Phone: +91-98300-14477 / +91-90889-89888',
+          //   ],
+          // },
         ]}
       />
     </>

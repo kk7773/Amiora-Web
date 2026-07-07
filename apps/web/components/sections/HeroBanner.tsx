@@ -56,7 +56,7 @@ export function HeroBanner() {
   const mobilePriority = isDesktop === false || isDesktop === null
 
   return (
-    <section ref={containerRef} className="relative h-[72dvh] min-h-[420px] md:h-[100dvh] md:min-h-[500px] lg:min-h-[600px] overflow-hidden">
+    <section ref={containerRef} className="relative h-[72dvh] min-h-[420px] md:h-screen md:min-h-screen overflow-hidden">
       <div className="hero-parallax-bg absolute inset-0">
         {showDesktop && (
           <Image

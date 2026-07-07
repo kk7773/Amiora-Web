@@ -95,7 +95,7 @@ export default function AboutPage() {
       </section>
 
       {/* Certifications */}
-      <section className="section-x section-y text-center">
+      {/* <section className="section-x section-y text-center">
         <p className="text-2xs uppercase tracking-widest2 text-teal mb-3">Recognition</p>
         <h2 className="font-display text-display-xl text-ink mb-10">Awards & Certifications</h2>
         <div className="flex flex-wrap justify-center gap-4">
@@ -105,7 +105,7 @@ export default function AboutPage() {
             </div>
           ))}
         </div>
-      </section>
+      </section> */}
     </div>
     </>
   )

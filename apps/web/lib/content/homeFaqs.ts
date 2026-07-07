@@ -21,7 +21,7 @@ export const HOME_FAQS = [
     id: 'home-4',
     question: 'What is your return and exchange policy?',
     answer:
-      'We offer a 100-day easy return window on eligible pieces in unused condition with original packaging and invoice. Custom-made and altered items may have different terms — our team will confirm before you confirm your order.',
+      'We offer a 15-days easy return window on eligible pieces in unused condition with original packaging and invoice. Custom-made and altered items may have different terms — our team will confirm before you confirm your order.',
   },
   {
     id: 'home-5',

@@ -24,9 +24,9 @@ export function StoreLocatorTeaser({ storeCount = 1, cities = [AMIORA_STORE.city
             <h3 className="font-display text-xl text-ink">Visit Us In Store</h3>
             <p className="text-sm text-ink-muted">Experience jewellery in person</p>
           </div>
-          <span className="hidden sm:block bg-ink text-white text-xs px-3 py-1 rounded-full">
+          {/* <span className="hidden sm:block bg-ink text-white text-xs px-3 py-1 rounded-full">
             {storeCount} Stores
-          </span>
+          </span> */}
         </div>
 
         <div className="flex flex-wrap gap-2">

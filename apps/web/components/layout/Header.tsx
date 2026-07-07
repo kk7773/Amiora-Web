@@ -127,7 +127,7 @@ export function Header() {
       {/* Top announcement bar */}
       <div className="bg-deep-teal text-cream text-2xs tracking-widest2 text-center py-2 px-4 hidden sm:block">
         Free shipping on orders ₹5,000+&nbsp;&nbsp;·&nbsp;&nbsp;BIS Hallmarked&nbsp;&nbsp;·&nbsp;&nbsp;
-        Call: +91-98765-43210
+        Call: +91-90889-89888
       </div>
 
       <header className="sticky top-0 z-40 w-full">

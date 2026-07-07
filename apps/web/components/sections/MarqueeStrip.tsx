@@ -1,10 +1,9 @@
 const ITEMS = [
   'Free Sizing on All Rings',
   'BIS Hallmarked Jewellery',
-  '100-Day Return Policy',
-  'Book a Home Demo',
+  '15-Days Return Policy',
+  'Book a Demo',
   'Custom Design Available',
-  'EMI Available on All Orders',
   'Free Shipping on ₹5,000+',
   'Certified Diamonds',
 ]

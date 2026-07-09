@@ -12,6 +12,7 @@ export async function POST(req: NextRequest) {
     const prices   = await getLatestPrices()
     const goldPrice = prices.gold?.pricePerGram ?? 7200
     const silverPrice = prices.silver?.pricePerGram ?? 90
+    const diamondPrice = prices.diamond?.pricePerGram ?? 0
 
     const { data: pairs } = await supabase
       .from('smart_pairs')
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
     const purityMap = await fetchPurityMapForProducts(supabase, products)
 
     const withPrices = products.map((p) =>
-      mapProductForCard(p, goldPrice, silverPrice, purityMap),
+      mapProductForCard(p, goldPrice, silverPrice, purityMap, diamondPrice),
     )
 
     return NextResponse.json({ products: withPrices })

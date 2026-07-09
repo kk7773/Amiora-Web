@@ -12,6 +12,7 @@ export type CatalogPricingContext = {
   stoneLines: unknown
   initialGoldPerGram: number
   initialSilverPerGram: number
+  initialDiamondPerCarat: number
 }
 
 export function useCatalogPrices(
@@ -19,14 +20,16 @@ export function useCatalogPrices(
   purities: CatalogPurity[],
   ctx: CatalogPricingContext,
 ) {
-  const { gold, silver, loading } = usePricing({
+  const { gold, silver, diamond, loading } = usePricing({
     deferFetch: true,
     initialGoldPerGram: ctx.initialGoldPerGram,
     initialSilverPerGram: ctx.initialSilverPerGram,
+    initialDiamondPerCarat: ctx.initialDiamondPerCarat,
   })
 
   const goldPerGram = gold?.pricePerGram ?? ctx.initialGoldPerGram
   const silverPerGram = silver?.pricePerGram ?? ctx.initialSilverPerGram
+  const diamondPerCarat = diamond?.pricePerGram ?? ctx.initialDiamondPerCarat
 
   const computedPrices = useMemo(() => {
     const map: Record<string, PriceBreakdown> = {}
@@ -43,6 +46,7 @@ export function useCatalogPrices(
         stoneLines: ctx.stoneLines,
         goldPerGram,
         silverPerGram,
+        diamondPricePerCarat: diamondPerCarat,
         makingChargeDiscountPct: ctx.makingChargeDiscountPct,
         gemPriceDiscountPct: ctx.gemPriceDiscountPct,
       })
@@ -58,7 +62,8 @@ export function useCatalogPrices(
     ctx.stoneLines,
     goldPerGram,
     silverPerGram,
+    diamondPerCarat,
   ])
 
-  return { computedPrices, loading, goldPerGram, silverPerGram }
+  return { computedPrices, loading, goldPerGram, silverPerGram, diamondPerCarat }
 }

@@ -5,17 +5,18 @@ import { requireCmsAccess, writeAuditLog } from '@/lib/rbac'
 interface ManualPriceBody {
   gold?:   number | null
   silver?: number | null
+  diamond?: number | null
 }
 
 export async function POST(req: NextRequest) {
   const perm = await requireCmsAccess('pricing', 'edit')
   if (perm.ok === false) return perm.response
   const body = (await req.json()) as ManualPriceBody
-  const { gold, silver } = body
+  const { gold, silver, diamond } = body
 
-  if ((!gold || gold <= 0) && (!silver || silver <= 0)) {
+  if ((!gold || gold <= 0) && (!silver || silver <= 0) && (!diamond || diamond <= 0)) {
     return NextResponse.json(
-      { error: 'Provide at least one valid price (gold or silver > 0)' },
+      { error: 'Provide at least one valid price (gold, silver, or diamond > 0)' },
       { status: 400 }
     )
   }
@@ -40,6 +41,14 @@ export async function POST(req: NextRequest) {
           fetched_at: now,
         })]
       : []),
+    ...(diamond && diamond > 0
+      ? [supabase.from('live_prices').insert({
+          metal: 'diamond_ct',
+          price_per_gram: diamond,
+          currency: 'INR',
+          fetched_at: now,
+        })]
+      : []),
   ])
 
   const failed = results.filter(
@@ -51,10 +60,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to save one or more prices' }, { status: 500 })
   }
 
-  await writeAuditLog({ adminId: perm.adminId, action: 'update_pricing_manual', resource: 'pricing', meta: { gold, silver } })
+  await writeAuditLog({ adminId: perm.adminId, action: 'update_pricing_manual', resource: 'pricing', meta: { gold, silver, diamond } })
   return NextResponse.json({
     success: true,
-    updated: { gold: gold ?? null, silver: silver ?? null },
+    updated: { gold: gold ?? null, silver: silver ?? null, diamond: diamond ?? null },
     at: now,
   })
 }

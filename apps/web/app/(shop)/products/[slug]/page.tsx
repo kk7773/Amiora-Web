@@ -573,19 +573,20 @@ export default async function ProductPage({ params }: Props) {
     ).then((r) => (r.data ?? []) as SuggestedProduct[]).catch(() => [])
   }
 
-  const { gold: liveGold, silver: liveSilver } = await getLatestPrices()
+  const { gold: liveGold, silver: liveSilver, diamond: liveDiamond } = await getLatestPrices()
   const goldPrice = liveGold?.pricePerGram ?? 7200
   const silverPrice = liveSilver?.pricePerGram ?? 90
+  const diamondPrice = liveDiamond?.pricePerGram ?? 0
 
   const relatedForPricing = [...pairedProducts, ...suggestedProducts]
   const purityMap = await fetchPurityMapForProducts(supabase, relatedForPricing)
 
   const smartPairs = pairedProducts.map((p) =>
-    mapProductForCard(p, goldPrice, silverPrice, purityMap),
+    mapProductForCard(p, goldPrice, silverPrice, purityMap, diamondPrice),
   ) as Parameters<typeof ProductCard>[0]['product'][]
 
   const youMayAlsoLike = suggestedProducts.map((p) =>
-    mapProductForCard(p, goldPrice, silverPrice, purityMap),
+    mapProductForCard(p, goldPrice, silverPrice, purityMap, diamondPrice),
   ) as Parameters<typeof ProductCard>[0]['product'][]
 
   const safeReviews = (reviewsRes ?? []).map((r) => ({
@@ -619,6 +620,7 @@ export default async function ProductPage({ params }: Props) {
     goldPrice,
     silverPrice,
     purityMapForSchema,
+    diamondPrice,
   ).basePrice
 
   const collectionMeta = product.collection as { name: string; slug: string } | null
@@ -689,6 +691,7 @@ export default async function ProductPage({ params }: Props) {
           stoneLines: (product as { stone_lines?: unknown }).stone_lines ?? [],
           initialGoldPerGram: goldPrice,
           initialSilverPerGram: silverPrice,
+          initialDiamondPerCarat: diamondPrice,
         }}
       />
 

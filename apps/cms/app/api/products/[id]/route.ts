@@ -112,7 +112,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       return NextResponse.json({ error: 'Invalid category or missing category code' }, { status: 400 })
     }
 
-    const [purityRes, colorRes, existingGroupsRes, existingVariantsRes, goldRes, silverRes] =
+    const [purityRes, colorRes, existingGroupsRes, existingVariantsRes, goldRes, silverRes, diamondRes] =
       await Promise.all([
       supabase
         .from('metal_purities')
@@ -144,12 +144,21 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         .order('fetched_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
+      supabase
+        .from('live_prices')
+        .select('price_per_gram')
+        .eq('metal', 'diamond_ct')
+        .order('fetched_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ])
 
     const goldPerGram =
       goldRes.data?.price_per_gram != null ? Number(goldRes.data.price_per_gram) : null
     const silverPerGram =
       silverRes.data?.price_per_gram != null ? Number(silverRes.data.price_per_gram) : null
+    const diamondPerCarat =
+      diamondRes.data?.price_per_gram != null ? Number(diamondRes.data.price_per_gram) : null
     const purityMeta = Object.fromEntries(
       (purityRes.data ?? []).map((row) => [row.id, { code: row.code, metal: row.metal }]),
     )
@@ -296,6 +305,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         stoneLines,
         goldPerGram,
         silverPerGram,
+        diamondPricePerCarat: diamondPerCarat,
       })
       const snapshotPrice = breakdown?.finalPrice ?? 0
 

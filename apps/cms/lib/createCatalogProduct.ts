@@ -35,7 +35,7 @@ export async function createCatalogProduct(
   }
   const catCode = String(catRow.code)
 
-  const [{ data: purityRows }, { data: goldRow }, { data: silverRow }] = await Promise.all([
+  const [{ data: purityRows }, { data: goldRow }, { data: silverRow }, { data: diamondRow }] = await Promise.all([
     supabase
       .from('metal_purities')
       .select('id, code, metal')
@@ -54,10 +54,18 @@ export async function createCatalogProduct(
       .order('fetched_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase
+      .from('live_prices')
+      .select('price_per_gram')
+      .eq('metal', 'diamond_ct')
+      .order('fetched_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ])
 
   const goldPerGram = goldRow?.price_per_gram != null ? Number(goldRow.price_per_gram) : null
   const silverPerGram = silverRow?.price_per_gram != null ? Number(silverRow.price_per_gram) : null
+  const diamondPerCarat = diamondRow?.price_per_gram != null ? Number(diamondRow.price_per_gram) : null
   const purityMeta = Object.fromEntries(
     (purityRows ?? []).map((r) => [r.id, { code: r.code, metal: r.metal }]),
   )
@@ -163,6 +171,7 @@ export async function createCatalogProduct(
       stoneLines,
       goldPerGram,
       silverPerGram,
+      diamondPricePerCarat: diamondPerCarat,
     })
     const snapshotPrice = breakdown?.finalPrice ?? 0
 

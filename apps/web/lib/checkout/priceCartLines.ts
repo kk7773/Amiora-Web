@@ -72,9 +72,10 @@ export async function priceCartLines(
     return { lines, components: { making: 0, gem: 0 }, errors }
   }
 
-  const prices = await getLatestPrices().catch(() => ({ gold: null, silver: null }))
+  const prices = await getLatestPrices().catch(() => ({ gold: null, silver: null, diamond: null }))
   const goldPerGram = prices.gold?.pricePerGram ?? 7200
   const silverPerGram = prices.silver?.pricePerGram ?? 90
+  const diamondPerCarat = prices.diamond?.pricePerGram ?? 0
 
   const requestedProductIds = [...new Set(items.map((i) => i.product_id))]
   const variantIds = [...new Set(items.map((i) => i.variant_id).filter(Boolean))]
@@ -205,6 +206,7 @@ export async function priceCartLines(
       stoneLines: product.stone_lines,
       goldPerGram,
       silverPerGram,
+      diamondPricePerCarat: diamondPerCarat,
       makingChargeDiscountPct: Number(product.making_charge_discount_pct ?? 0),
       gemPriceDiscountPct: Number(product.gem_price_discount_pct ?? 0),
       variantMakingChargeDiscountPct:

@@ -265,6 +265,7 @@ type StoneSizeUi = {
   cut_size: string
   count: string
   weight: string
+  price_per_carat: string
   rate: string
 }
 
@@ -284,12 +285,19 @@ function stoneSizeFromDb(raw: unknown, keyPrefix: string): StoneSizeUi[] {
     const rateRaw = o.rate_inr
     const countRaw = o.count
     const weightRaw = o.weight
+    const pricePerCaratRaw = o.price_per_carat_inr
     const rate =
       typeof rateRaw === 'number' && Number.isFinite(rateRaw)
         ? String(rateRaw)
         : typeof rateRaw === 'string' && rateRaw.trim() !== ''
           ? rateRaw
           : ''
+    const price_per_carat =
+      typeof pricePerCaratRaw === 'number' && Number.isFinite(pricePerCaratRaw)
+        ? String(pricePerCaratRaw)
+        : typeof pricePerCaratRaw === 'string' && pricePerCaratRaw.trim() !== ''
+          ? pricePerCaratRaw
+          : rate
     const count =
       typeof countRaw === 'number' && Number.isFinite(countRaw)
         ? String(countRaw)
@@ -307,6 +315,7 @@ function stoneSizeFromDb(raw: unknown, keyPrefix: string): StoneSizeUi[] {
       cut_size: cutSize,
       count,
       weight,
+      price_per_carat,
       rate,
     }
   })
@@ -321,10 +330,12 @@ function stoneLinesFromDb(raw: unknown): StoneLineUi[] {
     const color = typeof o.color === 'string' ? o.color : ''
     const sizes = stoneSizeFromDb(
       Array.isArray(o.sizes)
-        ? o.sizes
+      ? o.sizes
         : [{
             cut_size: o.cut_size ?? '',
             count: o.count ?? '',
+            weight: o.weight ?? '',
+            price_per_carat_inr: o.price_per_carat_inr ?? '',
             rate_inr: o.rate_inr ?? '',
             price_inr: o.price_inr ?? '',
           }],
@@ -335,7 +346,9 @@ function stoneLinesFromDb(raw: unknown): StoneLineUi[] {
       name,
       shape,
       color,
-      sizes: sizes.length > 0 ? sizes : [{ key: `st-${i}-size-0`, cut_size: '', count: '', weight: '', rate: '' }],
+      sizes: sizes.length > 0
+        ? sizes
+        : [{ key: `st-${i}-size-0`, cut_size: '', count: '', weight: '', price_per_carat: '', rate: '' }],
     }
   })
 }
@@ -356,6 +369,7 @@ function newStoneSizeRow(): StoneSizeUi {
     cut_size: '',
     count: '',
     weight: '',
+    price_per_carat: '',
     rate: '',
   }
 }
@@ -827,10 +841,14 @@ export function ProductCatalogCreateForm({
                 const sizes = row.sizes
                   .map((size) => {
                     const cut_size = size.cut_size.trim()
+                    const price_per_carat_inr =
+                      size.price_per_carat.trim() !== '' && Number.isFinite(parseFloat(size.price_per_carat))
+                        ? parseFloat(size.price_per_carat)
+                        : null
                     const rate_inr =
                       size.rate.trim() !== '' && Number.isFinite(parseFloat(size.rate))
                         ? parseFloat(size.rate)
-                        : null
+                        : price_per_carat_inr
                     const count =
                       size.count.trim() !== '' && Number.isFinite(parseInt(size.count, 10))
                         ? parseInt(size.count, 10)
@@ -840,10 +858,20 @@ export function ProductCatalogCreateForm({
                         ? parseFloat(size.weight)
                         : null
                     const price_inr =
-                      rate_inr != null && count != null ? rate_inr * count : null
-                    return { cut_size, count, weight, rate_inr, price_inr }
+                      price_per_carat_inr != null && weight != null
+                        ? price_per_carat_inr * weight
+                        : rate_inr != null && count != null
+                          ? rate_inr * count
+                          : null
+                    return { cut_size, count, weight, price_per_carat_inr, rate_inr, price_inr }
                   })
-                  .filter((size) => size.cut_size !== '' || size.count != null || size.weight != null || size.rate_inr != null)
+                  .filter((size) =>
+                    size.cut_size !== '' ||
+                    size.count != null ||
+                    size.weight != null ||
+                    size.price_per_carat_inr != null ||
+                    size.rate_inr != null,
+                  )
 
                 const price_inr = sizes.reduce((total, size) => total + (size.price_inr ?? 0), 0)
 
@@ -1228,11 +1256,16 @@ export function ProductCatalogCreateForm({
 
                     <div className="space-y-3">
                       {row.sizes.map((size, sizeIndex) => {
+                        const pricePerCaratNum = parseFloat(size.price_per_carat)
                         const rateNum = parseFloat(size.rate)
                         const countNum = parseInt(size.count, 10)
-                        const price = Number.isFinite(rateNum) && Number.isFinite(countNum) && countNum > 0
-                          ? rateNum * countNum
-                          : null
+                        const weightNum = parseFloat(size.weight)
+                        const price =
+                          Number.isFinite(pricePerCaratNum) && Number.isFinite(weightNum) && weightNum > 0
+                            ? pricePerCaratNum * weightNum
+                            : Number.isFinite(rateNum) && Number.isFinite(countNum) && countNum > 0
+                              ? rateNum * countNum
+                              : null
                         return (
                           <div key={size.key} className="rounded-lg border border-divider bg-white p-3 space-y-3">
                             <div className="flex items-center justify-between">
@@ -1281,11 +1314,23 @@ export function ProductCatalogCreateForm({
                                 />
                               </label>
                               <label className="block space-y-1">
-                                <span className="text-xs text-ink-muted">Rate (₹)</span>
+                                <span className="text-xs text-ink-muted">Price / ct (₹)</span>
                                 <input
                                   type="number"
                                   min={0}
-                                  step={1}
+                                  step="0.01"
+                                  value={size.price_per_carat}
+                                  onChange={(e) => updateStoneSize(row.key, size.key, (current) => ({ ...current, price_per_carat: e.target.value, rate: e.target.value }))}
+                                  className={stoneInp}
+                                  placeholder="0"
+                                />
+                              </label>
+                              <label className="block space-y-1">
+                                <span className="text-xs text-ink-muted">Legacy rate (₹)</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step="0.01"
                                   value={size.rate}
                                   onChange={(e) => updateStoneSize(row.key, size.key, (current) => ({ ...current, rate: e.target.value }))}
                                   className={stoneInp}

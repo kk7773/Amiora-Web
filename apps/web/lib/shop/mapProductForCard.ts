@@ -38,6 +38,7 @@ export function mapProductForCard(
   goldPrice: number,
   silverPrice: number,
   purityMap: Record<string, PurityMeta> = {},
+  diamondPricePerCarat = 0,
 ) {
   const images = resolveProductCardImages(raw.name, raw.product_images, raw.product_color_groups)
   return attachCardPrice(
@@ -51,5 +52,6 @@ export function mapProductForCard(
     goldPrice,
     silverPrice,
     purityMap,
+    diamondPricePerCarat,
   )
 }

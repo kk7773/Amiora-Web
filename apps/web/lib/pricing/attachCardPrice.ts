@@ -28,6 +28,7 @@ export function attachCardPrice<T extends CardProductSlice>(
   goldPerGram: number,
   silverPerGram: number,
   purityMap: Record<string, PurityMeta> = {},
+  diamondPricePerCarat = 0,
 ): T & { basePrice: number; discountPercentOff: number | null } {
   let minPrice = Infinity
   let bestPercentOff = 0
@@ -44,6 +45,7 @@ export function attachCardPrice<T extends CardProductSlice>(
       stoneLines: product.stone_lines,
       goldPerGram,
       silverPerGram,
+      diamondPricePerCarat,
       makingChargeDiscountPct: product.making_charge_discount_pct ?? 0,
       gemPriceDiscountPct: product.gem_price_discount_pct ?? 0,
     })

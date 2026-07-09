@@ -24,7 +24,7 @@ export type CallbackStatus     = 'pending' | 'called' | 'no_answer'
 export type DemoRequestType    = 'visit_store' | 'home_visit'
 export type DemoStatus         = 'pending' | 'confirmed' | 'completed' | 'cancelled'
 export type NotificationType   = 'new_order' | 'custom_request' | 'callback' | 'demo_request' | 'review'
-export type LiveMetal          = 'gold_999' | 'silver_999'
+export type LiveMetal          = 'gold_999' | 'silver_999' | 'diamond_ct'
 export type ProductPublishStatus = 'draft' | 'active' | 'archived'
 
 // ─────────────────────────────────────────────────────────────────────────────

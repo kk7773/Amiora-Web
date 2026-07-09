@@ -2,6 +2,7 @@ export type StoneSizeRecord = {
   cut_size: string
   count: number | null
   weight: number | null
+  price_per_carat_inr: number | null
   rate_inr: number | null
   price_inr: number | null
 }
@@ -38,15 +39,21 @@ function normalizeStoneSizeRows(input: unknown): StoneSizeRecord[] {
     const cut_size = typeof r.cut_size === 'string' ? r.cut_size.trim() : ''
     const count = parseOptionalInteger(r.count)
     const weight = parseOptionalNumber(r.weight)
+    const price_per_carat_inr = parseOptionalNumber(r.price_per_carat_inr)
     const rate_inr = parseOptionalNumber(r.rate_inr)
     const price_inr = parseOptionalNumber(r.price_inr)
-    const computedPrice = price_inr ?? (rate_inr != null && count != null ? rate_inr * count : null)
-    if (!cut_size && rate_inr == null && computedPrice == null && weight == null) continue
+    const resolvedRate = price_per_carat_inr ?? rate_inr
+    const computedPrice =
+      price_inr ??
+      (resolvedRate != null && weight != null ? resolvedRate * weight : null) ??
+      (rate_inr != null && count != null ? rate_inr * count : null)
+    if (!cut_size && resolvedRate == null && computedPrice == null && weight == null) continue
     out.push({
       cut_size,
       count,
       weight,
-      rate_inr,
+      price_per_carat_inr: resolvedRate,
+      rate_inr: resolvedRate,
       price_inr: computedPrice,
     })
   }
@@ -65,19 +72,26 @@ export function normalizeStoneLines(input: unknown): StoneLineRecord[] {
     const sizes = normalizeStoneSizeRows(r.sizes)
     const legacyCutSize = typeof r.cut_size === 'string' ? r.cut_size.trim() : ''
     const legacyCount = parseOptionalInteger(r.count)
+    const legacyPricePerCarat = parseOptionalNumber(r.price_per_carat_inr)
     const legacyRate = parseOptionalNumber(r.rate_inr)
     const legacyPrice = parseOptionalNumber(r.price_inr)
 
     const resolvedSizes =
       sizes.length > 0
         ? sizes
-        : legacyCutSize || legacyRate != null || legacyPrice != null || legacyCount != null
+        : legacyCutSize || legacyPricePerCarat != null || legacyRate != null || legacyPrice != null || legacyCount != null
           ? [{
               cut_size: legacyCutSize,
               count: legacyCount,
               weight: parseOptionalNumber(r.weight),
-              rate_inr: legacyRate,
-              price_inr: legacyPrice ?? (legacyRate != null && legacyCount != null ? legacyRate * legacyCount : null),
+              price_per_carat_inr: legacyPricePerCarat ?? legacyRate,
+              rate_inr: legacyPricePerCarat ?? legacyRate,
+              price_inr:
+                legacyPrice ??
+                ((legacyPricePerCarat ?? legacyRate) != null && parseOptionalNumber(r.weight) != null
+                  ? (legacyPricePerCarat ?? legacyRate)! * parseOptionalNumber(r.weight)!
+                  : null) ??
+                (legacyRate != null && legacyCount != null ? legacyRate * legacyCount : null),
             }]
           : []
 
@@ -93,6 +107,9 @@ export function normalizeStoneLines(input: unknown): StoneLineRecord[] {
     const price_inr = resolvedSizes.reduce((total, size) => {
       if (typeof size.price_inr === 'number' && Number.isFinite(size.price_inr)) {
         return total + size.price_inr
+      }
+      if (size.price_per_carat_inr != null && size.weight != null) {
+        return total + size.price_per_carat_inr * size.weight
       }
       if (size.rate_inr != null && size.count != null) {
         return total + size.rate_inr * size.count

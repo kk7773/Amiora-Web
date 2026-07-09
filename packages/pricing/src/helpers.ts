@@ -37,7 +37,7 @@ export function resolveLiveRate(
 }
 
 /** Sum fixed diamond/gem price from product stone_lines JSON. */
-export function sumStoneLinesPrice(stoneLines: unknown): number {
+export function sumStoneLinesPrice(stoneLines: unknown, diamondPricePerCarat = 0): number {
   if (!Array.isArray(stoneLines)) return 0
   let total = 0
   for (const row of stoneLines) {
@@ -47,13 +47,36 @@ export function sumStoneLinesPrice(stoneLines: unknown): number {
     if (Array.isArray(sizes)) {
       for (const size of sizes) {
         if (!size || typeof size !== 'object') continue
-        const price = (size as Record<string, unknown>).price_inr
+        const sizeRecord = size as Record<string, unknown>
+        const price = sizeRecord.price_inr
         if (typeof price === 'number' && Number.isFinite(price) && price > 0) {
           total += price
           continue
         }
-        const rate = (size as Record<string, unknown>).rate_inr
-        const count = (size as Record<string, unknown>).count
+        const pricePerCarat = sizeRecord.price_per_carat_inr
+        const weight = sizeRecord.weight
+        if (
+          typeof pricePerCarat === 'number' &&
+          Number.isFinite(pricePerCarat) &&
+          pricePerCarat > 0 &&
+          typeof weight === 'number' &&
+          Number.isFinite(weight) &&
+          weight > 0
+        ) {
+          total += pricePerCarat * weight
+          continue
+        }
+        if (
+          diamondPricePerCarat > 0 &&
+          typeof weight === 'number' &&
+          Number.isFinite(weight) &&
+          weight > 0
+        ) {
+          total += diamondPricePerCarat * weight
+          continue
+        }
+        const rate = sizeRecord.rate_inr
+        const count = sizeRecord.count
         if (
           typeof rate === 'number' &&
           Number.isFinite(rate) &&
@@ -70,6 +93,38 @@ export function sumStoneLinesPrice(stoneLines: unknown): number {
     const price = record.price_inr
     if (typeof price === 'number' && Number.isFinite(price) && price > 0) {
       total += price
+      continue
+    }
+    const pricePerCarat = record.price_per_carat_inr
+    const weight = record.weight
+    if (
+      typeof pricePerCarat === 'number' &&
+      Number.isFinite(pricePerCarat) &&
+      pricePerCarat > 0 &&
+      typeof weight === 'number' &&
+      Number.isFinite(weight) &&
+      weight > 0
+    ) {
+      total += pricePerCarat * weight
+      continue
+    }
+    if (
+      diamondPricePerCarat > 0 &&
+      typeof weight === 'number' &&
+      Number.isFinite(weight) &&
+      weight > 0
+    ) {
+      total += diamondPricePerCarat * weight
+      continue
+    }
+    const totalWeight = record.total_weight
+    if (
+      diamondPricePerCarat > 0 &&
+      typeof totalWeight === 'number' &&
+      Number.isFinite(totalWeight) &&
+      totalWeight > 0
+    ) {
+      total += diamondPricePerCarat * totalWeight
       continue
     }
     const rate = record.rate_inr
@@ -96,6 +151,7 @@ export interface ComputeCatalogVariantInput {
   stoneLines?: unknown
   goldPerGram: number | null | undefined
   silverPerGram: number | null | undefined
+  diamondPricePerCarat?: number | null | undefined
   makingChargeDiscountPct?: number
   gemPriceDiscountPct?: number
   variantMakingChargeDiscountPct?: number | null
@@ -108,7 +164,7 @@ export function computeCatalogVariantPrice(input: ComputeCatalogVariantInput): P
 
   const liveRate = resolveLiveRate(input.metalType, input.goldPerGram, input.silverPerGram)
   const purity = purityCodeToCalcInput(input.purityCode, input.metalType)
-  const gemTotal = sumStoneLinesPrice(input.stoneLines)
+  const gemTotal = sumStoneLinesPrice(input.stoneLines, input.diamondPricePerCarat ?? 0)
 
   return calculateVariantPrice({
     weightGrams: weight,

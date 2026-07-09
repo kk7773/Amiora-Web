@@ -160,10 +160,10 @@ export async function fetchAndStorePrices(): Promise<{
  * Use tag 'live-prices' to revalidate manually after a manual price update.
  */
 export const getLatestPrices = unstable_cache(
-  async (): Promise<{ gold: LivePrice | null; silver: LivePrice | null }> => {
+  async (): Promise<{ gold: LivePrice | null; silver: LivePrice | null; diamond: LivePrice | null }> => {
     const supabase = createServerClient()
 
-    const [goldResult, silverResult] = await Promise.all([
+    const [goldResult, silverResult, diamondResult] = await Promise.all([
       supabase
         .from('live_prices')
         .select('*')
@@ -178,6 +178,13 @@ export const getLatestPrices = unstable_cache(
         .order('fetched_at', { ascending: false })
         .limit(1)
         .single(),
+      supabase
+        .from('live_prices')
+        .select('*')
+        .eq('metal', 'diamond_ct')
+        .order('fetched_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ])
 
     const toLivePrice = (row: typeof goldResult['data']): LivePrice | null => {
@@ -194,6 +201,7 @@ export const getLatestPrices = unstable_cache(
     return {
       gold:   toLivePrice(goldResult.data),
       silver: toLivePrice(silverResult.data),
+      diamond: toLivePrice(diamondResult.data),
     }
   },
   ['latest-prices'],

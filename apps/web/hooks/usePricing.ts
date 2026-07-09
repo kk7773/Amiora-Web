@@ -7,17 +7,19 @@ import type { LivePrice } from '@amiora/types'
 interface PricesState {
   gold:    LivePrice | null
   silver:  LivePrice | null
+  diamond: LivePrice | null
   loading: boolean
   error:   string | null
 }
 
-let cachedPrices: { gold: LivePrice | null; silver: LivePrice | null } | null = null
+let cachedPrices: { gold: LivePrice | null; silver: LivePrice | null; diamond: LivePrice | null } | null = null
 
 const REFRESH_AFTER_MS = 5 * 60 * 1000
 
 type UsePricingOptions = {
   initialGoldPerGram?: number
   initialSilverPerGram?: number
+  initialDiamondPerCarat?: number
   /** Skip immediate /api/pricing fetch when SSR rates are available */
   deferFetch?: boolean
 }
@@ -33,7 +35,7 @@ function livePriceFromGram(metal: LivePrice['metal'], pricePerGram: number): Liv
 }
 
 /**
- * Fetches + caches live gold/silver prices.
+ * Fetches + caches live gold/silver/diamond prices.
  * Subscribes to Supabase Realtime for live updates.
  */
 export function usePricing(options?: UsePricingOptions): PricesState {
@@ -44,10 +46,14 @@ export function usePricing(options?: UsePricingOptions): PricesState {
   const initialSilver = options?.initialSilverPerGram != null
     ? livePriceFromGram('silver_999', options.initialSilverPerGram)
     : null
+  const initialDiamond = options?.initialDiamondPerCarat != null && options.initialDiamondPerCarat > 0
+    ? livePriceFromGram('diamond_ct', options.initialDiamondPerCarat)
+    : null
 
   const [state, setState] = useState<PricesState>(() => ({
     gold:    initialGold ?? cachedPrices?.gold ?? null,
     silver:  initialSilver ?? cachedPrices?.silver ?? null,
+    diamond: initialDiamond ?? cachedPrices?.diamond ?? null,
     loading: !deferFetch && !cachedPrices && !initialGold,
     error:   null,
   }))
@@ -59,16 +65,16 @@ export function usePricing(options?: UsePricingOptions): PricesState {
     const fetchPrices = async () => {
       try {
         const res  = await fetch('/api/pricing', { cache: 'no-store' })
-        const json = (await res.json()) as { data: { gold: LivePrice; silver: LivePrice } }
+        const json = (await res.json()) as { data: { gold: LivePrice; silver: LivePrice; diamond: LivePrice | null } }
         cachedPrices = json.data
-        setState({ gold: json.data.gold, silver: json.data.silver, loading: false, error: null })
+        setState({ gold: json.data.gold, silver: json.data.silver, diamond: json.data.diamond, loading: false, error: null })
       } catch {
         setState((s) => ({ ...s, loading: false, error: 'Failed to load live prices' }))
       }
     }
 
     if (deferFetch && initialGold && initialSilver) {
-      cachedPrices = { gold: initialGold, silver: initialSilver }
+      cachedPrices = { gold: initialGold, silver: initialSilver, diamond: initialDiamond }
       const timer = setTimeout(() => {
         void fetchPrices()
       }, REFRESH_AFTER_MS)
@@ -82,10 +88,13 @@ export function usePricing(options?: UsePricingOptions): PricesState {
             pricePerGram: row.price_per_gram, currency: row.currency, fetchedAt: row.fetched_at,
           }
           setState((s) => {
-            const updated = row.metal === 'gold_999'
-              ? { ...s, gold: price }
-              : { ...s, silver: price }
-            cachedPrices = { gold: updated.gold, silver: updated.silver }
+            const updated =
+              row.metal === 'gold_999'
+                ? { ...s, gold: price }
+                : row.metal === 'silver_999'
+                  ? { ...s, silver: price }
+                  : { ...s, diamond: price }
+            cachedPrices = { gold: updated.gold, silver: updated.silver, diamond: updated.diamond }
             return updated
           })
         })
@@ -108,17 +117,20 @@ export function usePricing(options?: UsePricingOptions): PricesState {
           pricePerGram: row.price_per_gram, currency: row.currency, fetchedAt: row.fetched_at,
         }
         setState((s) => {
-          const updated = row.metal === 'gold_999'
-            ? { ...s, gold: price }
-            : { ...s, silver: price }
-          cachedPrices = { gold: updated.gold, silver: updated.silver }
+          const updated =
+            row.metal === 'gold_999'
+              ? { ...s, gold: price }
+              : row.metal === 'silver_999'
+                ? { ...s, silver: price }
+                : { ...s, diamond: price }
+          cachedPrices = { gold: updated.gold, silver: updated.silver, diamond: updated.diamond }
           return updated
         })
       })
       .subscribe()
 
     return () => { void client.removeChannel(channel) }
-  }, [deferFetch, initialGold, initialSilver])
+  }, [deferFetch, initialDiamond, initialGold, initialSilver])
 
   return state
 }

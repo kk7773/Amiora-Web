@@ -145,6 +145,7 @@ export default async function HomePage() {
         prices.gold?.pricePerGram ?? 7200,
         prices.silver?.pricePerGram ?? 90,
         purityMap,
+        prices.diamond?.pricePerGram ?? 0,
       )
     })
 

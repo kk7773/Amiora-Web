@@ -179,6 +179,44 @@ export function computeCatalogVariantPrice(input: ComputeCatalogVariantInput): P
   })
 }
 
+export function readManualPriceOverride(value: number | null | undefined): number | null {
+  return value != null && Number.isFinite(value) && value > 0 ? Math.round(value * 100) / 100 : null
+}
+
+export function applyManualPriceOverride(
+  breakdown: PriceBreakdown | null,
+  manualPrice: number | null | undefined,
+): PriceBreakdown | null {
+  const override = readManualPriceOverride(manualPrice)
+  if (override == null) return breakdown
+
+  if (!breakdown) {
+    return {
+      purePrice: 0,
+      baseMetalPrice: 0,
+      makingCharge: 0,
+      makingChargeDiscount: 0,
+      makingChargeNet: 0,
+      gemPrice: 0,
+      gemPriceDiscount: 0,
+      gemPriceNet: 0,
+      productDiscount: 0,
+      finalPrice: override,
+      listTotalBeforeDiscount: override,
+      percentOffGross: 0,
+      purityMultiplier: 0,
+      currency: 'INR',
+    }
+  }
+
+  return {
+    ...breakdown,
+    finalPrice: override,
+    listTotalBeforeDiscount: override,
+    percentOffGross: 0,
+  }
+}
+
 /** Build price breakup rows for PDP table display. */
 export function breakdownToDisplayRows(
   breakdown: PriceBreakdown,

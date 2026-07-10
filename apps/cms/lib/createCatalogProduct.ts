@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { computeCatalogVariantPrice } from '@amiora/pricing'
+import { computeCatalogVariantPrice, readManualPriceOverride } from '@amiora/pricing'
 import { generateAmioraSKU } from '@/lib/sku'
 import { insertProductColorGroup } from '@/lib/productColorGroupsDb'
 import { normalizeStoneLines, parseOptionalGrams } from '@/lib/normalizeStoneLines'
@@ -173,7 +173,7 @@ export async function createCatalogProduct(
       silverPerGram,
       diamondPricePerCarat: diamondPerCarat,
     })
-    const snapshotPrice = breakdown?.finalPrice ?? 0
+    const snapshotPrice = readManualPriceOverride(cell.price) ?? breakdown?.finalPrice ?? 0
 
     variantRows.push({
       product_id: productId,

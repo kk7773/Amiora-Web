@@ -132,6 +132,7 @@ export type ProductCatalogCreateFormProps = {
 type CellState = {
   id?: string
   metal_weight_g: string
+  price: string
   stock_qty: string
   is_active: boolean
 }
@@ -253,6 +254,10 @@ function buildCellState(matrix: MatrixSeedCell[], fallbackWeightG?: number | nul
           cell.metal_weight_g != null && Number.isFinite(Number(cell.metal_weight_g))
             ? String(Number(cell.metal_weight_g))
             : fallback,
+        price:
+          cell.price != null && Number.isFinite(Number(cell.price)) && Number(cell.price) > 0
+            ? String(Number(cell.price))
+            : '',
         stock_qty: String(cell.stock_qty),
         is_active: cell.is_active,
       } satisfies CellState,
@@ -694,7 +699,7 @@ export function ProductCatalogCreateForm({
   function setCellValue(colorId: string, purityId: string, updater: (current: CellState) => CellState) {
     const key = buildCellKey(colorId, purityId)
     setCells((prev) => {
-      const current = prev[key] ?? { metal_weight_g: '', stock_qty: '1', is_active: true }
+      const current = prev[key] ?? { metal_weight_g: '', price: '', stock_qty: '1', is_active: true }
       return { ...prev, [key]: updater(current) }
     })
   }
@@ -780,6 +785,7 @@ export function ProductCatalogCreateForm({
       id?: string
       color_id: string
       purity_id: string
+      price?: number
       stock_qty: number
       is_active: boolean
       metal_weight_g: number
@@ -790,12 +796,15 @@ export function ProductCatalogCreateForm({
         const current = cells[buildCellKey(row.color_id, purity.id)]
         if (!current) continue
         const weightTrim = current.metal_weight_g.trim()
+        const priceTrim = current.price.trim()
         const weightParsed = weightTrim !== '' ? parseFloat(weightTrim) : NaN
+        const priceParsed = priceTrim !== '' ? parseFloat(priceTrim) : NaN
         if (!Number.isFinite(weightParsed) || weightParsed <= 0) continue
         matrix.push({
           id: current.id,
           color_id: row.color_id,
           purity_id: purity.id,
+          ...(Number.isFinite(priceParsed) && priceParsed > 0 ? { price: priceParsed } : {}),
           stock_qty: Math.max(0, Math.floor(Number(current.stock_qty) || 0)),
           is_active: current.is_active,
           metal_weight_g: weightParsed,
@@ -1462,7 +1471,7 @@ export function ProductCatalogCreateForm({
       <section className="bg-white rounded-xl border border-divider p-6 space-y-4 overflow-x-auto">
         <h3 className="font-display text-lg text-deep-teal">Weight &amp; stock matrix</h3>
         <p className="text-sm text-ink-muted">
-          Price is calculated automatically from today&apos;s gold/silver rate, weight, making charge %, and stone lines. Each cell can hold multiple pcs.
+          Manual price, if entered, overrides the auto-calculated variant price everywhere. Leave it empty to keep live formula pricing.
         </p>
         {!hasMetalPurities ? (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -1499,6 +1508,7 @@ export function ProductCatalogCreateForm({
                     {puritiesForProduct.map((purity) => {
                       const cell = cells[buildCellKey(row.color_id, purity.id)] ?? {
                         metal_weight_g: '',
+                        price: '',
                         stock_qty: '1',
                         is_active: true,
                       }
@@ -1514,6 +1524,20 @@ export function ProductCatalogCreateForm({
                               setCellValue(row.color_id, purity.id, (current) => ({
                                 ...current,
                                 metal_weight_g: e.target.value,
+                              }))
+                            }
+                            className="w-full border rounded px-2 py-1 mb-2"
+                          />
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            placeholder="Manual price (₹)"
+                            value={cell.price}
+                            onChange={(e) =>
+                              setCellValue(row.color_id, purity.id, (current) => ({
+                                ...current,
+                                price: e.target.value,
                               }))
                             }
                             className="w-full border rounded px-2 py-1 mb-2"

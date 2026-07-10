@@ -1,4 +1,4 @@
-import { computeCatalogVariantPrice } from '@amiora/pricing'
+import { applyManualPriceOverride, computeCatalogVariantPrice } from '@amiora/pricing'
 
 export type PurityMeta = { code: string; metal?: string }
 
@@ -37,7 +37,7 @@ export function attachCardPrice<T extends CardProductSlice>(
     if (!(variant.is_active ?? true)) continue
 
     const purity = variant.purity_id ? purityMap[variant.purity_id] : undefined
-    const breakdown = computeCatalogVariantPrice({
+    const breakdown = applyManualPriceOverride(computeCatalogVariantPrice({
       metalWeightG: variant.metal_weight_g,
       purityCode: purity?.code ?? '',
       metalType: purity?.metal,
@@ -48,7 +48,7 @@ export function attachCardPrice<T extends CardProductSlice>(
       diamondPricePerCarat,
       makingChargeDiscountPct: product.making_charge_discount_pct ?? 0,
       gemPriceDiscountPct: product.gem_price_discount_pct ?? 0,
-    })
+    }), variant.price)
 
     if (!breakdown || breakdown.finalPrice <= 0) continue
     if (breakdown.finalPrice < minPrice) {

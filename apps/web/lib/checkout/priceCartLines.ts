@@ -1,4 +1,4 @@
-import { computeCatalogVariantPrice, resolveLiveRate } from '@amiora/pricing'
+import { applyManualPriceOverride, computeCatalogVariantPrice, resolveLiveRate } from '@amiora/pricing'
 import { getLatestPrices } from '@/lib/pricing/engine'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { CartLine } from '@/lib/coupons/evaluateCoupon'
@@ -35,6 +35,7 @@ type VariantRow = {
   id: string
   product_id: string
   sku?: string | null
+  price?: number | null
   metal_weight_g: number | null
   purity_id: string
   is_active: boolean
@@ -84,13 +85,13 @@ export async function priceCartLines(
     variantIds.length > 0
       ? supabase
           .from('product_variants')
-          .select('id, product_id, sku, metal_weight_g, purity_id, is_active, stock_qty, making_charge_discount_pct, gem_price_discount_pct')
+          .select('id, product_id, sku, price, metal_weight_g, purity_id, is_active, stock_qty, making_charge_discount_pct, gem_price_discount_pct')
           .in('id', variantIds)
       : Promise.resolve({ data: [] as VariantRow[] }),
     requestedProductIds.length > 0
       ? supabase
           .from('product_variants')
-          .select('id, product_id, sku, metal_weight_g, purity_id, is_active, stock_qty, making_charge_discount_pct, gem_price_discount_pct')
+          .select('id, product_id, sku, price, metal_weight_g, purity_id, is_active, stock_qty, making_charge_discount_pct, gem_price_discount_pct')
           .in('product_id', requestedProductIds)
       : Promise.resolve({ data: [] as VariantRow[] }),
   ])
@@ -198,7 +199,7 @@ export async function priceCartLines(
     const purity = purityMap.get(normalizeLookupKey(variant.purity_id))
     const metalRate = resolveLiveRate(purity?.metal ?? undefined, goldPerGram, silverPerGram)
 
-    const breakdown = computeCatalogVariantPrice({
+    const breakdown = applyManualPriceOverride(computeCatalogVariantPrice({
       metalWeightG: variant.metal_weight_g,
       purityCode: purity?.code ?? '',
       metalType: purity?.metal ?? undefined,
@@ -217,7 +218,7 @@ export async function priceCartLines(
         variant.gem_price_discount_pct != null
           ? Number(variant.gem_price_discount_pct)
           : null,
-    })
+    }), variant.price)
 
     if (!breakdown || breakdown.finalPrice <= 0) {
       errors.push(`${product.name}: price could not be calculated`)

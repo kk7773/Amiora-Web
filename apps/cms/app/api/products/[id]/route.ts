@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@amiora/database'
-import { computeCatalogVariantPrice } from '@amiora/pricing'
+import { computeCatalogVariantPrice, readManualPriceOverride } from '@amiora/pricing'
 import { generateAmioraSKU } from '@/lib/sku'
 import { normalizeStoneLines } from '@/lib/normalizeStoneLines'
 import { requireCmsAccess, writeAuditLog } from '@/lib/rbac'
@@ -307,7 +307,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         silverPerGram,
         diamondPricePerCarat: diamondPerCarat,
       })
-      const snapshotPrice = breakdown?.finalPrice ?? 0
+      const snapshotPrice = readManualPriceOverride(cell.price) ?? breakdown?.finalPrice ?? 0
 
       const payload = {
         color_group_id: groupId,

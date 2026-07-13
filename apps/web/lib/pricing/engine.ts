@@ -40,6 +40,12 @@ interface ExchangeRateResponse {
   rates: Record<string, number>
 }
 
+function readDiamondManualRate(meta: unknown): number | null {
+  if (!meta || typeof meta !== 'object') return null
+  const diamond = (meta as { diamond?: unknown }).diamond
+  return diamond != null && Number.isFinite(Number(diamond)) && Number(diamond) > 0 ? Number(diamond) : null
+}
+
 /**
  * Fetch USD→INR exchange rate.
  * Returns 84 as a hardcoded fallback if the API is unavailable.
@@ -163,7 +169,7 @@ export const getLatestPrices = unstable_cache(
   async (): Promise<{ gold: LivePrice | null; silver: LivePrice | null; diamond: LivePrice | null }> => {
     const supabase = createServerClient()
 
-    const [goldResult, silverResult, diamondResult] = await Promise.all([
+    const [goldResult, silverResult, diamondResult, diamondAuditResult] = await Promise.all([
       supabase
         .from('live_prices')
         .select('*')
@@ -185,6 +191,14 @@ export const getLatestPrices = unstable_cache(
         .order('fetched_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
+      supabase
+        .from('admin_audit_logs')
+        .select('meta, created_at')
+        .eq('action', 'update_pricing_manual')
+        .eq('resource', 'pricing')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ])
 
     const toLivePrice = (row: typeof goldResult['data']): LivePrice | null => {
@@ -198,10 +212,21 @@ export const getLatestPrices = unstable_cache(
       }
     }
 
+    const diamondFallback =
+      readDiamondManualRate(diamondAuditResult.data?.meta) != null
+        ? ({
+            id: 'admin-audit:diamond_price_per_carat',
+            metal: 'diamond_ct',
+            pricePerGram: Number(readDiamondManualRate(diamondAuditResult.data?.meta)),
+            currency: 'INR',
+            fetchedAt: diamondAuditResult.data?.created_at ?? new Date(0).toISOString(),
+          } satisfies LivePrice)
+        : null
+
     return {
       gold:   toLivePrice(goldResult.data),
       silver: toLivePrice(silverResult.data),
-      diamond: toLivePrice(diamondResult.data),
+      diamond: toLivePrice(diamondResult.data) ?? diamondFallback,
     }
   },
   ['latest-prices'],

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@amiora/database'
+import { createClient } from '@supabase/supabase-js'
 import { requireCmsAccess, writeAuditLog } from '@/lib/rbac'
 
 interface ManualPriceBody {
@@ -11,59 +11,75 @@ interface ManualPriceBody {
 export async function POST(req: NextRequest) {
   const perm = await requireCmsAccess('pricing', 'edit')
   if (perm.ok === false) return perm.response
-  const body = (await req.json()) as ManualPriceBody
-  const { gold, silver, diamond } = body
+  try {
+    const body = (await req.json()) as ManualPriceBody
+    const { gold, silver, diamond } = body
 
-  if ((!gold || gold <= 0) && (!silver || silver <= 0) && (!diamond || diamond <= 0)) {
+    if ((!gold || gold <= 0) && (!silver || silver <= 0) && (!diamond || diamond <= 0)) {
+      return NextResponse.json(
+        { error: 'Provide at least one valid price (gold, silver, or diamond > 0)' },
+        { status: 400 }
+      )
+    }
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } },
+    )
+    const now = new Date().toISOString()
+
+    const failed: Array<{ field: 'gold' | 'silver' | 'diamond'; error: unknown }> = []
+
+    if (gold && gold > 0) {
+      const result = await supabase.from('live_prices').insert({
+        metal: 'gold_999',
+        price_per_gram: gold,
+        currency: 'INR',
+        fetched_at: now,
+      })
+      if (result.error) failed.push({ field: 'gold', error: result.error })
+    }
+
+    if (silver && silver > 0) {
+      const result = await supabase.from('live_prices').insert({
+        metal: 'silver_999',
+        price_per_gram: silver,
+        currency: 'INR',
+        fetched_at: now,
+      })
+      if (result.error) failed.push({ field: 'silver', error: result.error })
+    }
+
+    if (diamond && diamond > 0) {
+      const diamondInsert = await supabase.from('live_prices').insert({
+        metal: 'diamond_ct',
+        price_per_gram: diamond,
+        currency: 'INR',
+        fetched_at: now,
+      })
+
+      if (diamondInsert.error) {
+        console.warn('[pricing/manual] live_prices diamond_ct insert failed; falling back to audit-log-backed manual diamond rate', diamondInsert.error)
+      }
+    }
+
+    if (failed.length > 0) {
+      console.error('[pricing/manual] insert failed', failed)
+      return NextResponse.json({ error: 'Failed to save one or more prices', details: failed }, { status: 500 })
+    }
+
+    await writeAuditLog({ adminId: perm.adminId, action: 'update_pricing_manual', resource: 'pricing', meta: { gold, silver, diamond } })
+    return NextResponse.json({
+      success: true,
+      updated: { gold: gold ?? null, silver: silver ?? null, diamond: diamond ?? null },
+      at: now,
+    })
+  } catch (err: unknown) {
+    console.error('[pricing/manual]', err)
     return NextResponse.json(
-      { error: 'Provide at least one valid price (gold, silver, or diamond > 0)' },
-      { status: 400 }
+      { error: err instanceof Error ? err.message : 'Failed to save prices' },
+      { status: 500 },
     )
   }
-
-  const supabase = createServerClient()
-  const now = new Date().toISOString()
-
-  const results = await Promise.allSettled([
-    ...(gold && gold > 0
-      ? [supabase.from('live_prices').insert({
-          metal: 'gold_999',
-          price_per_gram: gold,
-          currency: 'INR',
-          fetched_at: now,
-        })]
-      : []),
-    ...(silver && silver > 0
-      ? [supabase.from('live_prices').insert({
-          metal: 'silver_999',
-          price_per_gram: silver,
-          currency: 'INR',
-          fetched_at: now,
-        })]
-      : []),
-    ...(diamond && diamond > 0
-      ? [supabase.from('live_prices').insert({
-          metal: 'diamond_ct',
-          price_per_gram: diamond,
-          currency: 'INR',
-          fetched_at: now,
-        })]
-      : []),
-  ])
-
-  const failed = results.filter(
-    (r) => r.status === 'rejected' ||
-           (r.status === 'fulfilled' && (r as PromiseFulfilledResult<{ error: unknown }>).value?.error)
-  )
-
-  if (failed.length > 0) {
-    return NextResponse.json({ error: 'Failed to save one or more prices' }, { status: 500 })
-  }
-
-  await writeAuditLog({ adminId: perm.adminId, action: 'update_pricing_manual', resource: 'pricing', meta: { gold, silver, diamond } })
-  return NextResponse.json({
-    success: true,
-    updated: { gold: gold ?? null, silver: silver ?? null, diamond: diamond ?? null },
-    at: now,
-  })
 }

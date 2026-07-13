@@ -274,12 +274,34 @@ type StoneSizeUi = {
   rate: string
 }
 
+type StoneTypeUi = 'diamond' | 'other_than_diamond' | ''
+
 type StoneLineUi = {
   key: string
-  name: string
+  stone_type: StoneTypeUi
   shape: string
   color: string
   sizes: StoneSizeUi[]
+}
+
+function normalizeStoneType(value: unknown): StoneTypeUi {
+  if (typeof value !== 'string') return ''
+  const normalized = value.trim().toLowerCase()
+  if (normalized === 'diamond') return 'diamond'
+  if (
+    normalized === 'other_than_diamond' ||
+    normalized === 'other than diamond' ||
+    normalized === 'other-than-diamond'
+  ) {
+    return 'other_than_diamond'
+  }
+  return ''
+}
+
+function stoneTypeLabel(value: StoneTypeUi): string {
+  if (value === 'diamond') return 'Diamond'
+  if (value === 'other_than_diamond') return 'Other than diamond'
+  return 'Stine'
 }
 
 function stoneSizeFromDb(raw: unknown, keyPrefix: string): StoneSizeUi[] {
@@ -331,6 +353,7 @@ function stoneLinesFromDb(raw: unknown): StoneLineUi[] {
   return raw.map((item, i) => {
     const o = item as Record<string, unknown>
     const name = typeof o.name === 'string' ? o.name : ''
+    const stone_type = normalizeStoneType(o.stone_type ?? name)
     const shape = typeof o.shape === 'string' ? normalizeDiamondShape(o.shape) : ''
     const color = typeof o.color === 'string' ? o.color : ''
     const sizes = stoneSizeFromDb(
@@ -348,7 +371,7 @@ function stoneLinesFromDb(raw: unknown): StoneLineUi[] {
     )
     return {
       key: `st-${i}-${name.slice(0, 8)}`,
-      name,
+      stone_type,
       shape,
       color,
       sizes: sizes.length > 0
@@ -361,7 +384,7 @@ function stoneLinesFromDb(raw: unknown): StoneLineUi[] {
 function newStoneRow(): StoneLineUi {
   return {
     key: `st-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-    name: '',
+    stone_type: '',
     shape: '',
     color: '',
     sizes: [newStoneSizeRow()],
@@ -847,15 +870,20 @@ export function ProductCatalogCreateForm({
         stone_lines: hasStone
           ? stoneRows
               .map((row) => {
+                const isDiamondStone = row.stone_type === 'diamond'
                 const sizes = row.sizes
                   .map((size) => {
                     const cut_size = size.cut_size.trim()
                     const price_per_carat_inr =
-                      size.price_per_carat.trim() !== '' && Number.isFinite(parseFloat(size.price_per_carat))
+                      !isDiamondStone &&
+                      size.price_per_carat.trim() !== '' &&
+                      Number.isFinite(parseFloat(size.price_per_carat))
                         ? parseFloat(size.price_per_carat)
                         : null
                     const rate_inr =
-                      size.rate.trim() !== '' && Number.isFinite(parseFloat(size.rate))
+                      !isDiamondStone &&
+                      size.rate.trim() !== '' &&
+                      Number.isFinite(parseFloat(size.rate))
                         ? parseFloat(size.rate)
                         : price_per_carat_inr
                     const count =
@@ -885,7 +913,13 @@ export function ProductCatalogCreateForm({
                 const price_inr = sizes.reduce((total, size) => total + (size.price_inr ?? 0), 0)
 
                 return {
-                  name: row.name.trim(),
+                  stone_type: row.stone_type || null,
+                  name:
+                    row.stone_type === 'diamond'
+                      ? 'diamond'
+                      : row.stone_type === 'other_than_diamond'
+                        ? 'other than diamond'
+                        : '',
                   shape: row.shape.trim(),
                   color: row.color.trim(),
                   sizes,
@@ -895,7 +929,7 @@ export function ProductCatalogCreateForm({
                   price_inr: price_inr > 0 ? price_inr : null,
                 }
               })
-              .filter((row) => row.name !== '' || row.shape !== '' || row.color !== '' || row.sizes.length > 0)
+              .filter((row) => row.stone_type != null || row.shape !== '' || row.color !== '' || row.sizes.length > 0)
           : [],
       }
 
@@ -1140,12 +1174,12 @@ export function ProductCatalogCreateForm({
         </div>
       </section>
 
-      {/* Diamond specifications section hidden — fields replaced by Stone (gem) section below */}
+      {/* Diamond specifications section hidden — fields replaced by Stine (gem) section below */}
 
       <section className="bg-white rounded-xl border border-divider p-6 space-y-4">
-        <h3 className="font-display text-lg text-deep-teal">Stone (gem)</h3>
+        <h3 className="font-display text-lg text-deep-teal">Stine (gem)</h3>
         <label className="block space-y-1 max-w-md">
-          <span className="text-xs text-ink-muted">Does this product include stone(s)?</span>
+          <span className="text-xs text-ink-muted">Does this product include stine(s)?</span>
           <select
             value={hasStone ? 'yes' : 'no'}
             onChange={(e) => {
@@ -1163,6 +1197,7 @@ export function ProductCatalogCreateForm({
         {hasStone && (
           <div className="space-y-4">
             {stoneRows.map((row, idx) => {
+              const isDiamondStone = row.stone_type === 'diamond'
               const rowTotalPcs = row.sizes.reduce((total, size) => {
                 const countNum = parseInt(size.count, 10)
                 if (!Number.isFinite(countNum) || countNum <= 0) return total
@@ -1174,8 +1209,13 @@ export function ProductCatalogCreateForm({
                 return total + weightNum
               }, 0)
               const rowTotal = row.sizes.reduce((total, size) => {
+                const pricePerCaratNum = parseFloat(size.price_per_carat)
                 const rateNum = parseFloat(size.rate)
                 const countNum = parseInt(size.count, 10)
+                const weightNum = parseFloat(size.weight)
+                if (!isDiamondStone && Number.isFinite(pricePerCaratNum) && Number.isFinite(weightNum) && weightNum > 0) {
+                  return total + pricePerCaratNum * weightNum
+                }
                 if (!Number.isFinite(rateNum) || !Number.isFinite(countNum) || countNum <= 0) return total
                 return total + rateNum * countNum
               }, 0)
@@ -1187,9 +1227,9 @@ export function ProductCatalogCreateForm({
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <span className="text-xs font-medium text-ink-muted uppercase tracking-wide">
-                        Stone {idx + 1}
+                        {stoneTypeLabel(row.stone_type)} {idx + 1}
                       </span>
-                      <p className="text-xs text-ink-faint mt-1">Add multiple cut / size rows under one stone.</p>
+                      <p className="text-xs text-ink-faint mt-1">Add multiple cut / size rows under one stine.</p>
                     </div>
                     <button
                       type="button"
@@ -1201,7 +1241,7 @@ export function ProductCatalogCreateForm({
                         setStoneRows((prev) => prev.filter((r) => r.key !== row.key))
                       }}
                       className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                      aria-label="Remove stone"
+                      aria-label="Remove stine"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -1209,13 +1249,31 @@ export function ProductCatalogCreateForm({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <label className="block space-y-1">
-                      <span className="text-xs text-ink-muted">Stone name</span>
-                      <input
-                        value={row.name}
-                        onChange={(e) => update({ name: e.target.value })}
+                      <span className="text-xs text-ink-muted">Stine</span>
+                      <select
+                        value={row.stone_type}
+                        onChange={(e) =>
+                          setStoneRows((prev) =>
+                            prev.map((r) =>
+                              r.key !== row.key
+                                ? r
+                                : {
+                                    ...r,
+                                    stone_type: e.target.value as StoneTypeUi,
+                                    sizes:
+                                      e.target.value === 'diamond'
+                                        ? r.sizes.map((size) => ({ ...size, price_per_carat: '', rate: '' }))
+                                        : r.sizes,
+                                  },
+                            ),
+                          )
+                        }
                         className={stoneInp}
-                        placeholder="e.g. Ruby"
-                      />
+                      >
+                        <option value="">Select stine</option>
+                        <option value="diamond">Diamond</option>
+                        <option value="other_than_diamond">Other than diamond</option>
+                      </select>
                     </label>
                     <label className="block space-y-1">
                       <span className="text-xs text-ink-muted">Shape</span>
@@ -1247,6 +1305,9 @@ export function ProductCatalogCreateForm({
                       </div>
                       <div className="w-full rounded-lg border border-divider bg-white px-3 py-2 text-sm text-ink-muted">
                         Total weight: {rowTotalWeight > 0 ? `${rowTotalWeight.toFixed(3)} ct` : '—'}
+                      </div>
+                      <div className="w-full rounded-lg border border-divider bg-white px-3 py-2 text-sm text-ink-muted sm:col-span-2">
+                        Total value: {isDiamondStone ? 'Live diamond price se auto-calculate hoga' : rowTotal > 0 ? `₹${rowTotal.toLocaleString('en-IN')}` : '—'}
                       </div>
                     </div>
                   </div>
@@ -1322,33 +1383,23 @@ export function ProductCatalogCreateForm({
                                   placeholder="0.000"
                                 />
                               </label>
-                              <label className="block space-y-1">
-                                <span className="text-xs text-ink-muted">Price / ct (₹)</span>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  step="0.01"
-                                  value={size.price_per_carat}
-                                  onChange={(e) => updateStoneSize(row.key, size.key, (current) => ({ ...current, price_per_carat: e.target.value, rate: e.target.value }))}
-                                  className={stoneInp}
-                                  placeholder="0"
-                                />
-                              </label>
-                              <label className="block space-y-1">
-                                <span className="text-xs text-ink-muted">Legacy rate (₹)</span>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  step="0.01"
-                                  value={size.rate}
-                                  onChange={(e) => updateStoneSize(row.key, size.key, (current) => ({ ...current, rate: e.target.value }))}
-                                  className={stoneInp}
-                                  placeholder="0"
-                                />
-                              </label>
+                              {!isDiamondStone && (
+                                <label className="block space-y-1">
+                                  <span className="text-xs text-ink-muted">Price / ct (₹)</span>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    step="0.01"
+                                    value={size.price_per_carat}
+                                    onChange={(e) => updateStoneSize(row.key, size.key, (current) => ({ ...current, price_per_carat: e.target.value, rate: e.target.value }))}
+                                    className={stoneInp}
+                                    placeholder="0"
+                                  />
+                                </label>
+                              )}
                             </div>
                             <div className="text-xs text-ink-muted">
-                              Size total: {price != null ? `₹${price.toLocaleString('en-IN')}` : '—'}
+                              Size total: {isDiamondStone ? 'Live diamond price se auto-calculate hoga' : price != null ? `₹${price.toLocaleString('en-IN')}` : '—'}
                             </div>
                           </div>
                         )
@@ -1364,7 +1415,7 @@ export function ProductCatalogCreateForm({
               onClick={() => setStoneRows((prev) => [...prev, newStoneRow()])}
               className="inline-flex items-center gap-1.5 text-sm px-4 py-2 border border-dashed border-teal text-teal rounded-lg hover:bg-teal/5 transition-colors w-full justify-center"
             >
-              <Plus className="w-4 h-4" /> Add stone
+              <Plus className="w-4 h-4" /> Add stine
             </button>
           </div>
         )}

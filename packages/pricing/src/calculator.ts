@@ -46,6 +46,7 @@ export function parsePurityMultiplier(purity: string): number {
 }
 
 export interface PriceInput {
+  /** Net/pure metal weight already entered for this purity row. */
   weightGrams: number
   purity: string
   livePricePerGram999: number
@@ -99,7 +100,8 @@ export function calculateVariantPrice(input: PriceInput): PriceBreakdown {
   const purityMultiplier = parsePurityMultiplier(purity)
 
   const purePrice      = weightGrams * livePricePerGram999
-  const baseMetalPrice = purePrice * purityMultiplier
+  // CMS stores net/pure metal weight per purity row, so do not apply purity again.
+  const baseMetalPrice = purePrice
   const makingCharge   = baseMetalPrice * (makingChargePct / 100)
   const gemPrice       = gemPriceOverride ?? 0
 

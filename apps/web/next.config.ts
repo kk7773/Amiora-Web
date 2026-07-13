@@ -4,7 +4,7 @@ import path from 'path'
 const monorepoRoot = path.resolve(__dirname, '../..')
 
 const nextConfig: NextConfig = {
-  transpilePackages: ['@amiora/ui', '@amiora/database', '@amiora/types'],
+  transpilePackages: ['@amiora/ui', '@amiora/database', '@amiora/types', '@amiora/pricing'],
   outputFileTracingRoot: monorepoRoot,
   ...(process.env.NODE_ENV === 'production' ? { output: 'standalone' as const } : {}),
 

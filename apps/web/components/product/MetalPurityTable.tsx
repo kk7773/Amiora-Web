@@ -76,7 +76,7 @@ export function MetalPurityTable({
               </div>
               <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
                 <div className="flex justify-between gap-2 col-span-2 sm:col-span-1">
-                  <dt className="text-ink-faint">Weight</dt>
+                  <dt className="text-ink-faint">Net metal weight</dt>
                   <dd className="text-ink tabular-nums">{formatWeightGrams(variant.metal_weight_g)}</dd>
                 </div>
                 <div className="flex justify-between gap-2">
@@ -101,15 +101,15 @@ export function MetalPurityTable({
 
       {/* Desktop: full table */}
       <div className="hidden md:block overflow-x-auto">
-        <table className="w-full text-sm border-collapse min-w-[28rem]">
+        <table className="w-full text-sm border-collapse min-w-[52rem]">
           <thead>
             <tr className="bg-surface">
-              <th className="text-left px-3 py-2 border border-divider text-ink">Purity</th>
-              <th className="text-left px-3 py-2 border border-divider text-ink">Weight</th>
-              <th className="text-left px-3 py-2 border border-divider text-ink">Metal Value</th>
-              <th className="text-left px-3 py-2 border border-divider text-ink">Making</th>
-              <th className="text-left px-3 py-2 border border-divider text-ink">Diamond</th>
-              <th className="text-left px-3 py-2 border border-divider text-ink">Total</th>
+              <th className="text-left px-3 py-2 border border-divider text-ink whitespace-nowrap">Purity</th>
+              <th className="text-left px-3 py-2 border border-divider text-ink whitespace-nowrap">Net metal weight</th>
+              <th className="text-left px-3 py-2 border border-divider text-ink whitespace-nowrap">Metal Value</th>
+              <th className="text-left px-3 py-2 border border-divider text-ink whitespace-nowrap">Making</th>
+              <th className="text-left px-3 py-2 border border-divider text-ink whitespace-nowrap">Diamond</th>
+              <th className="text-left px-3 py-2 border border-divider text-ink whitespace-nowrap">Total</th>
             </tr>
           </thead>
           <tbody>
@@ -123,24 +123,24 @@ export function MetalPurityTable({
                     isSelected && 'bg-teal/5 ring-1 ring-inset ring-teal/30',
                   )}
                 >
-                  <td className="px-3 py-2 border border-divider/80 text-ink font-medium">
+                  <td className="px-3 py-2 border border-divider/80 text-ink font-medium whitespace-nowrap">
                     {purityLabel}
                   </td>
-                  <td className="px-3 py-2 border border-divider/80 text-ink tabular-nums">
+                  <td className="px-3 py-2 border border-divider/80 text-ink tabular-nums whitespace-nowrap">
                     {formatWeightGrams(variant.metal_weight_g)}
                   </td>
-                  <td className="px-3 py-2 border border-divider/80 text-ink tabular-nums">
+                  <td className="px-3 py-2 border border-divider/80 text-ink tabular-nums whitespace-nowrap">
                     {breakdown ? formatINR(breakdown.baseMetalPrice) : '—'}
                   </td>
-                  <td className="px-3 py-2 border border-divider/80 text-ink tabular-nums">
+                  <td className="px-3 py-2 border border-divider/80 text-ink tabular-nums whitespace-nowrap">
                     {breakdown ? formatINR(breakdown.makingChargeNet) : '—'}
                   </td>
-                  <td className="px-3 py-2 border border-divider/80 text-ink tabular-nums">
+                  <td className="px-3 py-2 border border-divider/80 text-ink tabular-nums whitespace-nowrap">
                     {breakdown && breakdown.gemPriceNet > 0
                       ? formatINR(breakdown.gemPriceNet)
                       : '—'}
                   </td>
-                  <td className="px-3 py-2 border border-divider/80 text-ink tabular-nums font-medium">
+                  <td className="px-3 py-2 border border-divider/80 text-ink tabular-nums font-medium whitespace-nowrap min-w-[9rem]">
                     {breakdown ? formatINR(breakdown.finalPrice) : '—'}
                   </td>
                 </tr>

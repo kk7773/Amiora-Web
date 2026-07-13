@@ -1,4 +1,4 @@
-import { applyManualPriceOverride, computeCatalogVariantPrice, resolveLiveRate } from '@amiora/pricing'
+import { computeCatalogVariantPrice, resolveLiveRate } from '@amiora/pricing'
 import { getLatestPrices } from '@/lib/pricing/engine'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { CartLine } from '@/lib/coupons/evaluateCoupon'
@@ -199,7 +199,7 @@ export async function priceCartLines(
     const purity = purityMap.get(normalizeLookupKey(variant.purity_id))
     const metalRate = resolveLiveRate(purity?.metal ?? undefined, goldPerGram, silverPerGram)
 
-    const breakdown = applyManualPriceOverride(computeCatalogVariantPrice({
+    const breakdown = computeCatalogVariantPrice({
       metalWeightG: variant.metal_weight_g,
       purityCode: purity?.code ?? '',
       metalType: purity?.metal ?? undefined,
@@ -218,7 +218,7 @@ export async function priceCartLines(
         variant.gem_price_discount_pct != null
           ? Number(variant.gem_price_discount_pct)
           : null,
-    }), variant.price)
+    })
 
     if (!breakdown || breakdown.finalPrice <= 0) {
       errors.push(`${product.name}: price could not be calculated`)

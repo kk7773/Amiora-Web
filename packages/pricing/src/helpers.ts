@@ -43,6 +43,13 @@ export function sumStoneLinesPrice(stoneLines: unknown, diamondPricePerCarat = 0
   for (const row of stoneLines) {
     if (!row || typeof row !== 'object') continue
     const record = row as Record<string, unknown>
+    const stoneType =
+      typeof record.stone_type === 'string'
+        ? record.stone_type.trim().toLowerCase()
+        : typeof record.name === 'string'
+          ? record.name.trim().toLowerCase()
+          : ''
+    const isDiamondStone = stoneType === 'diamond'
     const sizes = record.sizes
     if (Array.isArray(sizes)) {
       for (const size of sizes) {
@@ -67,6 +74,7 @@ export function sumStoneLinesPrice(stoneLines: unknown, diamondPricePerCarat = 0
           continue
         }
         if (
+          isDiamondStone &&
           diamondPricePerCarat > 0 &&
           typeof weight === 'number' &&
           Number.isFinite(weight) &&
@@ -109,6 +117,7 @@ export function sumStoneLinesPrice(stoneLines: unknown, diamondPricePerCarat = 0
       continue
     }
     if (
+      isDiamondStone &&
       diamondPricePerCarat > 0 &&
       typeof weight === 'number' &&
       Number.isFinite(weight) &&
@@ -119,6 +128,7 @@ export function sumStoneLinesPrice(stoneLines: unknown, diamondPricePerCarat = 0
     }
     const totalWeight = record.total_weight
     if (
+      isDiamondStone &&
       diamondPricePerCarat > 0 &&
       typeof totalWeight === 'number' &&
       Number.isFinite(totalWeight) &&

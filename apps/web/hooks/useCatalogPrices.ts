@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import { applyManualPriceOverride, computeCatalogVariantPrice, type PriceBreakdown } from '@amiora/pricing'
+import { computeCatalogVariantPrice, type PriceBreakdown } from '@amiora/pricing'
 import type { CatalogPurity, CatalogVariantRow } from '@/components/product/VariantSelector'
 import { usePricing } from './usePricing'
 
@@ -38,7 +38,7 @@ export function useCatalogPrices(
     for (const variant of variants) {
       if (!variant.is_active) continue
       const purity = purityById.get(variant.purity_id)
-      const breakdown = applyManualPriceOverride(computeCatalogVariantPrice({
+      const breakdown = computeCatalogVariantPrice({
         metalWeightG: variant.metal_weight_g,
         purityCode: purity?.code ?? '',
         metalType: purity?.metal,
@@ -49,7 +49,7 @@ export function useCatalogPrices(
         diamondPricePerCarat: diamondPerCarat,
         makingChargeDiscountPct: ctx.makingChargeDiscountPct,
         gemPriceDiscountPct: ctx.gemPriceDiscountPct,
-      }), variant.price)
+      })
       if (breakdown) map[variant.id] = breakdown
     }
     return map

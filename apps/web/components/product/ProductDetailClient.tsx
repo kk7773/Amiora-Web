@@ -330,16 +330,16 @@ export function ProductDetailClient({
 
           <div className="space-y-1">
             <div className="flex flex-wrap items-baseline gap-3">
-              <p className="font-display text-2xl sm:text-3xl text-ink tabular-nums">
+              <p className="shrink-0 whitespace-nowrap font-display text-2xl sm:text-3xl text-ink tabular-nums">
                 {displayPrice > 0 ? formatINR(displayPrice) : '—'}
               </p>
               {activeVariant && (
-                <span className="text-xs text-ink-muted font-mono">{activeVariant.sku}</span>
+                <span className="min-w-0 break-all text-xs text-ink-muted font-mono">{activeVariant.sku}</span>
               )}
             </div>
             {activeVariant?.metal_weight_g != null && (
               <p className="text-sm text-ink-muted">
-                Metal weight: <span className="text-ink tabular-nums">{formatWeightGrams(activeVariant.metal_weight_g)}</span>
+                Net metal weight: <span className="text-ink tabular-nums">{formatWeightGrams(activeVariant.metal_weight_g)}</span>
               </p>
             )}
           </div>

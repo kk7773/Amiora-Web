@@ -8,12 +8,27 @@ export type StoneSizeRecord = {
 }
 
 export type StoneLineRecord = {
+  stone_type?: 'diamond' | 'other_than_diamond' | null
   name: string
   shape: string
   color: string
   sizes: StoneSizeRecord[]
   total_weight: number | null
   price_inr: number | null
+}
+
+function normalizeStoneType(value: unknown): 'diamond' | 'other_than_diamond' | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim().toLowerCase()
+  if (normalized === 'diamond') return 'diamond'
+  if (
+    normalized === 'other_than_diamond' ||
+    normalized === 'other than diamond' ||
+    normalized === 'other-than-diamond'
+  ) {
+    return 'other_than_diamond'
+  }
+  return null
 }
 
 function parseOptionalNumber(value: unknown): number | null {
@@ -66,6 +81,7 @@ export function normalizeStoneLines(input: unknown): StoneLineRecord[] {
   for (const row of input) {
     if (!row || typeof row !== 'object') continue
     const r = row as Record<string, unknown>
+    const stone_type = normalizeStoneType(r.stone_type ?? r.name)
     const name = typeof r.name === 'string' ? r.name.trim() : ''
     const shape = typeof r.shape === 'string' ? r.shape.trim() : ''
     const color = typeof r.color === 'string' ? r.color.trim() : ''
@@ -118,6 +134,7 @@ export function normalizeStoneLines(input: unknown): StoneLineRecord[] {
     }, 0)
 
     out.push({
+      stone_type,
       name,
       shape,
       color,

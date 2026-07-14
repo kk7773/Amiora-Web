@@ -131,10 +131,26 @@ export type ProductCatalogCreateFormProps = {
 
 type CellState = {
   id?: string
-  metal_weight_g: string
-  price: string
+  gross_weight_g: string
   stock_qty: string
   is_active: boolean
+}
+
+function purityCodeToWeightMultiplier(code: string): number {
+  const normalized = code.trim().toLowerCase()
+  if (!normalized) return 1
+
+  if (/^\d{3}$/.test(normalized)) {
+    const fineness = parseInt(normalized, 10)
+    return Number.isFinite(fineness) && fineness > 0 ? fineness / 1000 : 1
+  }
+
+  const karat = parseInt(normalized, 10)
+  if (Number.isFinite(karat) && karat > 0 && karat <= 24) {
+    return karat / 24
+  }
+
+  return 1
 }
 
 function buildCellKey(colorId: string, purityId: string) {
@@ -240,7 +256,11 @@ function VariantColorMedia({
   )
 }
 
-function buildCellState(matrix: MatrixSeedCell[], fallbackWeightG?: number | null) {
+function buildCellState(
+  matrix: MatrixSeedCell[],
+  purityLookup: Map<string, { code: string }>,
+  fallbackWeightG?: number | null,
+) {
   const fallback =
     fallbackWeightG != null && Number.isFinite(Number(fallbackWeightG))
       ? String(Number(fallbackWeightG))
@@ -250,14 +270,15 @@ function buildCellState(matrix: MatrixSeedCell[], fallbackWeightG?: number | nul
       buildCellKey(cell.color_id, cell.purity_id),
       {
         id: cell.id,
-        metal_weight_g:
-          cell.metal_weight_g != null && Number.isFinite(Number(cell.metal_weight_g))
-            ? String(Number(cell.metal_weight_g))
-            : fallback,
-        price:
-          cell.price != null && Number.isFinite(Number(cell.price)) && Number(cell.price) > 0
-            ? String(Number(cell.price))
-            : '',
+        gross_weight_g: (() => {
+          if (cell.metal_weight_g != null && Number.isFinite(Number(cell.metal_weight_g))) {
+            const purityCode = purityLookup.get(cell.purity_id)?.code ?? ''
+            const multiplier = purityCodeToWeightMultiplier(purityCode)
+            const grossWeight = multiplier > 0 ? Number(cell.metal_weight_g) / multiplier : Number(cell.metal_weight_g)
+            return String(Math.round(grossWeight * 1000) / 1000)
+          }
+          return fallback
+        })(),
         stock_qty: String(cell.stock_qty),
         is_active: cell.is_active,
       } satisfies CellState,
@@ -435,6 +456,10 @@ export function ProductCatalogCreateForm({
         .sort((a, b) => a.display_order - b.display_order || a.code.localeCompare(b.code)),
     [normalizedPurities, productMetalType],
   )
+  const purityLookup = useMemo(
+    () => new Map(normalizedPurities.map((purity) => [purity.id, { code: purity.code }])),
+    [normalizedPurities],
+  )
 
   const hasMetalColors = metalColors.length > 0
   const hasMetalPurities = metalPurities.length > 0
@@ -506,7 +531,7 @@ export function ProductCatalogCreateForm({
   )
 
   const [cells, setCells] = useState<Record<string, CellState>>(
-    buildCellState(initialData?.matrix ?? [], initialData?.product.metal_weight_g),
+    buildCellState(initialData?.matrix ?? [], purityLookup, initialData?.product.metal_weight_g),
   )
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
@@ -722,7 +747,7 @@ export function ProductCatalogCreateForm({
   function setCellValue(colorId: string, purityId: string, updater: (current: CellState) => CellState) {
     const key = buildCellKey(colorId, purityId)
     setCells((prev) => {
-      const current = prev[key] ?? { metal_weight_g: '', price: '', stock_qty: '1', is_active: true }
+      const current = prev[key] ?? { gross_weight_g: '', stock_qty: '1', is_active: true }
       return { ...prev, [key]: updater(current) }
     })
   }
@@ -808,7 +833,6 @@ export function ProductCatalogCreateForm({
       id?: string
       color_id: string
       purity_id: string
-      price?: number
       stock_qty: number
       is_active: boolean
       metal_weight_g: number
@@ -818,25 +842,26 @@ export function ProductCatalogCreateForm({
       for (const purity of puritiesForProduct) {
         const current = cells[buildCellKey(row.color_id, purity.id)]
         if (!current) continue
-        const weightTrim = current.metal_weight_g.trim()
-        const priceTrim = current.price.trim()
-        const weightParsed = weightTrim !== '' ? parseFloat(weightTrim) : NaN
-        const priceParsed = priceTrim !== '' ? parseFloat(priceTrim) : NaN
-        if (!Number.isFinite(weightParsed) || weightParsed <= 0) continue
+        const grossWeightTrim = current.gross_weight_g.trim()
+        const grossWeightParsed = grossWeightTrim !== '' ? parseFloat(grossWeightTrim) : NaN
+        const multiplier = purityCodeToWeightMultiplier(purity.code)
+        const pureWeight = Number.isFinite(grossWeightParsed) && grossWeightParsed > 0
+          ? Math.round(grossWeightParsed * multiplier * 1000) / 1000
+          : NaN
+        if (!Number.isFinite(pureWeight) || pureWeight <= 0) continue
         matrix.push({
           id: current.id,
           color_id: row.color_id,
           purity_id: purity.id,
-          ...(Number.isFinite(priceParsed) && priceParsed > 0 ? { price: priceParsed } : {}),
           stock_qty: Math.max(0, Math.floor(Number(current.stock_qty) || 0)),
           is_active: current.is_active,
-          metal_weight_g: weightParsed,
+          metal_weight_g: pureWeight,
         })
       }
     }
 
     if (matrix.length === 0) {
-      toast.error('Enter at least one variant with metal weight (g)')
+      toast.error('Enter at least one variant with product weight (g)')
       return
     }
 
@@ -1522,7 +1547,7 @@ export function ProductCatalogCreateForm({
       <section className="bg-white rounded-xl border border-divider p-6 space-y-4 overflow-x-auto">
         <h3 className="font-display text-lg text-deep-teal">Weight &amp; stock matrix</h3>
         <p className="text-sm text-ink-muted">
-          Manual price, if entered, overrides the auto-calculated variant price everywhere. Leave it empty to keep live formula pricing.
+          Top field mein product weight dalo. Uske neeche pure metal weight purity ke hisaab se auto-calculate hoga, aur pricing usi pure weight se niklegi.
         </p>
         {!hasMetalPurities ? (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -1558,41 +1583,36 @@ export function ProductCatalogCreateForm({
                     )}
                     {puritiesForProduct.map((purity) => {
                       const cell = cells[buildCellKey(row.color_id, purity.id)] ?? {
-                        metal_weight_g: '',
-                        price: '',
+                        gross_weight_g: '',
                         stock_qty: '1',
                         is_active: true,
                       }
+                      const grossWeightNum =
+                        cell.gross_weight_g.trim() !== '' ? parseFloat(cell.gross_weight_g) : NaN
+                      const purityMultiplier = purityCodeToWeightMultiplier(purity.code)
+                      const pureMetalWeight =
+                        Number.isFinite(grossWeightNum) && grossWeightNum > 0
+                          ? Math.round(grossWeightNum * purityMultiplier * 1000) / 1000
+                          : null
                       return (
                         <td key={purity.id} className="px-2 py-2 border-b align-top min-w-[11rem]">
                           <input
                             type="number"
                             min={0}
                             step="0.001"
-                            placeholder="Weight (g)"
-                            value={cell.metal_weight_g}
+                            placeholder="Product weight (g)"
+                            value={cell.gross_weight_g}
                             onChange={(e) =>
                               setCellValue(row.color_id, purity.id, (current) => ({
                                 ...current,
-                                metal_weight_g: e.target.value,
+                                gross_weight_g: e.target.value,
                               }))
                             }
                             className="w-full border rounded px-2 py-1 mb-2"
                           />
-                          <input
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            placeholder="Manual price (₹)"
-                            value={cell.price}
-                            onChange={(e) =>
-                              setCellValue(row.color_id, purity.id, (current) => ({
-                                ...current,
-                                price: e.target.value,
-                              }))
-                            }
-                            className="w-full border rounded px-2 py-1 mb-2"
-                          />
+                          <div className="w-full border rounded px-2 py-1 mb-2 bg-surface text-sm text-ink-muted">
+                            Pure metal weight: {pureMetalWeight != null ? `${pureMetalWeight.toFixed(3)} g` : '—'}
+                          </div>
                           <input
                             type="number"
                             min={0}

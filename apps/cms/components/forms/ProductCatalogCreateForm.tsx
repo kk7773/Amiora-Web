@@ -132,6 +132,7 @@ export type ProductCatalogCreateFormProps = {
 type CellState = {
   id?: string
   gross_weight_g: string
+  manual_price: string
   stock_qty: string
   is_active: boolean
 }
@@ -279,6 +280,10 @@ function buildCellState(
           }
           return fallback
         })(),
+        manual_price:
+          typeof cell.price === 'number' && Number.isFinite(cell.price) && cell.price > 0
+            ? String(cell.price)
+            : '',
         stock_qty: String(cell.stock_qty),
         is_active: cell.is_active,
       } satisfies CellState,
@@ -748,7 +753,11 @@ export function ProductCatalogCreateForm({
     const key = buildCellKey(colorId, purityId)
     setCells((prev) => {
       const current = prev[key] ?? { gross_weight_g: '', stock_qty: '1', is_active: true }
-      return { ...prev, [key]: updater(current) }
+      const normalizedCurrent =
+        'manual_price' in current
+          ? current
+          : { ...current, manual_price: '' }
+      return { ...prev, [key]: updater(normalizedCurrent) }
     })
   }
 
@@ -833,6 +842,7 @@ export function ProductCatalogCreateForm({
       id?: string
       color_id: string
       purity_id: string
+      price?: number
       stock_qty: number
       is_active: boolean
       metal_weight_g: number
@@ -844,6 +854,8 @@ export function ProductCatalogCreateForm({
         if (!current) continue
         const grossWeightTrim = current.gross_weight_g.trim()
         const grossWeightParsed = grossWeightTrim !== '' ? parseFloat(grossWeightTrim) : NaN
+        const manualPriceTrim = current.manual_price.trim()
+        const manualPrice = manualPriceTrim !== '' ? parseFloat(manualPriceTrim) : NaN
         const multiplier = purityCodeToWeightMultiplier(purity.code)
         const pureWeight = Number.isFinite(grossWeightParsed) && grossWeightParsed > 0
           ? Math.round(grossWeightParsed * multiplier * 1000) / 1000
@@ -853,6 +865,7 @@ export function ProductCatalogCreateForm({
           id: current.id,
           color_id: row.color_id,
           purity_id: purity.id,
+          price: Number.isFinite(manualPrice) && manualPrice > 0 ? Math.round(manualPrice * 100) / 100 : undefined,
           stock_qty: Math.max(0, Math.floor(Number(current.stock_qty) || 0)),
           is_active: current.is_active,
           metal_weight_g: pureWeight,
@@ -1584,6 +1597,7 @@ export function ProductCatalogCreateForm({
                     {puritiesForProduct.map((purity) => {
                       const cell = cells[buildCellKey(row.color_id, purity.id)] ?? {
                         gross_weight_g: '',
+                        manual_price: '',
                         stock_qty: '1',
                         is_active: true,
                       }
@@ -1613,6 +1627,20 @@ export function ProductCatalogCreateForm({
                           <div className="w-full border rounded px-2 py-1 mb-2 bg-surface text-sm text-ink-muted">
                             Pure metal weight: {pureMetalWeight != null ? `${pureMetalWeight.toFixed(3)} g` : '—'}
                           </div>
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            placeholder="Manual price (₹)"
+                            value={cell.manual_price}
+                            onChange={(e) =>
+                              setCellValue(row.color_id, purity.id, (current) => ({
+                                ...current,
+                                manual_price: e.target.value,
+                              }))
+                            }
+                            className="w-full border rounded px-2 py-1 mb-2"
+                          />
                           <input
                             type="number"
                             min={0}

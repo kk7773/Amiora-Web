@@ -1,6 +1,8 @@
 import { calculateVariantPrice, type PriceBreakdown } from './calculator'
 
 export type MetalType = 'gold' | 'silver' | 'platinum' | string
+export type GoldPurityRateKey = '09' | '14' | '18' | '22'
+export type GoldPurityRates = Partial<Record<GoldPurityRateKey, number | null>>
 
 const DEFAULT_GOLD_PER_GRAM   = 7200
 const DEFAULT_SILVER_PER_GRAM = 90
@@ -20,10 +22,31 @@ export function purityCodeToCalcInput(code: string, metal?: MetalType): string {
   return c
 }
 
+export function normalizeGoldPurityRateKey(code: string): GoldPurityRateKey | null {
+  const c = code.trim().toLowerCase()
+  if (!c) return null
+  if (c === '9' || c === '09' || c === '9k' || c === '9kt') return '09'
+  if (c === '14' || c === '14k' || c === '14kt') return '14'
+  if (c === '18' || c === '18k' || c === '18kt') return '18'
+  if (c === '22' || c === '22k' || c === '22kt') return '22'
+  return null
+}
+
+function getGoldPurityMultiplier(code: string): number | null {
+  const normalized = normalizeGoldPurityRateKey(code)
+  if (normalized === '09') return 9 / 24
+  if (normalized === '14') return 14 / 24
+  if (normalized === '18') return 18 / 24
+  if (normalized === '22') return 22 / 24
+  return null
+}
+
 export function resolveLiveRate(
   metal: MetalType | undefined,
   goldPerGram: number | null | undefined,
   silverPerGram: number | null | undefined,
+  purityCode?: string,
+  goldPurityRates?: GoldPurityRates,
 ): number {
   const isSilver = (metal ?? '').toLowerCase() === 'silver'
   if (isSilver) {
@@ -31,6 +54,17 @@ export function resolveLiveRate(
       ? silverPerGram
       : DEFAULT_SILVER_PER_GRAM
   }
+
+  const purityKey = purityCode ? normalizeGoldPurityRateKey(purityCode) : null
+  const manualPurityRate = purityKey ? goldPurityRates?.[purityKey] : null
+  if (manualPurityRate != null && Number.isFinite(manualPurityRate) && manualPurityRate > 0) {
+    const multiplier = purityKey ? getGoldPurityMultiplier(purityKey) : null
+    if (multiplier != null && multiplier > 0) {
+      return Math.round((manualPurityRate / multiplier) * 100) / 100
+    }
+    return manualPurityRate
+  }
+
   return goldPerGram != null && Number.isFinite(goldPerGram) && goldPerGram > 0
     ? goldPerGram
     : DEFAULT_GOLD_PER_GRAM
@@ -160,6 +194,7 @@ export interface ComputeCatalogVariantInput {
   makingChargePct?: number
   stoneLines?: unknown
   goldPerGram: number | null | undefined
+  goldPurityRates?: GoldPurityRates
   silverPerGram: number | null | undefined
   diamondPricePerCarat?: number | null | undefined
   makingChargeDiscountPct?: number
@@ -172,7 +207,13 @@ export function computeCatalogVariantPrice(input: ComputeCatalogVariantInput): P
   const weight = input.metalWeightG
   if (weight == null || !Number.isFinite(weight) || weight <= 0) return null
 
-  const liveRate = resolveLiveRate(input.metalType, input.goldPerGram, input.silverPerGram)
+  const liveRate = resolveLiveRate(
+    input.metalType,
+    input.goldPerGram,
+    input.silverPerGram,
+    input.purityCode,
+    input.goldPurityRates,
+  )
   const purity = purityCodeToCalcInput(input.purityCode, input.metalType)
   const gemTotal = sumStoneLinesPrice(input.stoneLines, input.diamondPricePerCarat ?? 0)
 

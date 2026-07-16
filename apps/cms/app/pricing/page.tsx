@@ -3,6 +3,24 @@ import { PricingClient } from './PricingClient'
 
 export const dynamic = 'force-dynamic'
 
+function readGoldPurityRates(meta: unknown) {
+  if (!meta || typeof meta !== 'object') return { '09': null, '14': null, '18': null, '22': null }
+  const source = (meta as { goldPurityRates?: unknown }).goldPurityRates
+  if (!source || typeof source !== 'object') return { '09': null, '14': null, '18': null, '22': null }
+
+  const read = (key: '09' | '14' | '18' | '22') => {
+    const value = (source as Record<string, unknown>)[key]
+    return value != null && Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : null
+  }
+
+  return {
+    '09': read('09'),
+    '14': read('14'),
+    '18': read('18'),
+    '22': read('22'),
+  }
+}
+
 function readDiamondFromAuditMeta(meta: unknown): number {
   if (!meta || typeof meta !== 'object') return 0
   const diamond = (meta as { diamond?: unknown }).diamond
@@ -45,6 +63,7 @@ export default async function PricingPage() {
   ])
 
   const fallbackDiamond = readDiamondFromAuditMeta(diamondAuditRes.data?.meta)
+  const goldPurityRates = readGoldPurityRates(diamondAuditRes.data?.meta)
 
   return (
     <PricingClient
@@ -54,6 +73,7 @@ export default async function PricingPage() {
       goldUpdatedAt={goldRes.data?.fetched_at ?? null}
       silverUpdatedAt={silverRes.data?.fetched_at ?? null}
       diamondUpdatedAt={diamondRes.data?.fetched_at ?? diamondAuditRes.data?.created_at ?? null}
+      goldPurityRates={goldPurityRates}
     />
   )
 }

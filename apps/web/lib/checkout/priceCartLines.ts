@@ -1,4 +1,4 @@
-import { computeCatalogVariantPrice, resolveLiveRate } from '@amiora/pricing'
+import { applyManualPriceOverride, computeCatalogVariantPrice, resolveLiveRate } from '@amiora/pricing'
 import { getLatestPrices } from '@/lib/pricing/engine'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { CartLine } from '@/lib/coupons/evaluateCoupon'
@@ -73,10 +73,11 @@ export async function priceCartLines(
     return { lines, components: { making: 0, gem: 0 }, errors }
   }
 
-  const prices = await getLatestPrices().catch(() => ({ gold: null, silver: null, diamond: null }))
+  const prices = await getLatestPrices().catch(() => ({ gold: null, silver: null, diamond: null, goldPurityRates: {} }))
   const goldPerGram = prices.gold?.pricePerGram ?? 7200
   const silverPerGram = prices.silver?.pricePerGram ?? 90
   const diamondPerCarat = prices.diamond?.pricePerGram ?? 0
+  const goldPurityRates = prices.goldPurityRates ?? {}
 
   const requestedProductIds = [...new Set(items.map((i) => i.product_id))]
   const variantIds = [...new Set(items.map((i) => i.variant_id).filter(Boolean))]
@@ -197,7 +198,7 @@ export async function priceCartLines(
     }
 
     const purity = purityMap.get(normalizeLookupKey(variant.purity_id))
-    const metalRate = resolveLiveRate(purity?.metal ?? undefined, goldPerGram, silverPerGram)
+    const metalRate = resolveLiveRate(purity?.metal ?? undefined, goldPerGram, silverPerGram, purity?.code ?? '', goldPurityRates)
 
     const breakdown = computeCatalogVariantPrice({
       metalWeightG: variant.metal_weight_g,
@@ -206,6 +207,7 @@ export async function priceCartLines(
       makingChargePct: Number(product.making_charge_pct ?? 8),
       stoneLines: product.stone_lines,
       goldPerGram,
+      goldPurityRates,
       silverPerGram,
       diamondPricePerCarat: diamondPerCarat,
       makingChargeDiscountPct: Number(product.making_charge_discount_pct ?? 0),
@@ -215,19 +217,20 @@ export async function priceCartLines(
           ? Number(variant.making_charge_discount_pct)
           : null,
       variantGemPriceDiscountPct:
-        variant.gem_price_discount_pct != null
+      variant.gem_price_discount_pct != null
           ? Number(variant.gem_price_discount_pct)
           : null,
     })
+    const effectiveBreakdown = applyManualPriceOverride(breakdown, variant.price)
 
-    if (!breakdown || breakdown.finalPrice <= 0) {
+    if (!effectiveBreakdown || effectiveBreakdown.finalPrice <= 0) {
       errors.push(`${product.name}: price could not be calculated`)
       continue
     }
 
-    const unitPrice = Math.round(breakdown.finalPrice)
-    making += breakdown.makingChargeNet * qty
-    gem += breakdown.gemPriceNet * qty
+    const unitPrice = Math.round(effectiveBreakdown.finalPrice)
+    making += effectiveBreakdown.makingChargeNet * qty
+    gem += effectiveBreakdown.gemPriceNet * qty
 
     lines.push({
       product_id: resolvedProductId,

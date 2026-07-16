@@ -16,7 +16,7 @@
 
 import { unstable_cache } from 'next/cache'
 import { createServerClient } from '@amiora/database'
-import { calculateVariantPrice, type PriceBreakdown } from '@amiora/pricing'
+import { normalizeGoldPurityRateKey, calculateVariantPrice, type GoldPurityRates, type PriceBreakdown } from '@amiora/pricing'
 import type { LivePrice } from '@amiora/types'
 
 const GOLD_API_BASE = 'https://www.goldapi.io/api'
@@ -44,6 +44,20 @@ function readDiamondManualRate(meta: unknown): number | null {
   if (!meta || typeof meta !== 'object') return null
   const diamond = (meta as { diamond?: unknown }).diamond
   return diamond != null && Number.isFinite(Number(diamond)) && Number(diamond) > 0 ? Number(diamond) : null
+}
+
+function readGoldPurityManualRates(meta: unknown): GoldPurityRates {
+  if (!meta || typeof meta !== 'object') return {}
+  const source = (meta as { goldPurityRates?: unknown }).goldPurityRates
+  if (!source || typeof source !== 'object') return {}
+
+  const result: GoldPurityRates = {}
+  for (const [rawKey, rawValue] of Object.entries(source as Record<string, unknown>)) {
+    const key = normalizeGoldPurityRateKey(rawKey)
+    const value = Number(rawValue)
+    if (key && Number.isFinite(value) && value > 0) result[key] = value
+  }
+  return result
 }
 
 /**
@@ -166,7 +180,7 @@ export async function fetchAndStorePrices(): Promise<{
  * Use tag 'live-prices' to revalidate manually after a manual price update.
  */
 export const getLatestPrices = unstable_cache(
-  async (): Promise<{ gold: LivePrice | null; silver: LivePrice | null; diamond: LivePrice | null }> => {
+  async (): Promise<{ gold: LivePrice | null; silver: LivePrice | null; diamond: LivePrice | null; goldPurityRates: GoldPurityRates }> => {
     const supabase = createServerClient()
 
     const [goldResult, silverResult, diamondResult, diamondAuditResult] = await Promise.all([
@@ -222,11 +236,13 @@ export const getLatestPrices = unstable_cache(
             fetchedAt: diamondAuditResult.data?.created_at ?? new Date(0).toISOString(),
           } satisfies LivePrice)
         : null
+    const goldPurityRates = readGoldPurityManualRates(diamondAuditResult.data?.meta)
 
     return {
       gold:   toLivePrice(goldResult.data),
       silver: toLivePrice(silverResult.data),
       diamond: toLivePrice(diamondResult.data) ?? diamondFallback,
+      goldPurityRates,
     }
   },
   ['latest-prices'],

@@ -272,6 +272,8 @@ export function ProductDetailClient({
         catalog.purities.find((p) => p.id === activeVariant.purity_id)?.metal,
         goldPerGram,
         silverPerGram,
+        catalog.purities.find((p) => p.id === activeVariant.purity_id)?.code ?? '',
+        pricingContext.goldPurityRates,
       ),
     })
     toast.success('Added to cart!', { description: product.name })

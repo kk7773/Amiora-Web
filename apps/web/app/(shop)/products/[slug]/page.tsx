@@ -573,7 +573,7 @@ export default async function ProductPage({ params }: Props) {
     ).then((r) => (r.data ?? []) as SuggestedProduct[]).catch(() => [])
   }
 
-  const { gold: liveGold, silver: liveSilver, diamond: liveDiamond } = await getLatestPrices()
+  const { gold: liveGold, silver: liveSilver, diamond: liveDiamond, goldPurityRates } = await getLatestPrices()
   const goldPrice = liveGold?.pricePerGram ?? 7200
   const silverPrice = liveSilver?.pricePerGram ?? 90
   const diamondPrice = liveDiamond?.pricePerGram ?? 0
@@ -621,6 +621,7 @@ export default async function ProductPage({ params }: Props) {
     silverPrice,
     purityMapForSchema,
     diamondPrice,
+    goldPurityRates,
   ).basePrice
 
   const collectionMeta = product.collection as { name: string; slug: string } | null
@@ -692,6 +693,7 @@ export default async function ProductPage({ params }: Props) {
           initialGoldPerGram: goldPrice,
           initialSilverPerGram: silverPrice,
           initialDiamondPerCarat: diamondPrice,
+          goldPurityRates,
         }}
       />
 

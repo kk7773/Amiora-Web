@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import { computeCatalogVariantPrice, type PriceBreakdown } from '@amiora/pricing'
+import { applyManualPriceOverride, computeCatalogVariantPrice, type GoldPurityRates, type PriceBreakdown } from '@amiora/pricing'
 import type { CatalogPurity, CatalogVariantRow } from '@/components/product/VariantSelector'
 import { usePricing } from './usePricing'
 
@@ -13,6 +13,7 @@ export type CatalogPricingContext = {
   initialGoldPerGram: number
   initialSilverPerGram: number
   initialDiamondPerCarat: number
+  goldPurityRates: GoldPurityRates
 }
 
 export function useCatalogPrices(
@@ -45,12 +46,14 @@ export function useCatalogPrices(
         makingChargePct: ctx.makingChargePct,
         stoneLines: ctx.stoneLines,
         goldPerGram,
+        goldPurityRates: ctx.goldPurityRates,
         silverPerGram,
         diamondPricePerCarat: diamondPerCarat,
         makingChargeDiscountPct: ctx.makingChargeDiscountPct,
         gemPriceDiscountPct: ctx.gemPriceDiscountPct,
       })
-      if (breakdown) map[variant.id] = breakdown
+      const effectiveBreakdown = applyManualPriceOverride(breakdown, variant.price)
+      if (effectiveBreakdown) map[variant.id] = effectiveBreakdown
     }
     return map
   }, [
@@ -60,6 +63,7 @@ export function useCatalogPrices(
     ctx.makingChargeDiscountPct,
     ctx.gemPriceDiscountPct,
     ctx.stoneLines,
+    ctx.goldPurityRates,
     goldPerGram,
     silverPerGram,
     diamondPerCarat,

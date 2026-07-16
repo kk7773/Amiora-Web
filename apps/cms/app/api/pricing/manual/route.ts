@@ -6,6 +6,7 @@ interface ManualPriceBody {
   gold?:   number | null
   silver?: number | null
   diamond?: number | null
+  goldPurityRates?: Record<string, number | null | undefined>
 }
 
 export async function POST(req: NextRequest) {
@@ -13,11 +14,17 @@ export async function POST(req: NextRequest) {
   if (perm.ok === false) return perm.response
   try {
     const body = (await req.json()) as ManualPriceBody
-    const { gold, silver, diamond } = body
+    const { gold, silver, diamond, goldPurityRates } = body
+    const normalizedGoldPurityRates = Object.fromEntries(
+      Object.entries(goldPurityRates ?? {})
+        .map(([key, value]) => [key, value != null && Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : null]),
+    )
 
-    if ((!gold || gold <= 0) && (!silver || silver <= 0) && (!diamond || diamond <= 0)) {
+    const hasGoldPurityRate = Object.values(normalizedGoldPurityRates).some((value) => value != null && value > 0)
+
+    if ((!gold || gold <= 0) && (!silver || silver <= 0) && (!diamond || diamond <= 0) && !hasGoldPurityRate) {
       return NextResponse.json(
-        { error: 'Provide at least one valid price (gold, silver, or diamond > 0)' },
+        { error: 'Provide at least one valid price (gold, silver, diamond, or gold purity rates > 0)' },
         { status: 400 }
       )
     }
@@ -69,10 +76,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to save one or more prices', details: failed }, { status: 500 })
     }
 
-    await writeAuditLog({ adminId: perm.adminId, action: 'update_pricing_manual', resource: 'pricing', meta: { gold, silver, diamond } })
+    await writeAuditLog({
+      adminId: perm.adminId,
+      action: 'update_pricing_manual',
+      resource: 'pricing',
+      meta: { gold, silver, diamond, goldPurityRates: normalizedGoldPurityRates },
+    })
     return NextResponse.json({
       success: true,
-      updated: { gold: gold ?? null, silver: silver ?? null, diamond: diamond ?? null },
+      updated: { gold: gold ?? null, silver: silver ?? null, diamond: diamond ?? null, goldPurityRates: normalizedGoldPurityRates },
       at: now,
     })
   } catch (err: unknown) {

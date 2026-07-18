@@ -102,6 +102,13 @@ export async function fetchActiveProductCards(
   supabase: SupabaseClient,
   options: FetchActiveProductCardsOptions = {},
 ): Promise<{ products: ProductCardRaw[]; error: string | null }> {
+  // `options.apply` is a function and cannot be represented in the cache key.
+  // If we cache these calls, distinct queries collapse onto the same key and
+  // concurrent requests can break Next's cache lock in dev/runtime.
+  if (options.apply) {
+    return fetchActiveProductCardsImpl(supabase, options)
+  }
+
   const cacheKey = JSON.stringify(options)
 
   return unstable_cache(

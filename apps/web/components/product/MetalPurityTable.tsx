@@ -1,7 +1,5 @@
 'use client'
 
-import { useMemo } from 'react'
-import { cn } from '@amiora/ui'
 import { formatINR, type PriceBreakdown } from '@amiora/pricing'
 import type { CatalogPurity, CatalogVariantRow } from './VariantSelector'
 
@@ -10,144 +8,176 @@ function formatWeightGrams(value: number | null | undefined): string {
   return `${value.toFixed(3)} g`
 }
 
+function purityMultiplier(code: string | null | undefined): number | null {
+  const normalized = (code ?? '').trim().toLowerCase()
+  if (!normalized) return null
+  if (normalized === '22' || normalized === '22k' || normalized === '22kt') return 22 / 24
+  if (normalized === '18' || normalized === '18k' || normalized === '18kt') return 18 / 24
+  if (normalized === '14' || normalized === '14k' || normalized === '14kt') return 14 / 24
+  if (normalized === '09' || normalized === '9' || normalized === '9k' || normalized === '9kt') return 9 / 24
+  if (normalized === '925' || normalized === '92.5') return 0.925
+  if (normalized === '835') return 0.835
+  return null
+}
+
+function formatStoneValue(value: number): string {
+  return value > 0 ? formatINR(value) : '—'
+}
+
+type StoneLineSummary = {
+  label: string
+  totalWeight: number | null
+  totalPrice: number | null
+}
+
+function summarizeStoneLines(stoneLines: unknown): StoneLineSummary[] {
+  if (!Array.isArray(stoneLines)) return []
+
+  return stoneLines
+    .map((row, index) => {
+      if (!row || typeof row !== 'object') return null
+      const record = row as Record<string, unknown>
+      const label =
+        typeof record.stone_type === 'string' && record.stone_type.trim()
+          ? record.stone_type.trim()
+          : typeof record.name === 'string' && record.name.trim()
+            ? record.name.trim()
+            : `Stone ${index + 1}`
+
+      const totalWeightRaw = record.total_weight
+      const totalWeight =
+        typeof totalWeightRaw === 'number' && Number.isFinite(totalWeightRaw) && totalWeightRaw > 0
+          ? totalWeightRaw
+          : null
+
+      const totalPriceRaw = record.price_inr
+      const totalPrice =
+        typeof totalPriceRaw === 'number' && Number.isFinite(totalPriceRaw) && totalPriceRaw > 0
+          ? totalPriceRaw
+          : null
+
+      return {
+        label: label.replace(/[_-]+/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase()),
+        totalWeight,
+        totalPrice,
+      }
+    })
+    .filter((row): row is StoneLineSummary => row != null)
+}
+
 interface MetalPurityTableProps {
-  colorId: string
-  selectedPurityId: string | null
-  purities: CatalogPurity[]
-  variants: CatalogVariantRow[]
-  computedPrices: Record<string, PriceBreakdown>
+  selectedVariant: CatalogVariantRow | null
+  selectedPurity: CatalogPurity | null
+  breakdown: PriceBreakdown | null
+  stoneLines: unknown
 }
 
 export function MetalPurityTable({
-  colorId,
-  selectedPurityId,
-  purities,
-  variants,
-  computedPrices,
+  selectedVariant,
+  selectedPurity,
+  breakdown,
+  stoneLines,
 }: MetalPurityTableProps) {
-  const rows = useMemo(() => {
-    const activeForColor = variants.filter(
-      (variant) => variant.is_active && variant.color_id === colorId,
-    )
-    const purityOrder = new Map(purities.map((purity, index) => [purity.id, index]))
-
-    return activeForColor
-      .map((variant) => {
-        const purity = purities.find((entry) => entry.id === variant.purity_id)
-        const breakdown = computedPrices[variant.id]
-        return {
-          variant,
-          purityLabel: purity?.label ?? '—',
-          breakdown,
-          sortKey: purityOrder.get(variant.purity_id) ?? 999,
-        }
-      })
-      .sort((a, b) => a.sortKey - b.sortKey || a.purityLabel.localeCompare(b.purityLabel))
-  }, [colorId, purities, variants, computedPrices])
-
-  if (rows.length === 0) {
-    return <p>Metal and purity details will appear here once configured.</p>
+  if (!selectedVariant || !selectedPurity) {
+    return <p>Select a variant to see metal, weight, and stone details.</p>
   }
 
-  return (
-    <div className="space-y-3">
-      <h4 className="font-display text-lg text-ink">Metal &amp; Purity</h4>
-      <p className="text-xs text-ink-faint">
-        Prices update automatically when gold/silver rates change.
-      </p>
+  const multiplier = purityMultiplier(selectedPurity.code)
+  const grossWeight =
+    selectedVariant.metal_weight_g != null &&
+    Number.isFinite(Number(selectedVariant.metal_weight_g)) &&
+    multiplier != null &&
+    multiplier > 0
+      ? Number(selectedVariant.metal_weight_g) / multiplier
+      : null
+  const stoneSummary = summarizeStoneLines(stoneLines)
 
-      {/* Mobile: stacked cards */}
-      <div className="md:hidden space-y-2">
-        {rows.map(({ variant, purityLabel, breakdown }) => {
-          const isSelected = selectedPurityId === variant.purity_id
-          return (
-            <div
-              key={variant.id}
-              className={cn(
-                'rounded-lg border border-divider bg-white p-3 space-y-2',
-                isSelected && 'border-teal ring-1 ring-teal/30 bg-teal/5',
-              )}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-medium text-ink">{purityLabel}</span>
-                <span className="text-sm font-medium text-ink tabular-nums">
-                  {breakdown ? formatINR(breakdown.finalPrice) : '—'}
-                </span>
-              </div>
-              <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
-                <div className="flex justify-between gap-2 col-span-2 sm:col-span-1">
-                  <dt className="text-ink-faint">Net metal weight</dt>
-                  <dd className="text-ink tabular-nums">{formatWeightGrams(variant.metal_weight_g)}</dd>
-                </div>
-                <div className="flex justify-between gap-2">
-                  <dt className="text-ink-faint">Metal</dt>
-                  <dd className="text-ink tabular-nums">{breakdown ? formatINR(breakdown.baseMetalPrice) : '—'}</dd>
-                </div>
-                <div className="flex justify-between gap-2">
-                  <dt className="text-ink-faint">Making</dt>
-                  <dd className="text-ink tabular-nums">{breakdown ? formatINR(breakdown.makingChargeNet) : '—'}</dd>
-                </div>
-                <div className="flex justify-between gap-2 col-span-2">
-                  <dt className="text-ink-faint">Diamond</dt>
-                  <dd className="text-ink tabular-nums">
-                    {breakdown && breakdown.gemPriceNet > 0 ? formatINR(breakdown.gemPriceNet) : '—'}
-                  </dd>
-                </div>
-              </dl>
-            </div>
-          )
-        })}
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1">
+        {/* <h4 className="font-display text-lg text-ink"></h4>
+        <p className="text-xs text-ink-faint">
+          Yeh details sirf abhi selected variant ke liye hain.
+        </p> */}
       </div>
 
-      {/* Desktop: full table */}
-      <div className="hidden md:block overflow-x-auto">
-        <table className="w-full text-sm border-collapse min-w-[52rem]">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-lg border border-divider bg-white p-3">
+          <p className="text-xs uppercase tracking-widest text-ink-faint">Purity</p>
+          <p className="mt-1 text-base font-medium text-ink">{selectedPurity.label}</p>
+        </div>
+        <div className="rounded-lg border border-divider bg-white p-3">
+          <p className="text-xs uppercase tracking-widest text-ink-faint">Net Metal Weight</p>
+          <p className="mt-1 text-base font-medium text-ink tabular-nums">{formatWeightGrams(selectedVariant.metal_weight_g)}</p>
+        </div>
+        <div className="rounded-lg border border-divider bg-white p-3">
+          <p className="text-xs uppercase tracking-widest text-ink-faint">Gross Weight</p>
+          <p className="mt-1 text-base font-medium text-ink tabular-nums">{formatWeightGrams(grossWeight)}</p>
+        </div>
+        <div className="rounded-lg border border-divider bg-white p-3">
+          <p className="text-xs uppercase tracking-widest text-ink-faint">Total Price</p>
+          <p className="mt-1 text-base font-medium text-ink tabular-nums">{breakdown ? formatINR(breakdown.finalPrice) : '—'}</p>
+        </div>
+      </div>
+
+      {/* <div className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse min-w-[24rem]">
           <thead>
             <tr className="bg-surface">
-              <th className="text-left px-3 py-2 border border-divider text-ink whitespace-nowrap">Purity</th>
-              <th className="text-left px-3 py-2 border border-divider text-ink whitespace-nowrap">Net metal weight</th>
-              <th className="text-left px-3 py-2 border border-divider text-ink whitespace-nowrap">Metal Value</th>
-              <th className="text-left px-3 py-2 border border-divider text-ink whitespace-nowrap">Making</th>
-              <th className="text-left px-3 py-2 border border-divider text-ink whitespace-nowrap">Diamond</th>
-              <th className="text-left px-3 py-2 border border-divider text-ink whitespace-nowrap">Total</th>
+              <th className="text-left px-3 py-2 border border-divider text-ink">Particulars</th>
+              <th className="text-left px-3 py-2 border border-divider text-ink">Value</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ variant, purityLabel, breakdown }) => {
-              const isSelected = selectedPurityId === variant.purity_id
-              return (
-                <tr
-                  key={variant.id}
-                  className={cn(
-                    'bg-white transition-colors',
-                    isSelected && 'bg-teal/5 ring-1 ring-inset ring-teal/30',
-                  )}
-                >
-                  <td className="px-3 py-2 border border-divider/80 text-ink font-medium whitespace-nowrap">
-                    {purityLabel}
-                  </td>
-                  <td className="px-3 py-2 border border-divider/80 text-ink tabular-nums whitespace-nowrap">
-                    {formatWeightGrams(variant.metal_weight_g)}
-                  </td>
-                  <td className="px-3 py-2 border border-divider/80 text-ink tabular-nums whitespace-nowrap">
-                    {breakdown ? formatINR(breakdown.baseMetalPrice) : '—'}
-                  </td>
-                  <td className="px-3 py-2 border border-divider/80 text-ink tabular-nums whitespace-nowrap">
-                    {breakdown ? formatINR(breakdown.makingChargeNet) : '—'}
-                  </td>
-                  <td className="px-3 py-2 border border-divider/80 text-ink tabular-nums whitespace-nowrap">
-                    {breakdown && breakdown.gemPriceNet > 0
-                      ? formatINR(breakdown.gemPriceNet)
-                      : '—'}
-                  </td>
-                  <td className="px-3 py-2 border border-divider/80 text-ink tabular-nums font-medium whitespace-nowrap min-w-[9rem]">
-                    {breakdown ? formatINR(breakdown.finalPrice) : '—'}
-                  </td>
-                </tr>
-              )
-            })}
+            <tr className="bg-white">
+              <td className="px-3 py-2 border border-divider/80 text-ink font-medium">Metal Value</td>
+              <td className="px-3 py-2 border border-divider/80 text-ink tabular-nums">
+                {breakdown ? formatINR(breakdown.baseMetalPrice) : '—'}
+              </td>
+            </tr>
+            <tr className="bg-white">
+              <td className="px-3 py-2 border border-divider/80 text-ink font-medium">Making Charge</td>
+              <td className="px-3 py-2 border border-divider/80 text-ink tabular-nums">
+                {breakdown ? formatINR(breakdown.makingChargeNet) : '—'}
+              </td>
+            </tr>
+            <tr className="bg-white">
+              <td className="px-3 py-2 border border-divider/80 text-ink font-medium">Stone Value</td>
+              <td className="px-3 py-2 border border-divider/80 text-ink tabular-nums">
+                {breakdown ? formatStoneValue(breakdown.gemPriceNet) : '—'}
+              </td>
+            </tr>
+            <tr className="bg-white">
+              <td className="px-3 py-2 border border-divider/80 text-ink font-medium">Variant Total</td>
+              <td className="px-3 py-2 border border-divider/80 text-ink tabular-nums font-medium">
+                {breakdown ? formatINR(breakdown.finalPrice) : '—'}
+              </td>
+            </tr>
           </tbody>
         </table>
+      </div> */}
+
+      <div className="space-y-2">
+        <h5 className="text-sm font-medium text-ink">Stone Info</h5>
+        {stoneSummary.length === 0 ? (
+          <div className="rounded-lg border border-divider bg-white px-3 py-2 text-sm text-ink-muted">
+            No stone details configured for this product.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {stoneSummary.map((stone) => (
+              <div key={`${stone.label}-${stone.totalWeight ?? 0}-${stone.totalPrice ?? 0}`} className="rounded-lg border border-divider bg-white p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-ink">{stone.label}</p>
+                  <div className="flex flex-wrap gap-3 text-xs text-ink-muted">
+                    <span>Total weight: <span className="text-ink tabular-nums">{stone.totalWeight != null ? `${stone.totalWeight.toFixed(3)} ct` : '—'}</span></span>
+                    <span>Total value: <span className="text-ink tabular-nums">{stone.totalPrice != null ? formatINR(stone.totalPrice) : '—'}</span></span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

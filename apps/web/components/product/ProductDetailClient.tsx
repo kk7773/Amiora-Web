@@ -234,6 +234,9 @@ export function ProductDetailClient({
 
   const activeBreakdown = activeVariant ? computedPrices[activeVariant.id] : null
   const displayPrice = activeBreakdown?.finalPrice ?? 0
+  const activePurity = activeVariant
+    ? catalog.purities.find((purity) => purity.id === activeVariant.purity_id) ?? null
+    : null
 
   const handleVariantChange = useCallback(
     (state: SelectedVariantState & { variant: CatalogVariantRow | null }) => {
@@ -412,8 +415,8 @@ export function ProductDetailClient({
                   key={tab}
                   type="button"
                   onClick={() => setActiveTab(i)}
-                  className={`px-3 sm:px-4 py-2.5 text-xs sm:text-sm whitespace-nowrap shrink-0 transition-colors border-b-2 -mb-px ${
-                    activeTab === i ? 'border-teal text-teal font-medium' : 'border-transparent text-ink-muted hover:text-ink'
+                  className={`px-3 sm:px-4 py-2.5 text-sm whitespace-nowrap shrink-0 transition-colors border-b-2 -mb-px font-semibold ${
+                    activeTab === i ? 'border-teal text-teal' : 'border-transparent text-ink hover:text-deep-teal'
                   }`}
                 >
                   {tab}
@@ -423,11 +426,10 @@ export function ProductDetailClient({
             <div className="py-4 text-sm text-ink-muted leading-relaxed space-y-3">
               {activeTab === 0 && (
                 <MetalPurityTable
-                  colorId={sel.colorId}
-                  selectedPurityId={activeVariant?.purity_id ?? null}
-                  purities={catalog.purities}
-                  variants={catalog.variants}
-                  computedPrices={computedPrices}
+                  selectedVariant={activeVariant}
+                  selectedPurity={activePurity}
+                  breakdown={activeBreakdown}
+                  stoneLines={pricingContext.stoneLines}
                 />
               )}
               {activeTab === 1 && (

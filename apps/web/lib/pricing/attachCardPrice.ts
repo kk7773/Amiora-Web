@@ -1,4 +1,4 @@
-import { applyManualPriceOverride, computeCatalogVariantPrice, type GoldPurityRates } from '@amiora/pricing'
+import { computeCatalogVariantPrice, type GoldPurityRates } from '@amiora/pricing'
 
 export type PurityMeta = { code: string; metal?: string }
 
@@ -51,12 +51,10 @@ export function attachCardPrice<T extends CardProductSlice>(
       makingChargeDiscountPct: product.making_charge_discount_pct ?? 0,
       gemPriceDiscountPct: product.gem_price_discount_pct ?? 0,
     })
-    const effectiveBreakdown = applyManualPriceOverride(breakdown, variant.price)
-
-    if (!effectiveBreakdown || effectiveBreakdown.finalPrice <= 0) continue
-    if (effectiveBreakdown.finalPrice < minPrice) {
-      minPrice = effectiveBreakdown.finalPrice
-      bestPercentOff = effectiveBreakdown.percentOffGross
+    if (!breakdown || breakdown.finalPrice <= 0) continue
+    if (breakdown.finalPrice < minPrice) {
+      minPrice = breakdown.finalPrice
+      bestPercentOff = breakdown.percentOffGross
     }
   }
 

@@ -32,15 +32,6 @@ export function normalizeGoldPurityRateKey(code: string): GoldPurityRateKey | nu
   return null
 }
 
-function getGoldPurityMultiplier(code: string): number | null {
-  const normalized = normalizeGoldPurityRateKey(code)
-  if (normalized === '09') return 9 / 24
-  if (normalized === '14') return 14 / 24
-  if (normalized === '18') return 18 / 24
-  if (normalized === '22') return 22 / 24
-  return null
-}
-
 export function resolveLiveRate(
   metal: MetalType | undefined,
   goldPerGram: number | null | undefined,
@@ -58,10 +49,6 @@ export function resolveLiveRate(
   const purityKey = purityCode ? normalizeGoldPurityRateKey(purityCode) : null
   const manualPurityRate = purityKey ? goldPurityRates?.[purityKey] : null
   if (manualPurityRate != null && Number.isFinite(manualPurityRate) && manualPurityRate > 0) {
-    const multiplier = purityKey ? getGoldPurityMultiplier(purityKey) : null
-    if (multiplier != null && multiplier > 0) {
-      return Math.round((manualPurityRate / multiplier) * 100) / 100
-    }
     return manualPurityRate
   }
 

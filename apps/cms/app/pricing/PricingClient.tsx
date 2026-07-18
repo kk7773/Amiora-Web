@@ -147,7 +147,7 @@ export function PricingClient({
             <TrendingUp className="h-5 w-5 text-teal" />
             <h1 className="font-display text-2xl text-cream">Pricing Control</h1>
           </div>
-          <p className="text-sidebar-text text-sm">
+          <p className="text-ink text-sm font-medium">
             Manually set base metal rates aur gold purity-wise rates. Storefront pricing turant recalculate hoga.
           </p>
         </div>
@@ -155,7 +155,7 @@ export function PricingClient({
         <button
           onClick={handleRefresh}
           disabled={refreshing}
-          className="flex items-center gap-2 px-4 py-2 text-sm border border-white/20 text-sidebar-text rounded-lg hover:border-teal hover:text-teal transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-divider text-ink rounded-lg hover:border-teal hover:text-teal transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
           {refreshing ? 'Refreshing…' : 'Refresh from Live API'}
@@ -163,7 +163,7 @@ export function PricingClient({
       </div>
 
       {/* Info banner */}
-      <div className="flex gap-2 p-3 rounded-lg bg-teal/10 border border-teal/20 text-sidebar-text text-xs">
+      <div className="flex gap-2 p-3 rounded-lg bg-teal/10 border border-teal/20 text-ink text-sm font-medium">
         <Info className="h-3.5 w-3.5 text-teal shrink-0 mt-0.5" />
         Gold 9k / 14k / 18k / 22k rates yahan se alag set kar sakte ho. Agar blank chhoda, system 999 gold rate se purity multiplier derive karega.
       </div>
@@ -178,7 +178,7 @@ export function PricingClient({
               <div className="w-8 h-8 rounded-full bg-yellow-500/20 flex items-center justify-center text-base">🪙</div>
               <div>
                 <p className="text-cream font-medium text-sm">Gold (999 purity)</p>
-                <p className="text-sidebar-text text-xs">Updated {timeAgo(goldUpdatedAt)}</p>
+                <p className="text-ink-muted text-xs font-medium">Updated {timeAgo(goldUpdatedAt)}</p>
               </div>
             </div>
             {changedGold && (
@@ -187,11 +187,11 @@ export function PricingClient({
           </div>
 
           <div>
-            <label className="block text-xs text-sidebar-text uppercase tracking-widest mb-1.5">
+            <label className="block text-xs text-ink font-semibold uppercase tracking-widest mb-1.5">
               Rate (₹ per gram)
             </label>
             <div className="flex items-center gap-0">
-              <span className="px-3 py-2.5 bg-white/10 border border-white/20 border-r-0 rounded-l-lg text-sidebar-text text-sm">₹</span>
+              <span className="px-3 py-2.5 bg-white border border-divider border-r-0 rounded-l-lg text-ink text-sm font-semibold">₹</span>
               <input
                 type="number"
                 value={gold}
@@ -199,11 +199,11 @@ export function PricingClient({
                 min={1}
                 step={0.01}
                 placeholder="7200"
-                className="flex-1 px-3 py-2.5 bg-white/10 border border-white/20 rounded-r-lg text-cream text-sm outline-none focus:border-teal transition-colors"
+                className="flex-1 px-3 py-2.5 bg-white border border-divider rounded-r-lg text-ink text-sm font-semibold outline-none focus:border-teal transition-colors placeholder:text-ink-faint"
               />
             </div>
-            <p className="text-xs text-sidebar-text mt-1.5">
-              Current: <span className="text-cream">{formatINR(currentGold)}/g</span>
+            <p className="text-sm text-ink mt-1.5 font-medium">
+              Current: <span className="text-deep-teal font-semibold">{formatINR(currentGold)}/g</span>
             </p>
           </div>
         </div>
@@ -215,7 +215,7 @@ export function PricingClient({
               <div className="w-8 h-8 rounded-full bg-slate-400/20 flex items-center justify-center text-base">🥈</div>
               <div>
                 <p className="text-cream font-medium text-sm">Silver (999 purity)</p>
-                <p className="text-sidebar-text text-xs">Updated {timeAgo(silverUpdatedAt)}</p>
+                <p className="text-ink-muted text-xs font-medium">Updated {timeAgo(silverUpdatedAt)}</p>
               </div>
             </div>
             {changedSilver && (
@@ -224,11 +224,11 @@ export function PricingClient({
           </div>
 
           <div>
-            <label className="block text-xs text-sidebar-text uppercase tracking-widest mb-1.5">
+            <label className="block text-xs text-ink font-semibold uppercase tracking-widest mb-1.5">
               Rate (₹ per gram)
             </label>
             <div className="flex items-center gap-0">
-              <span className="px-3 py-2.5 bg-white/10 border border-white/20 border-r-0 rounded-l-lg text-sidebar-text text-sm">₹</span>
+              <span className="px-3 py-2.5 bg-white border border-divider border-r-0 rounded-l-lg text-ink text-sm font-semibold">₹</span>
               <input
                 type="number"
                 value={silver}
@@ -236,11 +236,11 @@ export function PricingClient({
                 min={1}
                 step={0.01}
                 placeholder="90"
-                className="flex-1 px-3 py-2.5 bg-white/10 border border-white/20 rounded-r-lg text-cream text-sm outline-none focus:border-teal transition-colors"
+                className="flex-1 px-3 py-2.5 bg-white border border-divider rounded-r-lg text-ink text-sm font-semibold outline-none focus:border-teal transition-colors placeholder:text-ink-faint"
               />
             </div>
-            <p className="text-xs text-sidebar-text mt-1.5">
-              Current: <span className="text-cream">{formatINR(currentSilver)}/g</span>
+            <p className="text-sm text-ink mt-1.5 font-medium">
+              Current: <span className="text-deep-teal font-semibold">{formatINR(currentSilver)}/g</span>
             </p>
           </div>
         </div>
@@ -252,7 +252,7 @@ export function PricingClient({
               <div className="w-8 h-8 rounded-full bg-cyan-400/20 flex items-center justify-center text-base">💎</div>
               <div>
                 <p className="text-cream font-medium text-sm">Diamond (cut basis)</p>
-                <p className="text-sidebar-text text-xs">Updated {timeAgo(diamondUpdatedAt)}</p>
+                <p className="text-ink-muted text-xs font-medium">Updated {timeAgo(diamondUpdatedAt)}</p>
               </div>
             </div>
             {changedDiamond && (
@@ -261,11 +261,11 @@ export function PricingClient({
           </div>
 
           <div>
-            <label className="block text-xs text-sidebar-text uppercase tracking-widest mb-1.5">
+            <label className="block text-xs text-ink font-semibold uppercase tracking-widest mb-1.5">
               Rate (₹ per ct)
             </label>
             <div className="flex items-center gap-0">
-              <span className="px-3 py-2.5 bg-white/10 border border-white/20 border-r-0 rounded-l-lg text-sidebar-text text-sm">₹</span>
+              <span className="px-3 py-2.5 bg-white border border-divider border-r-0 rounded-l-lg text-ink text-sm font-semibold">₹</span>
               <input
                 type="number"
                 value={diamond}
@@ -273,11 +273,11 @@ export function PricingClient({
                 min={0}
                 step={0.01}
                 placeholder="50000"
-                className="flex-1 px-3 py-2.5 bg-white/10 border border-white/20 rounded-r-lg text-cream text-sm outline-none focus:border-teal transition-colors"
+                className="flex-1 px-3 py-2.5 bg-white border border-divider rounded-r-lg text-ink text-sm font-semibold outline-none focus:border-teal transition-colors placeholder:text-ink-faint"
               />
             </div>
-            <p className="text-xs text-sidebar-text mt-1.5">
-              Current: <span className="text-cream">{currentDiamond > 0 ? `${formatINR(currentDiamond)}/ct` : 'Not set'}</span>
+            <p className="text-sm text-ink mt-1.5 font-medium">
+              Current: <span className="text-deep-teal font-semibold">{currentDiamond > 0 ? `${formatINR(currentDiamond)}/ct` : 'Not set'}</span>
             </p>
           </div>
         </div>
@@ -285,8 +285,8 @@ export function PricingClient({
 
       <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
         <div className="px-5 py-4 border-b border-white/10">
-          <h2 className="text-cream text-sm font-medium">Gold Purity Rate Control</h2>
-          <p className="text-sidebar-text text-xs mt-1">
+          <h2 className="text-deep-teal text-base font-semibold">Gold Purity Rate Control</h2>
+          <p className="text-ink text-sm mt-1 font-medium">
             In rates ko per-gram purity rate samjha jayega. Gold products me matching purity ke liye yahi rate use hoga.
           </p>
         </div>
@@ -303,19 +303,19 @@ export function PricingClient({
               <div key={key} className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-cream font-medium text-sm">{label}</p>
-                    <p className="text-sidebar-text text-xs">Current: {formatINR(currentRate)}/g</p>
+                    <p className="text-ink font-semibold text-base">{label}</p>
+                    <p className="text-ink text-sm font-medium">Current: {formatINR(currentRate)}/g</p>
                   </div>
                   {changed && (
                     <span className="text-2xs px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded-full">Modified</span>
                   )}
                 </div>
                 <div>
-                  <label className="block text-xs text-sidebar-text uppercase tracking-widest mb-1.5">
+                  <label className="block text-xs text-ink font-semibold uppercase tracking-widest mb-1.5">
                     Rate (₹ per gram)
                   </label>
                   <div className="flex items-center gap-0">
-                    <span className="px-3 py-2.5 bg-white/10 border border-white/20 border-r-0 rounded-l-lg text-sidebar-text text-sm">₹</span>
+                    <span className="px-3 py-2.5 bg-white border border-divider border-r-0 rounded-l-lg text-ink text-sm font-semibold">₹</span>
                     <input
                       type="number"
                       min={0}
@@ -323,11 +323,11 @@ export function PricingClient({
                       value={goldByPurity[key]}
                       onChange={(e) => setGoldByPurity((prev) => ({ ...prev, [key]: e.target.value }))}
                       placeholder={String(fallbackRate)}
-                      className="flex-1 px-3 py-2.5 bg-white/10 border border-white/20 rounded-r-lg text-cream text-sm outline-none focus:border-teal transition-colors"
+                      className="flex-1 px-3 py-2.5 bg-white border border-divider rounded-r-lg text-ink text-sm font-semibold outline-none focus:border-teal transition-colors placeholder:text-ink-faint"
                     />
                   </div>
-                  <p className="text-xs text-sidebar-text mt-1.5">
-                    Fallback from 999 gold: <span className="text-cream">{formatINR(fallbackRate)}/g</span>
+                  <p className="text-sm text-ink mt-1.5 font-medium">
+                    Fallback from 999 gold: <span className="text-deep-teal font-semibold">{formatINR(fallbackRate)}/g</span>
                   </p>
                 </div>
               </div>
@@ -350,11 +350,11 @@ export function PricingClient({
       <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
         <div className="px-5 py-3 border-b border-white/10 flex items-center gap-2">
           <TrendingUp className="h-4 w-4 text-teal" />
-          <h2 className="text-cream text-sm font-medium">Price Preview — 5g sample (8% making charge)</h2>
+          <h2 className="text-deep-teal text-base font-semibold">Price Preview — 5g sample (8% making charge)</h2>
         </div>
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-xs uppercase tracking-widest text-sidebar-text border-b border-white/10">
+            <tr className="text-xs uppercase tracking-widest text-ink border-b border-white/10">
               <th className="px-5 py-3 text-left">Metal / Purity</th>
               <th className="px-5 py-3 text-right">Current Rate</th>
               <th className="px-5 py-3 text-right">New Rate</th>
@@ -390,10 +390,10 @@ export function PricingClient({
               const diff      = updated - current
               return (
                 <tr key={label} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                  <td className="px-5 py-3 text-cream">{label}</td>
-                  <td className="px-5 py-3 text-right text-sidebar-text">{formatINR(current)}</td>
-                  <td className="px-5 py-3 text-right text-cream">{formatINR(updated)}</td>
-                  <td className={`px-5 py-3 text-right font-medium ${diff > 0 ? 'text-green-400' : diff < 0 ? 'text-red-400' : 'text-sidebar-text'}`}>
+                  <td className="px-5 py-3 text-ink font-medium">{label}</td>
+                  <td className="px-5 py-3 text-right text-ink font-medium">{formatINR(current)}</td>
+                  <td className="px-5 py-3 text-right text-deep-teal font-semibold">{formatINR(updated)}</td>
+                  <td className={`px-5 py-3 text-right font-semibold ${diff > 0 ? 'text-green-600' : diff < 0 ? 'text-red-600' : 'text-ink-muted'}`}>
                     {diff === 0 ? '—' : `${diff > 0 ? '+' : ''}${formatINR(diff)}`}
                   </td>
                 </tr>
@@ -401,7 +401,7 @@ export function PricingClient({
             })}
           </tbody>
         </table>
-        <p className="text-2xs text-sidebar-text px-5 py-2.5">
+        <p className="text-xs text-ink px-5 py-2.5 font-medium">
           * Preview assumes 5g gross weight and 8% making charge. Gold rows use purity-specific per-gram rates set above.
         </p>
       </div>

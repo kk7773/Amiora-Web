@@ -80,7 +80,7 @@ export function Sidebar({
           <div className="w-8 h-8 rounded-full bg-teal flex items-center justify-center text-white text-xs font-display font-bold">A</div>
           <div>
             <p className="text-cream font-display text-base leading-tight">AMIORA</p>
-            <p className="text-sidebar-text text-[10px] tracking-widest uppercase">
+            <p className="text-cream/80 text-[10px] font-semibold tracking-widest uppercase">
               {cmsRole === 'super_admin' ? 'Super Admin' : 'Admin CMS'}
             </p>
           </div>
@@ -88,7 +88,7 @@ export function Sidebar({
         <button
           type="button"
           onClick={onToggle}
-          className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-sidebar-text hover:bg-sidebar-hover hover:text-cream transition-colors"
+          className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-cream/85 hover:bg-sidebar-hover hover:text-white transition-colors"
           aria-label="Hide sidebar"
           title="Hide sidebar"
         >
@@ -107,14 +107,14 @@ export function Sidebar({
               href={href}
               className={`group flex items-center gap-3 mx-2 px-3 py-2.5 rounded-lg mb-0.5 transition-all ${
                 active
-                  ? 'bg-sidebar-active text-cream'
+                  ? 'bg-sidebar-active text-white shadow-sm'
                   : superAdminOnly
-                    ? 'text-gold/70 hover:bg-sidebar-hover hover:text-gold'
-                    : 'text-sidebar-text hover:bg-sidebar-hover hover:text-cream'
+                    ? 'text-gold hover:bg-sidebar-hover hover:text-[#f3d27a]'
+                    : 'text-cream/95 hover:bg-sidebar-hover hover:text-white'
               }`}
             >
               <Icon className="w-4 h-4 shrink-0" />
-              <span className="text-sm flex-1">{label}</span>
+              <span className="text-sm font-semibold flex-1">{label}</span>
               {count > 0 && (
                 <span className="bg-gold text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
                   {count > 99 ? '99+' : count}
@@ -130,10 +130,10 @@ export function Sidebar({
       <div className="border-t border-white/10 p-3">
         <button
           onClick={signOut}
-          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sidebar-text hover:bg-sidebar-hover hover:text-cream transition-all"
+          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-cream/95 hover:bg-sidebar-hover hover:text-white transition-all"
         >
           <LogOut className="w-4 h-4" />
-          <span className="text-sm">Sign Out</span>
+          <span className="text-sm font-semibold">Sign Out</span>
         </button>
       </div>
     </aside>

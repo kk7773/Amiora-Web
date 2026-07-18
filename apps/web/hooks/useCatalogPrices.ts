@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import { applyManualPriceOverride, computeCatalogVariantPrice, type GoldPurityRates, type PriceBreakdown } from '@amiora/pricing'
+import { computeCatalogVariantPrice, type GoldPurityRates, type PriceBreakdown } from '@amiora/pricing'
 import type { CatalogPurity, CatalogVariantRow } from '@/components/product/VariantSelector'
 import { usePricing } from './usePricing'
 
@@ -52,8 +52,7 @@ export function useCatalogPrices(
         makingChargeDiscountPct: ctx.makingChargeDiscountPct,
         gemPriceDiscountPct: ctx.gemPriceDiscountPct,
       })
-      const effectiveBreakdown = applyManualPriceOverride(breakdown, variant.price)
-      if (effectiveBreakdown) map[variant.id] = effectiveBreakdown
+      if (breakdown) map[variant.id] = breakdown
     }
     return map
   }, [

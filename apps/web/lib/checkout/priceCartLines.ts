@@ -1,4 +1,4 @@
-import { applyManualPriceOverride, computeCatalogVariantPrice, resolveLiveRate } from '@amiora/pricing'
+import { computeCatalogVariantPrice, resolveLiveRate } from '@amiora/pricing'
 import { getLatestPrices } from '@/lib/pricing/engine'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { CartLine } from '@/lib/coupons/evaluateCoupon'
@@ -221,16 +221,14 @@ export async function priceCartLines(
           ? Number(variant.gem_price_discount_pct)
           : null,
     })
-    const effectiveBreakdown = applyManualPriceOverride(breakdown, variant.price)
-
-    if (!effectiveBreakdown || effectiveBreakdown.finalPrice <= 0) {
+    if (!breakdown || breakdown.finalPrice <= 0) {
       errors.push(`${product.name}: price could not be calculated`)
       continue
     }
 
-    const unitPrice = Math.round(effectiveBreakdown.finalPrice)
-    making += effectiveBreakdown.makingChargeNet * qty
-    gem += effectiveBreakdown.gemPriceNet * qty
+    const unitPrice = Math.round(breakdown.finalPrice)
+    making += breakdown.makingChargeNet * qty
+    gem += breakdown.gemPriceNet * qty
 
     lines.push({
       product_id: resolvedProductId,

@@ -51,12 +51,13 @@ export function LivePriceDisplay({
           {breakdown.gemPrice > 0 && (
             <Row label="Diamond / Gemstone" value={breakdown.gemPrice} />
           )}
+          <Row label="GST (3%)" value={breakdown.gstAmount} />
           <div className="border-t border-divider pt-2 mt-2">
             <Row label="Total" value={breakdown.finalPrice} bold />
           </div>
           <p className="text-2xs text-ink-faint mt-2">
             Purity: {(breakdown.purityMultiplier * 100).toFixed(1)}% fine metal ·
-            Taxes extra · Live price
+            Inclusive of 3% GST · Live price
           </p>
         </div>
       )}

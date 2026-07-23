@@ -4,6 +4,8 @@
 
 export type SupportedPurity = '22k' | '18k' | '14k' | '9k' | '92.5'
 
+export const GST_RATE = 0.03
+
 export const PURITY_MULTIPLIERS: Record<SupportedPurity, number> = {
   '22k':  22 / 24,
   '18k':  18 / 24,
@@ -68,6 +70,8 @@ export interface PriceBreakdown {
   gemPriceDiscount: number
   gemPriceNet: number
   productDiscount: number
+  subtotalBeforeGst: number
+  gstAmount: number
   finalPrice: number
   listTotalBeforeDiscount: number
   percentOffGross: number
@@ -110,8 +114,12 @@ export function calculateVariantPrice(input: PriceInput): PriceBreakdown {
   const makingChargeNet      = round2(makingCharge - makingChargeDiscount)
   const gemPriceNet          = round2(gemPrice     - gemPriceDiscount)
   const productDiscount      = round2(makingChargeDiscount + gemPriceDiscount)
-  const finalPrice           = round2(baseMetalPrice + makingChargeNet + gemPriceNet)
-  const listTotalBeforeDiscount = round2(baseMetalPrice + makingCharge + gemPrice)
+  const subtotalBeforeGst    = round2(baseMetalPrice + makingChargeNet + gemPriceNet)
+  const gstAmount            = round2(subtotalBeforeGst * GST_RATE)
+  const finalPrice           = round2(subtotalBeforeGst + gstAmount)
+  const listSubtotalBeforeGst = round2(baseMetalPrice + makingCharge + gemPrice)
+  const listGstAmount        = round2(listSubtotalBeforeGst * GST_RATE)
+  const listTotalBeforeDiscount = round2(listSubtotalBeforeGst + listGstAmount)
   const savedVsList          = round2(listTotalBeforeDiscount - finalPrice)
   const percentOffGross =
     listTotalBeforeDiscount > 0 && savedVsList > 0
@@ -128,6 +136,8 @@ export function calculateVariantPrice(input: PriceInput): PriceBreakdown {
     gemPriceDiscount,
     gemPriceNet,
     productDiscount,
+    subtotalBeforeGst,
+    gstAmount,
     finalPrice,
     listTotalBeforeDiscount,
     percentOffGross,

@@ -239,6 +239,8 @@ export function applyManualPriceOverride(
       gemPriceDiscount: 0,
       gemPriceNet: 0,
       productDiscount: 0,
+      subtotalBeforeGst: override,
+      gstAmount: 0,
       finalPrice: override,
       listTotalBeforeDiscount: override,
       percentOffGross: 0,
@@ -266,6 +268,9 @@ export function breakdownToDisplayRows(
   ]
   if (breakdown.gemPriceNet > 0) {
     rows.push({ label: 'Diamond / stone', amount: breakdown.gemPriceNet })
+  }
+  if (breakdown.gstAmount > 0) {
+    rows.push({ label: 'GST (3%)', amount: breakdown.gstAmount })
   }
   rows.push({ label: 'Total', amount: breakdown.finalPrice })
   return rows

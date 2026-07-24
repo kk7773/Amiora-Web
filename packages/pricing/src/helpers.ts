@@ -263,17 +263,16 @@ export function applyManualPriceOverride(
 /** Build price breakup rows for PDP table display. */
 export function breakdownToDisplayRows(
   breakdown: PriceBreakdown,
-  makingChargePct: number,
 ): Array<{ label: string; amount: number }> {
   const rows: Array<{ label: string; amount: number }> = [
     { label: 'Metal value', amount: breakdown.baseMetalPrice },
-    { label: `Making charge (${makingChargePct}%)`, amount: breakdown.makingChargeNet },
+    { label: 'Making charge', amount: breakdown.makingChargeNet },
   ]
   if (breakdown.gemPriceNet > 0) {
     rows.push({ label: 'Diamond / stone', amount: breakdown.gemPriceNet })
   }
   if (breakdown.gstAmount > 0) {
-    rows.push({ label: 'GST (3%)', amount: breakdown.gstAmount })
+    rows.push({ label: 'Taxes', amount: breakdown.gstAmount })
   }
   rows.push({ label: 'Total', amount: breakdown.finalPrice })
   return rows

@@ -219,9 +219,9 @@ export function WriteReviewForm({
         </div>
 
         <div className={cn(wide && 'flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1')}>
-          <p className={cn('text-2xs text-ink-faint leading-relaxed', wide && 'sm:max-w-xs order-2 sm:order-1')}>
+          {/* <p className={cn('text-2xs text-ink-faint leading-relaxed', wide && 'sm:max-w-xs order-2 sm:order-1')}>
             Reviews are moderated before publishing.
-          </p>
+          </p> */}
           <button
             type="submit"
             disabled={loading || isLoggedIn === null}

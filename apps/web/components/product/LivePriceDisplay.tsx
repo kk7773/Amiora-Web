@@ -47,7 +47,8 @@ export function LivePriceDisplay({
         <div className="bg-surface border border-divider rounded-xl p-4 text-sm space-y-2 w-full max-w-xs">
           <p className="text-xs uppercase tracking-widest text-ink-muted mb-3">Price Breakdown</p>
           <Row label="Base Metal Price" value={breakdown.baseMetalPrice} />
-          <Row label={`Making Charges (${makingChargePct}%)`} value={breakdown.makingCharge} />
+          <Row label={`Making Charges`
+            } value={breakdown.makingCharge} />
           {breakdown.gemPrice > 0 && (
             <Row label="Diamond / Gemstone" value={breakdown.gemPrice} />
           )}

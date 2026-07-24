@@ -46,6 +46,17 @@ interface VariantSelectorProps {
   onChange:    (state: SelectedVariantState & { variant: CatalogVariantRow | null }) => void
 }
 
+function readPurityRank(code: string): number {
+  const match = code.trim().toLowerCase().match(/^(\d+(?:\.\d+)?)\s*(?:k|kt)?$/)
+  return match ? Number(match[1]) : Number.NEGATIVE_INFINITY
+}
+
+function isYellowColor(group: Pick<CatalogColorGroup, 'code' | 'label'>): boolean {
+  const code = group.code.trim().toLowerCase()
+  const label = group.label.trim().toLowerCase()
+  return code.includes('yellow') || label.includes('yellow')
+}
+
 export function VariantSelector({ colorGroups, purities, variants, onChange }: VariantSelectorProps) {
   const activeVariants = useMemo(
     () => variants.filter((variant) => variant.is_active),
@@ -57,13 +68,38 @@ export function VariantSelector({ colorGroups, purities, variants, onChange }: V
     [purities],
   )
 
+  const initialVariant = useMemo(() => {
+    const purityById = new Map(purities.map((purity) => [purity.id, purity]))
+    const activeColorIds = new Set(activeVariants.map((variant) => variant.color_id))
+    const preferredYellowColorId =
+      colorGroups.find((group) => activeColorIds.has(group.colorId) && isYellowColor(group))?.colorId ?? null
+
+    return [...activeVariants].sort((a, b) => {
+      if (preferredYellowColorId) {
+        const aIsPreferred = a.color_id === preferredYellowColorId
+        const bIsPreferred = b.color_id === preferredYellowColorId
+        if (aIsPreferred !== bIsPreferred) return aIsPreferred ? -1 : 1
+      }
+
+      const purityA = purityById.get(a.purity_id)
+      const purityB = purityById.get(b.purity_id)
+      const rankDiff = readPurityRank(purityB?.code ?? '') - readPurityRank(purityA?.code ?? '')
+      if (rankDiff !== 0) return rankDiff
+
+      const orderDiff = (purityA?.display_order ?? Number.MAX_SAFE_INTEGER) - (purityB?.display_order ?? Number.MAX_SAFE_INTEGER)
+      if (orderDiff !== 0) return orderDiff
+
+      return a.sku.localeCompare(b.sku)
+    })[0] ?? null
+  }, [activeVariants, colorGroups, purities])
+
   const initialColorId =
-    activeVariants[0]?.color_id ??
+    initialVariant?.color_id ??
     colorGroups[0]?.colorId ??
     ''
 
   const initialPurityId =
-    activeVariants.find((variant) => variant.color_id === initialColorId)?.purity_id ??
+    initialVariant?.purity_id ??
     sortedPurities[0]?.id ??
     ''
 
@@ -183,7 +219,7 @@ export function VariantSelector({ colorGroups, purities, variants, onChange }: V
           >
             +
           </button>
-          <span className="text-xs text-ink-faint">Max 5</span>
+          {/* <span className="text-xs text-ink-faint">Max 5</span> */}
         </div>
       </div>
     </div>

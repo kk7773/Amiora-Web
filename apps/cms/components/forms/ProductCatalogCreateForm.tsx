@@ -1219,9 +1219,9 @@ export function ProductCatalogCreateForm({
       {/* Diamond specifications section hidden — fields replaced by Stine (gem) section below */}
 
       <section className="bg-white rounded-xl border border-divider p-6 space-y-4">
-        <h3 className="font-display text-lg text-deep-teal">Stine (gem)</h3>
+        <h3 className="font-display text-lg text-deep-teal">Stone (gem)</h3>
         <label className="block space-y-1 max-w-md">
-          <span className="text-xs text-ink-muted">Does this product include stine(s)?</span>
+          <span className="text-xs text-ink-muted">Does this product include stone(s)?</span>
           <select
             value={hasStone ? 'yes' : 'no'}
             onChange={(e) => {
@@ -1271,7 +1271,7 @@ export function ProductCatalogCreateForm({
                       <span className="text-xs font-medium text-ink-muted uppercase tracking-wide">
                         {stoneTypeLabel(row.stone_type)} {idx + 1}
                       </span>
-                      <p className="text-xs text-ink-faint mt-1">Add multiple cut / size rows under one stine.</p>
+                      <p className="text-xs text-ink-faint mt-1">Add multiple cut / size rows under one stone.</p>
                     </div>
                     <button
                       type="button"
@@ -1283,7 +1283,7 @@ export function ProductCatalogCreateForm({
                         setStoneRows((prev) => prev.filter((r) => r.key !== row.key))
                       }}
                       className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                      aria-label="Remove stine"
+                      aria-label="Remove stone"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -1291,7 +1291,7 @@ export function ProductCatalogCreateForm({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <label className="block space-y-1">
-                      <span className="text-xs text-ink-muted">Stine</span>
+                      <span className="text-xs text-ink-muted">Stone</span>
                       <select
                         value={row.stone_type}
                         onChange={(e) =>
@@ -1312,7 +1312,7 @@ export function ProductCatalogCreateForm({
                         }
                         className={stoneInp}
                       >
-                        <option value="">Select stine</option>
+                        <option value="">Select stone</option>
                         <option value="diamond">Diamond</option>
                         <option value="other_than_diamond">Other than diamond</option>
                       </select>
@@ -1457,7 +1457,7 @@ export function ProductCatalogCreateForm({
               onClick={() => setStoneRows((prev) => [...prev, newStoneRow()])}
               className="inline-flex items-center gap-1.5 text-sm px-4 py-2 border border-dashed border-teal text-teal rounded-lg hover:bg-teal/5 transition-colors w-full justify-center"
             >
-              <Plus className="w-4 h-4" /> Add stine
+              <Plus className="w-4 h-4" /> Add stone
             </button>
           </div>
         )}

@@ -64,6 +64,17 @@ const SERVICE_BADGES = [
   { icon: Gift,      label: 'Free Gift Wrap' },
 ]
 
+function readPurityRank(code: string): number {
+  const match = code.trim().toLowerCase().match(/^(\d+(?:\.\d+)?)\s*(?:k|kt)?$/)
+  return match ? Number(match[1]) : Number.NEGATIVE_INFINITY
+}
+
+function isYellowColor(group: Pick<CatalogColorGroup, 'code' | 'label'>): boolean {
+  const code = group.code.trim().toLowerCase()
+  const label = group.label.trim().toLowerCase()
+  return code.includes('yellow') || label.includes('yellow')
+}
+
 function toGallery(images: string[], videos: string[], productName: string) {
   const imageItems = images.map((url, i) => ({
     id:          `cg-img-${i}`,
@@ -194,7 +205,34 @@ export function ProductDetailClient({
   fallbackImages,
   pricingContext,
 }: ProductDetailClientProps) {
-  const initialVariant = catalog.variants.find((variant) => variant.is_active) ?? catalog.variants[0] ?? null
+  const purityById = new Map(catalog.purities.map((purity) => [purity.id, purity]))
+  const activeColorIds = new Set(
+    catalog.variants.filter((variant) => variant.is_active).map((variant) => variant.color_id),
+  )
+  const preferredYellowColorId =
+    catalog.colorGroups.find((group) => activeColorIds.has(group.colorId) && isYellowColor(group))?.colorId ?? null
+  const initialVariant =
+    [...catalog.variants]
+      .filter((variant) => variant.is_active)
+      .sort((a, b) => {
+        if (preferredYellowColorId) {
+          const aIsPreferred = a.color_id === preferredYellowColorId
+          const bIsPreferred = b.color_id === preferredYellowColorId
+          if (aIsPreferred !== bIsPreferred) return aIsPreferred ? -1 : 1
+        }
+
+        const purityA = purityById.get(a.purity_id)
+        const purityB = purityById.get(b.purity_id)
+        const rankDiff = readPurityRank(purityB?.code ?? '') - readPurityRank(purityA?.code ?? '')
+        if (rankDiff !== 0) return rankDiff
+
+        const orderDiff = (purityA?.display_order ?? Number.MAX_SAFE_INTEGER) - (purityB?.display_order ?? Number.MAX_SAFE_INTEGER)
+        if (orderDiff !== 0) return orderDiff
+
+        return a.sku.localeCompare(b.sku)
+      })[0] ??
+    catalog.variants[0] ??
+    null
   const initialColorId = initialVariant?.color_id ?? catalog.colorGroups[0]?.colorId ?? ''
 
   const [sel, setSel] = useState<SelectedVariantState & { variant: CatalogVariantRow | null }>(() => ({
@@ -285,8 +323,8 @@ export function ProductDetailClient({
   const TABS = ['Metal & Purity', 'Price Breakup', 'Care Guide']
   const liveBreakupRows = useMemo(() => {
     if (!activeBreakdown) return null
-    return breakdownToDisplayRows(activeBreakdown, product.making_charge_pct)
-  }, [activeBreakdown, product.making_charge_pct])
+    return breakdownToDisplayRows(activeBreakdown)
+  }, [activeBreakdown])
 
   const addToCartLabel = !activeVariant ? 'Select options' : inStock ? 'Add to Cart' : 'Out of Stock'
 
@@ -319,11 +357,11 @@ export function ProductDetailClient({
 
           <div>
             <h1 className="font-display text-display-lg md:text-display-xl text-ink leading-tight">{product.name}</h1>
-            {product.design_number && (
+            {/* {product.design_number && (
               <p className="mt-2 text-xs text-ink-muted font-mono tracking-wide">
                 Design No. {product.design_number}
               </p>
-            )}
+            )} */}
             {product.short_desc && (
               <p className="mt-2 text-sm text-ink-muted leading-relaxed">{product.short_desc}</p>
             )}
@@ -467,9 +505,9 @@ export function ProductDetailClient({
                         </tbody>
                       </table>
                     </div>
-                    <p className="text-xs text-ink-faint">
+                    {/* <p className="text-xs text-ink-faint">
                       Based on today&apos;s gold/silver rate. Diamond/stone price stays fixed.
-                    </p>
+                    </p> */}
                   </div>
                 ) : (
                   <p>Set metal weight per purity in admin to see price breakup.</p>

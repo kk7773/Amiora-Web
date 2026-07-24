@@ -47,9 +47,11 @@ export function resolveLiveRate(
   }
 
   const purityKey = purityCode ? normalizeGoldPurityRateKey(purityCode) : null
-  const manualPurityRate = purityKey ? goldPurityRates?.[purityKey] : null
-  if (manualPurityRate != null && Number.isFinite(manualPurityRate) && manualPurityRate > 0) {
-    return manualPurityRate
+  if (purityKey) {
+    const manualPurityRate = goldPurityRates?.[purityKey]
+    return manualPurityRate != null && Number.isFinite(manualPurityRate) && manualPurityRate > 0
+      ? manualPurityRate
+      : 0
   }
 
   return goldPerGram != null && Number.isFinite(goldPerGram) && goldPerGram > 0
@@ -201,6 +203,7 @@ export function computeCatalogVariantPrice(input: ComputeCatalogVariantInput): P
     input.purityCode,
     input.goldPurityRates,
   )
+  if (!Number.isFinite(liveRate) || liveRate <= 0) return null
   const purity = purityCodeToCalcInput(input.purityCode, input.metalType)
   const gemTotal = sumStoneLinesPrice(input.stoneLines, input.diamondPricePerCarat ?? 0)
 

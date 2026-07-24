@@ -904,6 +904,10 @@ export function ProductCatalogCreateForm({
         is_new_arrival: newArrival,
         is_best_seller: bestSeller,
         is_coming_soon: comingSoon,
+        making_charge_pct:
+          makingChargePct.trim() !== '' && Number.isFinite(parseFloat(makingChargePct))
+            ? parseFloat(makingChargePct)
+            : 8,
         has_stone: hasStone,
         stone_lines: hasStone
           ? stoneRows

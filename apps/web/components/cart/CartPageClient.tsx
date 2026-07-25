@@ -93,7 +93,7 @@ export function CartPageClient() {
                 const productHref = getCartItemHref(item)
                 return (
                 <motion.li
-                  key={`${item.productId}-${item.variantId}`}
+                  key={`${item.productId}-${item.variantId}-${item.sizeLabel || 'default'}`}
                   variants={fadeUp}
                   exit={{ opacity: 0, height: 0, overflow: 'hidden' }}
                   className="flex gap-5 py-6"
@@ -114,7 +114,7 @@ export function CartPageClient() {
                         {item.productName}
                       </Link>
                       <button
-                        onClick={() => { removeItem(item.productId, item.variantId); toast.success('Removed from cart') }}
+                        onClick={() => { removeItem(item.productId, item.variantId, item.sizeLabel); toast.success('Removed from cart') }}
                         className="p-1 text-ink-faint hover:text-red-500 transition-colors shrink-0"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -128,14 +128,14 @@ export function CartPageClient() {
                       {/* Qty stepper */}
                       <div className="flex items-center gap-2 border border-divider rounded-md overflow-hidden">
                         <button
-                          onClick={() => updateQuantity(item.productId, item.variantId, item.quantity - 1)}
+                          onClick={() => updateQuantity(item.productId, item.variantId, item.quantity - 1, item.sizeLabel)}
                           className="px-2.5 py-1.5 text-ink-muted hover:text-deep-teal transition-colors"
                         >
                           <Minus className="h-3 w-3" />
                         </button>
                         <span className="w-6 text-center text-sm font-medium">{item.quantity}</span>
                         <button
-                          onClick={() => updateQuantity(item.productId, item.variantId, item.quantity + 1)}
+                          onClick={() => updateQuantity(item.productId, item.variantId, item.quantity + 1, item.sizeLabel)}
                           className="px-2.5 py-1.5 text-ink-muted hover:text-deep-teal transition-colors"
                         >
                           <Plus className="h-3 w-3" />

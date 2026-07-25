@@ -205,6 +205,13 @@ export function ProductDetailClient({
   fallbackImages,
   pricingContext,
 }: ProductDetailClientProps) {
+  const isRingProduct =
+    product.categorySlug?.trim().toLowerCase() === 'rings' ||
+    product.categoryName?.trim().toLowerCase() === 'rings'
+  const ringSizeOptions = useMemo(
+    () => (isRingProduct ? Array.from({ length: 23 }, (_, index) => String(index + 6)) : []),
+    [isRingProduct],
+  )
   const purityById = new Map(catalog.purities.map((purity) => [purity.id, purity]))
   const activeColorIds = new Set(
     catalog.variants.filter((variant) => variant.is_active).map((variant) => variant.color_id),
@@ -291,6 +298,10 @@ export function ProductDetailClient({
       toast.error('Unavailable', { description: 'Pick an in-stock option.' })
       return
     }
+    if (isRingProduct && !sel.sizeLabel) {
+      toast.error('Select ring size', { description: 'Choose a size from 6 to 28 before adding this ring.' })
+      return
+    }
     const thumb =
       galleryImages.find((item) => item.media_type !== 'video')?.url ??
       galleryImages[0]?.url ??
@@ -299,7 +310,7 @@ export function ProductDetailClient({
       productId:    product.id,
       variantId:    activeVariant.id,
       variantSku:   activeVariant.sku,
-      sizeLabel:    '',
+      sizeLabel:    sel.sizeLabel ?? '',
       productName:  product.name,
       variantLabel: activeVariant.sku,
       imageUrl:     thumb,
@@ -393,6 +404,7 @@ export function ProductDetailClient({
             colorGroups={catalog.colorGroups}
             purities={catalog.purities}
             variants={catalog.variants}
+            sizeOptions={ringSizeOptions}
             onChange={handleVariantChange}
           />
 

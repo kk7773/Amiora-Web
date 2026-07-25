@@ -43,6 +43,7 @@ interface VariantSelectorProps {
   colorGroups: CatalogColorGroup[]
   purities:    CatalogPurity[]
   variants:    CatalogVariantRow[]
+  sizeOptions?: string[]
   onChange:    (state: SelectedVariantState & { variant: CatalogVariantRow | null }) => void
 }
 
@@ -57,7 +58,7 @@ function isYellowColor(group: Pick<CatalogColorGroup, 'code' | 'label'>): boolea
   return code.includes('yellow') || label.includes('yellow')
 }
 
-export function VariantSelector({ colorGroups, purities, variants, onChange }: VariantSelectorProps) {
+export function VariantSelector({ colorGroups, purities, variants, sizeOptions = [], onChange }: VariantSelectorProps) {
   const activeVariants = useMemo(
     () => variants.filter((variant) => variant.is_active),
     [variants],
@@ -105,7 +106,12 @@ export function VariantSelector({ colorGroups, purities, variants, onChange }: V
 
   const [colorId, setColorId]   = useState(initialColorId)
   const [purityId, setPurityId] = useState(initialPurityId)
+  const [sizeLabel, setSizeLabel] = useState<string | null>(null)
   const [quantity, setQuantity] = useState(1)
+
+  useEffect(() => {
+    setSizeLabel(null)
+  }, [sizeOptions])
 
   useEffect(() => {
     const availableColors = new Set(activeVariants.map((variant) => variant.color_id))
@@ -130,12 +136,12 @@ export function VariantSelector({ colorGroups, purities, variants, onChange }: V
   useEffect(() => {
     onChange({
       variantId: matchedVariant?.id ?? null,
-      sizeLabel: null,
+      sizeLabel,
       quantity,
       colorId,
       variant:   matchedVariant,
     })
-  }, [matchedVariant, quantity, colorId, onChange])
+  }, [matchedVariant, quantity, colorId, sizeLabel, onChange])
 
   const purityOptionsForColor = useMemo(() => {
     const set = new Set(activeVariants.filter((variant) => variant.color_id === colorId).map((variant) => variant.purity_id))
@@ -188,6 +194,27 @@ export function VariantSelector({ colorGroups, purities, variants, onChange }: V
           ))}
         </div>
       </div>
+
+      {sizeOptions.length > 0 && (
+        <div>
+          <label htmlFor="ring-size" className="block text-xs uppercase tracking-widest text-ink-muted mb-2">
+            Ring Size
+          </label>
+          <select
+            id="ring-size"
+            value={sizeLabel ?? ''}
+            onChange={(e) => setSizeLabel(e.target.value || null)}
+            className="w-40 rounded-lg border border-divider bg-bg px-3 py-3 text-sm text-ink outline-none transition-colors focus:border-teal focus:ring-1 focus:ring-teal"
+          >
+            <option value="">Select size</option>
+            {sizeOptions.map((size) => (
+              <option key={size} value={size}>
+                {size}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {matchedVariant && (
         <div className="text-sm space-y-1">

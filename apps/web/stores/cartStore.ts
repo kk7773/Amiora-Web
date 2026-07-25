@@ -25,8 +25,8 @@ export interface CartItem {
 interface CartStore {
   items: CartItem[]
   addItem:        (item: CartItem) => void
-  removeItem:     (productId: string, variantId: string) => void
-  updateQuantity: (productId: string, variantId: string, qty: number) => void
+  removeItem:     (productId: string, variantId: string, sizeLabel?: string) => void
+  updateQuantity: (productId: string, variantId: string, qty: number, sizeLabel?: string) => void
   clearCart:      () => void
   total:          () => number
   itemCount:      () => number
@@ -40,7 +40,10 @@ export const useCartStore = create<CartStore>()(
   addItem(item) {
     set((state) => {
       const existing = state.items.findIndex(
-        (i) => i.productId === item.productId && i.variantId === item.variantId
+        (i) =>
+          i.productId === item.productId &&
+          i.variantId === item.variantId &&
+          (i.sizeLabel || '') === (item.sizeLabel || '')
       )
       if (existing >= 0) {
         const items = [...state.items]
@@ -52,6 +55,7 @@ export const useCartStore = create<CartStore>()(
           ...(item.productSlug ? { productSlug: item.productSlug } : {}),
           ...(item.collectionSlug !== undefined ? { collectionSlug: item.collectionSlug } : {}),
           ...(item.categorySlug !== undefined ? { categorySlug: item.categorySlug } : {}),
+          sizeLabel: item.sizeLabel,
         }
         return { items }
       }
@@ -59,22 +63,22 @@ export const useCartStore = create<CartStore>()(
     })
   },
 
-  removeItem(productId, variantId) {
+  removeItem(productId, variantId, sizeLabel = '') {
     set((state) => ({
       items: state.items.filter(
-        (i) => !(i.productId === productId && i.variantId === variantId)
+        (i) => !(i.productId === productId && i.variantId === variantId && (i.sizeLabel || '') === sizeLabel)
       ),
     }))
   },
 
-  updateQuantity(productId, variantId, qty) {
+  updateQuantity(productId, variantId, qty, sizeLabel = '') {
     if (qty <= 0) {
-      get().removeItem(productId, variantId)
+      get().removeItem(productId, variantId, sizeLabel)
       return
     }
     set((state) => ({
       items: state.items.map((i) =>
-        i.productId === productId && i.variantId === variantId
+        i.productId === productId && i.variantId === variantId && (i.sizeLabel || '') === sizeLabel
           ? { ...i, quantity: Math.min(qty, 5) }
           : i
       ),
@@ -95,7 +99,7 @@ export const useCartStore = create<CartStore>()(
 }),
     {
       name: 'amiora-cart',
-      version: 4,
+      version: 5,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({ items: state.items }),
       migrate: (persistedState, version) => {
@@ -107,6 +111,7 @@ export const useCartStore = create<CartStore>()(
           items: (state?.items ?? []).map((item) => ({
             ...item,
             variantSku: item.variantSku ?? item.variantLabel ?? item.variantId,
+            sizeLabel: item.sizeLabel ?? '',
           })),
         }
       },

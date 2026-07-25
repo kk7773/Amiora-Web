@@ -105,9 +105,17 @@ export function ProductCard({ product, badgeLabel, className }: ProductCardProps
   const displayPrice = product.basePrice ?? 0
   const inStock = firstVariant ? (firstVariant.stock_qty ?? 0) > 0 : false
   const productHref = product.slug ? getProductHref(product as { slug: string; collectionSlug?: string | null; categorySlug?: string | null }) : '/shop'
+  const isRingProduct =
+    product.categorySlug?.trim().toLowerCase() === 'rings' ||
+    product.categoryName?.trim().toLowerCase() === 'rings'
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault()
+    if (isRingProduct) {
+      router.push(productHref)
+      toast.info('Select ring size on product page')
+      return
+    }
     if (!firstVariant) return
     addItem({
       productId:    product.id,

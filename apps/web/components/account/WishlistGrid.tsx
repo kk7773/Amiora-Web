@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Trash2, ShoppingBag } from 'lucide-react'
 import { ProductCard, type ProductCardProps } from '@/components/product/ProductCard'
@@ -14,6 +15,7 @@ interface WishlistGridProps {
 export function WishlistGrid({ products: initialProducts }: WishlistGridProps) {
   const [products, setProducts] = useState(initialProducts)
   const addItem = useCartStore((s) => s.addItem)
+  const router = useRouter()
 
   const handleRemove = async (productId: string) => {
     const supabase = createBrowserClient()
@@ -23,6 +25,14 @@ export function WishlistGrid({ products: initialProducts }: WishlistGridProps) {
   }
 
   const handleAddToCart = (product: ProductCardProps['product']) => {
+    const isRingProduct =
+      product.categorySlug?.trim().toLowerCase() === 'rings' ||
+      product.categoryName?.trim().toLowerCase() === 'rings'
+    if (isRingProduct) {
+      router.push(product.collectionSlug ? `/shop/${product.collectionSlug}/${product.slug}` : `/products/${product.slug}`)
+      toast.info('Select ring size on product page')
+      return
+    }
     const variant = product.product_variants?.[0]
     if (!variant) return
     addItem({

@@ -185,7 +185,7 @@ export function CheckoutClient({
   const cartSignature = useMemo(
     () =>
       JSON.stringify(
-        items.map((i) => [i.productId, i.variantId, i.quantity]),
+        items.map((i) => [i.productId, i.variantId, i.sizeLabel, i.quantity]),
       ),
     [items],
   )
@@ -666,10 +666,15 @@ export function CheckoutClient({
               const priced = quoteLineMap.get(`${item.productId}:${item.variantId}`)
               const lineTotal = priced?.line_total ?? null
               return (
-              <li key={`${item.productId}-${item.variantId}`} className="pt-3 first:pt-0 flex justify-between text-sm gap-2">
+              <li key={`${item.productId}-${item.variantId}-${item.sizeLabel || 'default'}`} className="pt-3 first:pt-0 flex justify-between text-sm gap-2">
                 <div className="min-w-0">
                   <p className="font-medium text-ink line-clamp-1">{item.productName}</p>
-                  <p className="text-xs text-ink-muted">{item.variantLabel} · Qty {item.quantity}</p>
+                  <p className="text-xs text-ink-muted">
+                    {item.variantLabel}
+                    {item.sizeLabel ? ` · Size ${item.sizeLabel}` : ''}
+                    {' · '}
+                    Qty {item.quantity}
+                  </p>
                 </div>
                 <p className="shrink-0 font-medium text-ink">
                   {loadingQuote || lineTotal == null ? '…' : formatINR(lineTotal)}

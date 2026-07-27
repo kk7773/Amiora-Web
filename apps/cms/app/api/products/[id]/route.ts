@@ -3,6 +3,7 @@ import { createServerClient } from '@amiora/database'
 import { computeCatalogVariantPrice, readManualPriceOverride } from '@amiora/pricing'
 import { generateAmioraSKU } from '@/lib/sku'
 import { normalizeStoneLines } from '@/lib/normalizeStoneLines'
+import { normalizeChainLengths } from '@/lib/normalizeChainLengths'
 import { requireCmsAccess, writeAuditLog } from '@/lib/rbac'
 import { insertProductColorGroup, updateProductColorGroup } from '@/lib/productColorGroupsDb'
 
@@ -11,6 +12,10 @@ function parseOptionalGrams(v: unknown): number | null {
   const n = typeof v === 'number' ? v : parseFloat(String(v))
   if (!Number.isFinite(n) || n < 0) return null
   return n
+}
+
+function isMissingChainLengthsColumn(message: string) {
+  return /chain_lengths/i.test(message) && /(column|schema cache|does not exist|42703)/i.test(message)
 }
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -51,6 +56,7 @@ type Body = {
     diamond_color?: string | null
     diamond_clarity?: string | null
     size_range?: string | null
+    chain_lengths?: unknown
     metal_weight_g?: number | null
     meta_title?: string | null
     meta_description?: string | null
@@ -186,6 +192,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       diamond_color: body.product.diamond_color ?? null,
       diamond_clarity: body.product.diamond_clarity ?? null,
       size_range: body.product.size_range ?? null,
+      chain_lengths: normalizeChainLengths(body.product.chain_lengths),
       metal_weight_g: parseOptionalGrams(body.product.metal_weight_g),
       meta_title: body.product.meta_title ?? null,
       meta_description: body.product.meta_description ?? null,
@@ -204,7 +211,17 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       .update(productUpdate)
       .eq('id', id)
 
-    if (productError) {
+    if (productError && isMissingChainLengthsColumn(productError.message)) {
+      const { chain_lengths: _chainLengths, ...withoutChainLengths } = productUpdate
+      const retry = await supabase
+        .from('products')
+        .update(withoutChainLengths)
+        .eq('id', id)
+      if (retry.error) {
+        console.error('[PATCH /api/products/:id] product update', retry.error)
+        return NextResponse.json({ error: retry.error.message }, { status: 500 })
+      }
+    } else if (productError) {
       console.error('[PATCH /api/products/:id] product update', productError)
       return NextResponse.json({ error: productError.message }, { status: 500 })
     }

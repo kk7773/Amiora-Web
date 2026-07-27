@@ -298,6 +298,7 @@ export interface Database {
           diamond_color: string | null
           diamond_clarity: string | null
           size_range: string | null
+          chain_lengths: Json
           metal_weight_g: number | null
           status: ProductPublishStatus
           is_featured: boolean
@@ -332,6 +333,7 @@ export interface Database {
           diamond_color?: string | null
           diamond_clarity?: string | null
           size_range?: string | null
+          chain_lengths?: Json
           metal_weight_g?: number | null
           status?: ProductPublishStatus
           is_featured?: boolean

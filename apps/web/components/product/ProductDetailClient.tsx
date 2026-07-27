@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Heart, MapPin, User, RefreshCw, Truck, Award, Gift } from 'lucide-react'
@@ -16,7 +16,7 @@ import { ProductShare }   from './ProductShare'
 import { StarRating }     from '@/components/ui/StarRating'
 import { useCartStore }   from '@/stores/cartStore'
 import { useWishlist }    from '@/hooks/useWishlist'
-import { breakdownToDisplayRows, formatINR, resolveLiveRate } from '@amiora/pricing'
+import { breakdownToDisplayRows, computeCatalogVariantPrice, formatINR, resolveLiveRate } from '@amiora/pricing'
 import { useCatalogPrices, type CatalogPricingContext } from '@/hooks/useCatalogPrices'
 import { MetalPurityTable, formatWeightGrams } from './MetalPurityTable'
 import { MOBILE_NAV_HEIGHT } from '@/components/layout/MobileBottomNav'
@@ -35,6 +35,7 @@ interface ProductDetailClientProps {
     diamond_color:      string | null
     diamond_clarity:    string | null
     size_range:         string | null
+    chain_lengths:      unknown
     making_charge_pct:  number
     avgRating:          number
     reviewCount:        number
@@ -104,6 +105,11 @@ type PriceBreakupRow = {
 type PriceBreakupPayload = {
   rows: PriceBreakupRow[]
   note: string | null
+}
+
+type ChainLengthRow = {
+  length_inch: number
+  weight_g: number
 }
 
 function prettifyLabel(raw: string): string {
@@ -199,6 +205,26 @@ function displayMoney(value: number | string): string {
   return value
 }
 
+function normalizeChainLengths(raw: unknown): ChainLengthRow[] {
+  if (!Array.isArray(raw)) return []
+
+  const rows: ChainLengthRow[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const record = item as Record<string, unknown>
+    const lengthValue = Number(record.length_inch ?? record.lengthInch)
+    const weightValue = Number(record.weight_g ?? record.weightG)
+    if (!Number.isFinite(lengthValue) || lengthValue <= 0) continue
+    if (!Number.isFinite(weightValue) || weightValue <= 0) continue
+    rows.push({
+      length_inch: Math.round(lengthValue * 1000) / 1000,
+      weight_g: Math.round(weightValue * 1000) / 1000,
+    })
+  }
+
+  return rows
+}
+
 export function ProductDetailClient({
   product,
   catalog,
@@ -212,6 +238,10 @@ export function ProductDetailClient({
     () => (isRingProduct ? Array.from({ length: 23 }, (_, index) => String(index + 6)) : []),
     [isRingProduct],
   )
+  const isChainProduct =
+    /necklace|chain/i.test(product.categorySlug ?? '') ||
+    /necklace|chain/i.test(product.categoryName ?? '')
+  const chainLengthOptions = useMemo(() => normalizeChainLengths(product.chain_lengths), [product.chain_lengths])
   const purityById = new Map(catalog.purities.map((purity) => [purity.id, purity]))
   const activeColorIds = new Set(
     catalog.variants.filter((variant) => variant.is_active).map((variant) => variant.color_id),
@@ -249,8 +279,16 @@ export function ProductDetailClient({
     colorId:   initialColorId,
     variant:   initialVariant,
   }))
+  const [selectedChainLength, setSelectedChainLength] = useState<string>('')
   const [activeTab, setActiveTab] = useState(0)
   const addItem = useCartStore((s) => s.addItem)
+
+  useEffect(() => {
+    if (!isChainProduct || chainLengthOptions.length === 0) return
+    if (!selectedChainLength || !chainLengthOptions.some((length) => String(length.length_inch) === selectedChainLength)) {
+      setSelectedChainLength(String(chainLengthOptions[0]!.length_inch))
+    }
+  }, [isChainProduct, chainLengthOptions, selectedChainLength])
 
   const galleryImages = useMemo(() => {
     const grp = catalog.colorGroups.find((g) => g.colorId === sel.colorId)
@@ -278,10 +316,50 @@ export function ProductDetailClient({
   )
 
   const activeBreakdown = activeVariant ? computedPrices[activeVariant.id] : null
-  const displayPrice = activeBreakdown?.finalPrice ?? 0
   const activePurity = activeVariant
     ? catalog.purities.find((purity) => purity.id === activeVariant.purity_id) ?? null
     : null
+  const selectedChainOption = useMemo(
+    () => chainLengthOptions.find((length) => String(length.length_inch) === selectedChainLength) ?? null,
+    [chainLengthOptions, selectedChainLength],
+  )
+  const chainBreakdown = useMemo(() => {
+    if (!isChainProduct || !selectedChainOption || !activePurity) return null
+    return computeCatalogVariantPrice({
+      metalWeightG: selectedChainOption.weight_g,
+      purityCode: activePurity.code,
+      metalType: activePurity.metal,
+      makingChargePct: pricingContext.makingChargePct,
+      stoneLines: pricingContext.stoneLines,
+      goldPerGram,
+      goldPurityRates: pricingContext.goldPurityRates,
+      silverPerGram,
+      diamondPricePerCarat: pricingContext.initialDiamondPerCarat,
+      makingChargeDiscountPct: pricingContext.makingChargeDiscountPct,
+      gemPriceDiscountPct: pricingContext.gemPriceDiscountPct,
+    })
+  }, [
+    isChainProduct,
+    selectedChainOption,
+    activePurity,
+    pricingContext.makingChargePct,
+    pricingContext.stoneLines,
+    pricingContext.goldPurityRates,
+    pricingContext.makingChargeDiscountPct,
+    pricingContext.gemPriceDiscountPct,
+    pricingContext.initialDiamondPerCarat,
+    goldPerGram,
+    silverPerGram,
+  ])
+  const displayBreakdown = isChainProduct && chainBreakdown ? chainBreakdown : activeBreakdown
+  const displayPrice = displayBreakdown?.finalPrice ?? 0
+  const displayVariant =
+    isChainProduct && activeVariant
+      ? {
+          ...activeVariant,
+          metal_weight_g: selectedChainOption?.weight_g ?? activeVariant.metal_weight_g,
+        }
+      : activeVariant
 
   const handleVariantChange = useCallback(
     (state: SelectedVariantState & { variant: CatalogVariantRow | null }) => {
@@ -302,6 +380,10 @@ export function ProductDetailClient({
       toast.error('Select ring size', { description: 'Choose a size from 6 to 28 before adding this ring.' })
       return
     }
+    if (isChainProduct && !selectedChainOption) {
+      toast.error('Select chain length', { description: 'Choose a chain length before adding this piece.' })
+      return
+    }
     const thumb =
       galleryImages.find((item) => item.media_type !== 'video')?.url ??
       galleryImages[0]?.url ??
@@ -310,7 +392,7 @@ export function ProductDetailClient({
       productId:    product.id,
       variantId:    activeVariant.id,
       variantSku:   activeVariant.sku,
-      sizeLabel:    sel.sizeLabel ?? '',
+      sizeLabel:    isChainProduct ? String(selectedChainOption?.length_inch ?? '') : sel.sizeLabel ?? '',
       productName:  product.name,
       variantLabel: activeVariant.sku,
       imageUrl:     thumb,
@@ -333,9 +415,9 @@ export function ProductDetailClient({
 
   const TABS = ['Metal & Purity', 'Price Breakup', 'Care Guide']
   const liveBreakupRows = useMemo(() => {
-    if (!activeBreakdown) return null
-    return breakdownToDisplayRows(activeBreakdown)
-  }, [activeBreakdown])
+    if (!displayBreakdown) return null
+    return breakdownToDisplayRows(displayBreakdown)
+  }, [displayBreakdown])
 
   const addToCartLabel = !activeVariant ? 'Select options' : inStock ? 'Add to Cart' : 'Out of Stock'
 
@@ -408,6 +490,31 @@ export function ProductDetailClient({
             onChange={handleVariantChange}
           />
 
+          {isChainProduct && chainLengthOptions.length > 0 && (
+            <div className="rounded-2xl border border-divider bg-surface/40 p-4 space-y-3">
+              <div>
+                <p className="text-xs uppercase tracking-widest text-ink-muted mb-2">Chain Length</p>
+                <select
+                  value={selectedChainLength}
+                  onChange={(e) => setSelectedChainLength(e.target.value)}
+                  className="w-full rounded-lg border border-divider bg-white px-3 py-3 text-sm text-ink outline-none transition-colors focus:border-teal focus:ring-1 focus:ring-teal"
+                >
+                  {chainLengthOptions.map((length) => (
+                    <option key={length.length_inch} value={String(length.length_inch)}>
+                      {length.length_inch}" · {length.weight_g.toFixed(3)} g
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 text-sm">
+                <span className="text-ink-muted">Selected length price</span>
+                <span className="font-display text-lg text-ink tabular-nums">
+                  {displayBreakdown ? formatINR(displayBreakdown.finalPrice) : '—'}
+                </span>
+              </div>
+            </div>
+          )}
+
           <div className="w-full h-px bg-divider" />
 
           <div className="hidden md:flex flex-col gap-3">
@@ -476,9 +583,9 @@ export function ProductDetailClient({
             <div className="py-4 text-sm text-ink-muted leading-relaxed space-y-3">
               {activeTab === 0 && (
                 <MetalPurityTable
-                  selectedVariant={activeVariant}
+                  selectedVariant={displayVariant}
                   selectedPurity={activePurity}
-                  breakdown={activeBreakdown}
+                  breakdown={displayBreakdown}
                   stoneLines={pricingContext.stoneLines}
                 />
               )}

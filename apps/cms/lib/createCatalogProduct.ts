@@ -3,6 +3,7 @@ import { computeCatalogVariantPrice, readManualPriceOverride } from '@amiora/pri
 import { generateAmioraSKU } from '@/lib/sku'
 import { insertProductColorGroup } from '@/lib/productColorGroupsDb'
 import { normalizeStoneLines, parseOptionalGrams } from '@/lib/normalizeStoneLines'
+import { normalizeChainLengths } from '@/lib/normalizeChainLengths'
 import type { CatalogProductPayload } from '@/lib/catalogProductTypes'
 import { fetchNextProductNumber } from '@/lib/productIdentity'
 
@@ -103,6 +104,7 @@ export async function createCatalogProduct(
     diamond_color: body.product.diamond_color ?? null,
     diamond_clarity: body.product.diamond_clarity ?? null,
     size_range: body.product.size_range ?? null,
+    chain_lengths: normalizeChainLengths(body.product.chain_lengths),
     metal_weight_g: parseOptionalGrams(body.product.metal_weight_g),
     meta_title: body.product.meta_title ?? null,
     meta_description: body.product.meta_description ?? null,
@@ -116,8 +118,19 @@ export async function createCatalogProduct(
     stone_lines: body.product.has_stone ? normalizeStoneLines(body.product.stone_lines) : [],
   }
 
+  const stripChainLengths = (payload: Record<string, unknown>) => {
+    const { chain_lengths: _chainLengths, ...rest } = payload
+    return rest
+  }
+
   let insertPayload: Record<string, unknown> = { ...prodInsert }
   let { data: prod, error: pErr } = await supabase.from('products').insert(insertPayload).select('id').single()
+
+  if ((pErr || !prod) && pErr?.message && /chain_lengths/i.test(pErr.message) && /(column|schema cache|does not exist|42703)/i.test(pErr.message)) {
+    const retry = await supabase.from('products').insert(stripChainLengths(insertPayload)).select('id').single()
+    prod = retry.data
+    pErr = retry.error
+  }
 
   if ((pErr || !prod) && pErr?.message && /design_number/i.test(pErr.message)) {
     const { design_number: _dn, ...withoutDesign } = insertPayload

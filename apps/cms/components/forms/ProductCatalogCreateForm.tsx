@@ -21,6 +21,14 @@ type MetalPurity = {
   metal?: 'gold' | 'silver' | 'platinum' | string
 }
 
+type ChainLengthUi = {
+  key: string
+  length_inch: string
+  weight_g: string
+}
+
+const CHAIN_LENGTH_OPTIONS = ['14', '16', '18', '20', '22'] as const
+
 const DIAMOND_SHAPE_OPTIONS = [
   'Round',
   'Oval',
@@ -98,6 +106,7 @@ type InitialData = {
     diamond_color: string | null
     diamond_clarity: string | null
     size_range: string | null
+    chain_lengths?: unknown
     metal_weight_g?: number | null
     meta_title: string | null
     meta_description: string | null
@@ -428,6 +437,50 @@ function newStoneSizeRow(): StoneSizeUi {
   }
 }
 
+function newChainLengthRow(lengthInch = ''): ChainLengthUi {
+  return {
+    key: `cl-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    length_inch: lengthInch,
+    weight_g: '',
+  }
+}
+
+function chainLengthsFromDb(raw: unknown): ChainLengthUi[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((item, index) => {
+      if (!item || typeof item !== 'object') return null
+      const record = item as Record<string, unknown>
+      const lengthInch =
+        typeof record.length_inch === 'number' && Number.isFinite(record.length_inch)
+          ? String(record.length_inch)
+          : typeof record.length_inch === 'string' && record.length_inch.trim() !== ''
+            ? record.length_inch.trim()
+            : typeof record.lengthInch === 'number' && Number.isFinite(record.lengthInch)
+              ? String(record.lengthInch)
+              : typeof record.lengthInch === 'string' && record.lengthInch.trim() !== ''
+                ? record.lengthInch.trim()
+                : ''
+      const weightG =
+        typeof record.weight_g === 'number' && Number.isFinite(record.weight_g)
+          ? String(record.weight_g)
+          : typeof record.weight_g === 'string' && record.weight_g.trim() !== ''
+            ? record.weight_g.trim()
+            : typeof record.weightG === 'number' && Number.isFinite(record.weightG)
+              ? String(record.weightG)
+              : typeof record.weightG === 'string' && record.weightG.trim() !== ''
+                ? record.weightG.trim()
+                : ''
+      if (!lengthInch && !weightG) return null
+      return {
+        key: `cl-${index}-${lengthInch || 'row'}`,
+        length_inch: lengthInch,
+        weight_g: weightG,
+      }
+    })
+    .filter((row): row is ChainLengthUi => row != null)
+}
+
 export function ProductCatalogCreateForm({
   categories,
   collections,
@@ -501,6 +554,9 @@ export function ProductCatalogCreateForm({
   const [diamondColor, setDiamondColor] = useState(initialData?.product.diamond_color ?? '')
   const [diamondClarity, setDiamondClarity] = useState(initialData?.product.diamond_clarity ?? '')
   const [sizeRange, setSizeRange] = useState(initialData?.product.size_range ?? '')
+  const [chainLengths, setChainLengths] = useState<ChainLengthUi[]>(
+    () => chainLengthsFromDb(initialData?.product.chain_lengths),
+  )
 
   const [metaTitle, setMetaTitle] = useState(initialData?.product.meta_title ?? '')
   const [metaDesc, setMetaDesc] = useState(initialData?.product.meta_description ?? '')
@@ -523,6 +579,20 @@ export function ProductCatalogCreateForm({
     if (!hasStone) return
     setStoneRows((prev) => (prev.length === 0 ? [newStoneRow()] : prev))
   }, [hasStone])
+
+  const selectedCategory = categories.find((category) => category.id === categoryId)
+  const isChainProduct = /necklace|chain/i.test(
+    `${selectedCategory?.name ?? ''} ${selectedCategory?.code ?? ''}`,
+  )
+
+  useEffect(() => {
+    if (!isChainProduct) return
+    setChainLengths((prev) => (prev.length > 0 ? prev : CHAIN_LENGTH_OPTIONS.map((length) => newChainLengthRow(length))))
+  }, [isChainProduct])
+
+  function updateChainLength(rowKey: string, updater: (row: ChainLengthUi) => ChainLengthUi) {
+    setChainLengths((prev) => prev.map((row) => (row.key === rowKey ? updater(row) : row)))
+  }
 
   const [colorRows, setColorRows] = useState<ColorRow[]>(
     initialData?.colorVariants.map((row) => ({
@@ -752,7 +822,7 @@ export function ProductCatalogCreateForm({
   function setCellValue(colorId: string, purityId: string, updater: (current: CellState) => CellState) {
     const key = buildCellKey(colorId, purityId)
     setCells((prev) => {
-      const current = prev[key] ?? { gross_weight_g: '', stock_qty: '1', is_active: true }
+      const current = prev[key] ?? { gross_weight_g: '', stock_qty: '1', is_active: false }
       const normalizedCurrent =
         'manual_price' in current
           ? current
@@ -897,6 +967,20 @@ export function ProductCatalogCreateForm({
         diamond_color: diamondColor.trim() || null,
         diamond_clarity: diamondClarity.trim() || null,
         size_range: sizeRange.trim() || null,
+        chain_lengths: isChainProduct
+          ? chainLengths
+              .map((row) => ({
+                length_inch:
+                  row.length_inch.trim() !== '' && Number.isFinite(parseFloat(row.length_inch))
+                    ? parseFloat(row.length_inch)
+                    : null,
+                weight_g:
+                  row.weight_g.trim() !== '' && Number.isFinite(parseFloat(row.weight_g))
+                    ? parseFloat(row.weight_g)
+                    : null,
+              }))
+              .filter((row) => row.length_inch != null && row.weight_g != null)
+          : [],
         meta_title: metaTitle.trim() || null,
         meta_description: metaDesc.trim() || null,
         status: nextStatus,
@@ -1603,7 +1687,7 @@ export function ProductCatalogCreateForm({
                         gross_weight_g: '',
                         manual_price: '',
                         stock_qty: '1',
-                        is_active: true,
+                        is_active: false,
                       }
                       const grossWeightNum =
                         cell.gross_weight_g.trim() !== '' ? parseFloat(cell.gross_weight_g) : NaN
@@ -1612,6 +1696,8 @@ export function ProductCatalogCreateForm({
                         Number.isFinite(grossWeightNum) && grossWeightNum > 0
                           ? Math.round(grossWeightNum * purityMultiplier * 1000) / 1000
                           : null
+                      const isCellComplete = pureMetalWeight != null
+                      const isCellActive = isCellComplete && cell.is_active
                       return (
                         <td key={purity.id} className="px-2 py-2 border-b align-top min-w-[11rem]">
                           <input
@@ -1657,11 +1743,17 @@ export function ProductCatalogCreateForm({
                           <label className="flex items-center gap-2 text-xs text-ink-muted mb-2">
                             <input
                               type="checkbox"
-                              checked={cell.is_active}
+                              checked={isCellActive}
+                              disabled={!isCellComplete}
                               onChange={(e) => setCellValue(row.color_id, purity.id, (current) => ({ ...current, is_active: e.target.checked }))}
                             />
                             Active variant
                           </label>
+                          {!isCellComplete && (
+                            <p className="mb-2 text-[11px] text-ink-faint">
+                              Add product weight to enable this variant.
+                            </p>
+                          )}
                           {color?.code ? (
                             <p className="text-[11px] text-ink-faint font-mono break-all">
                               {skuPreview(color.code, purity.code)}
@@ -1677,6 +1769,52 @@ export function ProductCatalogCreateForm({
           </table>
         )}
       </section>
+
+      {isChainProduct && (
+        <section className="bg-white rounded-xl border border-divider p-6 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="font-display text-lg text-deep-teal">Chain lengths</h3>
+            <span className="text-xs uppercase tracking-widest text-ink-faint">14 / 16 / 18 / 20 / 22 in</span>
+          </div>
+          <p className="text-sm text-ink-muted">
+            Har length ke liye weight daalo. Frontend par user length choose karega aur price live auto-calculate hoga.
+          </p>
+          <div className="space-y-3">
+            {chainLengths.map((row, index) => (
+              <div key={row.key} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr] gap-3 rounded-lg border border-divider bg-surface/40 p-4">
+                <label className="block space-y-1">
+                  <span className="text-xs text-ink-muted uppercase tracking-wider">Length (inch)</span>
+                  <select
+                    value={row.length_inch}
+                    onChange={(e) => updateChainLength(row.key, (current) => ({ ...current, length_inch: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
+                  >
+                    <option value="">Select length</option>
+                    {CHAIN_LENGTH_OPTIONS.map((length) => (
+                      <option key={length} value={length}>{length}"</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-xs text-ink-muted uppercase tracking-wider">Weight (g)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.001"
+                    value={row.weight_g}
+                    onChange={(e) => updateChainLength(row.key, (current) => ({ ...current, weight_g: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
+                    placeholder="0.000"
+                  />
+                </label>
+                <p className="sm:col-span-2 text-xs text-ink-faint">
+                  Row {index + 1}: price product page par selected purity ke basis par auto calculate hoga.
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="bg-white rounded-xl border border-divider p-6 space-y-4">
         <h3 className="font-display text-lg text-deep-teal">SEO &amp; publish</h3>

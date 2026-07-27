@@ -34,6 +34,7 @@ export type CatalogProductPayload = {
     diamond_color?: string | null
     diamond_clarity?: string | null
     size_range?: string | null
+    chain_lengths?: unknown
     metal_weight_g?: number | null
     meta_title?: string | null
     meta_description?: string | null

@@ -53,12 +53,10 @@ function isCatalogVariantRow(r: Record<string, unknown>): boolean {
 
 async function legacyVariantCatalog(
   supabase: ReturnType<typeof createServerClient>,
-  product: { id: string; slug: string; sku?: string | null },
+  product: { id: string; slug: string },
   variantRecords: Record<string, unknown>[],
   fallbackImageUrls: string[],
 ): Promise<CatalogBundle> {
-  const productSku = typeof product.sku === 'string' ? product.sku : product.slug
-
   const legacy = variantRecords.filter((r) => typeof r.id === 'string') as Array<{
     id: string
     is_active?: boolean
@@ -104,7 +102,7 @@ async function legacyVariantCatalog(
       id:         v.id,
       color_id:   typeof v.metal_variant_id === 'string' ? v.metal_variant_id : 'legacy-default',
       purity_id:  `legacy-pur:${purityKey}`,
-      sku:        `${productSku}-${v.id.slice(0, 8)}`,
+      sku:        `${product.slug}-${v.id.slice(0, 8)}`,
       price:      Number(v.gem_price_override ?? 0),
       stock_qty:  inStock ? 99 : 0,
       metal_weight_g: null,
@@ -130,6 +128,7 @@ type PdpProductRow = {
   diamond_color: string | null
   diamond_clarity: string | null
   size_range: string | null
+  chain_lengths: unknown
   design_number: string | null
   making_charge_pct: number | null
   making_charge_discount_pct: number | null
@@ -144,6 +143,7 @@ type PdpProductRow = {
 const PDP_PRODUCT_MODERN_SELECT = `
   id, name, slug, design_number, short_desc, description, faqs,
   diamond_shape, diamond_count, total_diamond_wt, diamond_color, diamond_clarity, size_range,
+  chain_lengths,
   making_charge_pct, making_charge_discount_pct, gem_price_discount_pct,
   has_stone, stone_lines,
   collection:${PRODUCT_COLLECTION_EMBED}(id, name, slug),
@@ -152,7 +152,15 @@ const PDP_PRODUCT_MODERN_SELECT = `
 `
 
 const PDP_PRODUCT_LEGACY_SELECT = `
-  id, name, slug, description, short_description, sku,
+  id, name, slug, description, short_description,
+  making_charge_pct,
+  collection:${PRODUCT_COLLECTION_EMBED}(id, name, slug),
+  category:${PRODUCT_CATEGORY_EMBED}(id, name, slug),
+  product_images(id, url, alt_text, sort_order, is_primary)
+`
+
+const PDP_PRODUCT_LEGACY_SELECT_NO_SHORT_DESC = `
+  id, name, slug, description,
   making_charge_pct,
   collection:${PRODUCT_COLLECTION_EMBED}(id, name, slug),
   category:${PRODUCT_CATEGORY_EMBED}(id, name, slug),
@@ -184,6 +192,14 @@ type PcgFetchRow = {
 
 function isVideosColumnMissing(message: string) {
   return /videos/i.test(message) && /(column|schema cache|does not exist|42703)/i.test(message)
+}
+
+function isChainLengthsColumnMissing(message: string) {
+  return /chain_lengths/i.test(message) && /(column|schema cache|does not exist|42703)/i.test(message)
+}
+
+function isShortDescriptionColumnMissing(message: string) {
+  return /short_description/i.test(message) && /(column|schema cache|does not exist|42703)/i.test(message)
 }
 
 /** Tolerates DBs that have not yet applied migration 018 (product_color_groups.videos). */
@@ -235,13 +251,8 @@ async function fetchPdpProductImpl(
     .eq('status', 'active')
     .single()
 
-  const modernCode = (modern.error as { code?: string } | null)?.code
   if (!modern.error && modern.data) {
     return { data: modern.data as PdpProductRow, error: null }
-  }
-
-  if (modern.error && modernCode !== '42703') {
-    return { data: null, error: modern.error as { message: string; code?: string } }
   }
 
   const leg = await supabase
@@ -252,6 +263,45 @@ async function fetchPdpProductImpl(
     .single()
 
   if (leg.error || !leg.data) {
+    if (leg.error && isShortDescriptionColumnMissing(leg.error.message)) {
+      const legFallback = await supabase
+        .from('products')
+        .select(PDP_PRODUCT_LEGACY_SELECT_NO_SHORT_DESC)
+        .eq('slug', slug)
+        .eq('status', 'active')
+        .single()
+
+      if (!legFallback.error && legFallback.data) {
+        const r = legFallback.data as Record<string, unknown>
+        const row: PdpProductRow = {
+          id:                         r.id as string,
+          name:                       r.name as string,
+          slug:                       r.slug as string,
+          design_number:              null,
+          short_desc:                 null,
+          description:                (r.description as string | null) ?? null,
+          faqs:                       null,
+          diamond_shape:              null,
+          diamond_count:              null,
+          total_diamond_wt:           null,
+          diamond_color:              null,
+          diamond_clarity:            null,
+          size_range:                 null,
+          chain_lengths:              [],
+          making_charge_pct:          (r.making_charge_pct as number | null) ?? null,
+          making_charge_discount_pct: null,
+          gem_price_discount_pct:     null,
+          collection:                 r.collection,
+          category:                   r.category,
+          product_images:             r.product_images,
+          sku:                        (r.sku as string | null) ?? null,
+        }
+        return { data: row, error: null }
+      }
+
+      return { data: null, error: (legFallback.error ?? leg.error ?? modern.error) as { message: string; code?: string } }
+    }
+
     return { data: null, error: (leg.error ?? modern.error) as { message: string; code?: string } }
   }
 
@@ -270,13 +320,13 @@ async function fetchPdpProductImpl(
     diamond_color:              null,
     diamond_clarity:            null,
     size_range:                 null,
+    chain_lengths:              [],
     making_charge_pct:          (r.making_charge_pct as number | null) ?? null,
     making_charge_discount_pct: null,
     gem_price_discount_pct:     null,
     collection:                 r.collection,
     category:                   r.category,
     product_images:             r.product_images,
-    sku:                        (r.sku as string | null) ?? null,
   }
   return { data: row, error: null }
 }
@@ -670,6 +720,7 @@ export default async function ProductPage({ params }: Props) {
           diamond_color:    product.diamond_color,
           diamond_clarity:  product.diamond_clarity,
           size_range:       product.size_range,
+          chain_lengths:    (product as { chain_lengths?: unknown }).chain_lengths ?? [],
           making_charge_pct: Number(product.making_charge_pct ?? 0),
           avgRating,
           reviewCount:     safeReviews.length,

@@ -1,7 +1,7 @@
 'use client'
 
 import { usePathname, useRouter } from 'next/navigation'
-import { Bell, PanelLeftOpen, Search, User } from 'lucide-react'
+import { Bell, PanelLeftOpen, User } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useNotificationStore } from '@/stores/notificationStore'
 
@@ -61,12 +61,6 @@ export function TopBar({
       <h1 className="font-display text-lg text-deep-teal">{title}</h1>
 
       <div className="ml-auto flex items-center gap-3">
-        {/* Search */}
-        <div className="hidden md:flex items-center gap-2 bg-surface rounded-lg px-3 py-1.5 text-ink-muted text-sm w-48">
-          <Search className="w-3.5 h-3.5 shrink-0" />
-          <input placeholder="Quick search…" className="bg-transparent outline-none w-full text-xs placeholder:text-ink-faint" />
-        </div>
-
         {/* Notification bell */}
         <div className="relative">
           <button

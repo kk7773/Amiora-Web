@@ -17,6 +17,10 @@ type ColorGroupRow = {
   display_order: number
 }
 
+function isMissingChainLengthsColumn(error: { message: string; code?: string } | null | undefined) {
+  return !!error && /chain_lengths/i.test(error.message) && /(column|schema cache|does not exist|42703)/i.test(error.message)
+}
+
 async function fetchProductColorGroups(
   supabase: SupabaseClient,
   productId: string,
@@ -62,11 +66,16 @@ export default async function EditProductPage({ params }: Props) {
   const supabase = createServerClient()
   await ensureGoldMetalPurities(supabase)
 
-  const [{ data: product, error: productError }, { data: collections }, { data: categories }, { data: tags }, { data: metalColors }, { data: metalPurities }] =
-    await Promise.all([
-      supabase
-        .from('products')
-        .select(`
+  const productSelectWithChain = `
+          id, name, slug, category_id, collection_id, product_number, design_number, short_desc, description,
+          diamond_shape, diamond_count, total_diamond_wt, diamond_color, diamond_clarity, size_range, chain_lengths, metal_weight_g,
+          meta_title, meta_description, status, is_featured, is_new_arrival, is_best_seller, is_coming_soon, making_charge_pct,
+          has_stone, stone_lines,
+          product_variants(
+            id, color_id, purity_id, sku, price, stock_qty, metal_weight_g, is_active
+          )
+        `
+  const productSelectWithoutChain = `
           id, name, slug, category_id, collection_id, product_number, design_number, short_desc, description,
           diamond_shape, diamond_count, total_diamond_wt, diamond_color, diamond_clarity, size_range, metal_weight_g,
           meta_title, meta_description, status, is_featured, is_new_arrival, is_best_seller, is_coming_soon, making_charge_pct,
@@ -74,9 +83,19 @@ export default async function EditProductPage({ params }: Props) {
           product_variants(
             id, color_id, purity_id, sku, price, stock_qty, metal_weight_g, is_active
           )
-        `)
-        .eq('id', id)
-        .single(),
+        `
+
+  const productRes = await supabase.from('products').select(productSelectWithChain).eq('id', id).single()
+  const product = productRes.data ?? null
+  const productError = productRes.error
+  const fallbackProductRes = isMissingChainLengthsColumn(productError)
+    ? await supabase.from('products').select(productSelectWithoutChain).eq('id', id).single()
+    : null
+  const activeProduct = fallbackProductRes?.data ?? product
+  const activeProductError = fallbackProductRes?.error ?? productError
+
+  const [{ data: collections }, { data: categories }, { data: tags }, { data: metalColors }, { data: metalPurities }] =
+    await Promise.all([
       supabase.from('collections').select('id, name').eq('is_active', true).order('sort_order'),
       supabase.from('categories').select('id, name, code').eq('is_active', true).order('sort_order'),
       supabase.from('tags').select('id, name, color').eq('is_active', true).order('sort_order'),
@@ -92,31 +111,31 @@ export default async function EditProductPage({ params }: Props) {
         .order('display_order'),
     ])
 
-  if (productError) {
-    console.error('[EditProductPage] products:', productError.message, '| id:', id)
+  if (activeProductError) {
+    console.error('[EditProductPage] products:', activeProductError.message, '| id:', id)
   }
-  if (!product) notFound()
+  if (!activeProduct) notFound()
 
   let collection_ids: string[] = []
   const { data: collectionLinks, error: collLinksErr } = await supabase
     .from('collection_products')
     .select('collection_id')
-    .eq('product_id', product.id)
+    .eq('product_id', activeProduct.id)
 
   if (!collLinksErr && collectionLinks?.length) {
     collection_ids = collectionLinks.map((r) => r.collection_id)
-  } else if (product.collection_id) {
-    collection_ids = [product.collection_id]
+  } else if (activeProduct.collection_id) {
+    collection_ids = [activeProduct.collection_id]
   }
 
   const { data: tagLinks } = await supabase
     .from('product_tags')
     .select('tag_id')
-    .eq('product_id', product.id)
+    .eq('product_id', activeProduct.id)
 
   const tag_ids = (tagLinks ?? []).map((r) => r.tag_id)
 
-  const colorGroupRows = await fetchProductColorGroups(supabase, product.id)
+  const colorGroupRows = await fetchProductColorGroups(supabase, activeProduct.id)
 
   const colorVariants = (colorGroupRows as Array<{
     id: string
@@ -135,7 +154,7 @@ export default async function EditProductPage({ params }: Props) {
       display_order: row.display_order,
     }))
 
-  const matrix = ((product.product_variants ?? []) as Array<{
+  const matrix = ((activeProduct.product_variants ?? []) as Array<{
     id: string
     color_id: string
     purity_id: string
@@ -182,38 +201,39 @@ export default async function EditProductPage({ params }: Props) {
         metalColors={(metalColors ?? []) as Parameters<typeof ProductCatalogCreateForm>[0]['metalColors']}
         metalPurities={(metalPurities ?? []) as Parameters<typeof ProductCatalogCreateForm>[0]['metalPurities']}
         initialData={{
-          id: product.id,
+          id: activeProduct.id,
           product: {
-            name: product.name,
-            slug: product.slug,
-            category_id: product.category_id ?? '',
-            collection_id: product.collection_id,
+            name: activeProduct.name,
+            slug: activeProduct.slug,
+            category_id: activeProduct.category_id ?? '',
+            collection_id: activeProduct.collection_id,
             collection_ids: collection_ids.length > 0 ? collection_ids : undefined,
             tag_ids: tag_ids.length > 0 ? tag_ids : undefined,
-            product_number: product.product_number,
-            design_number: product.design_number ?? null,
-            short_desc: product.short_desc,
-            description: product.description,
-            diamond_shape: product.diamond_shape,
-            diamond_count: product.diamond_count,
-            total_diamond_wt: product.total_diamond_wt,
-            diamond_color: product.diamond_color,
-            diamond_clarity: product.diamond_clarity,
-            size_range: product.size_range,
+            product_number: activeProduct.product_number,
+            design_number: activeProduct.design_number ?? null,
+            short_desc: activeProduct.short_desc,
+            description: activeProduct.description,
+            diamond_shape: activeProduct.diamond_shape,
+            diamond_count: activeProduct.diamond_count,
+            total_diamond_wt: activeProduct.total_diamond_wt,
+            diamond_color: activeProduct.diamond_color,
+            diamond_clarity: activeProduct.diamond_clarity,
+            size_range: activeProduct.size_range,
+            chain_lengths: (activeProduct as { chain_lengths?: unknown }).chain_lengths ?? [],
             metal_weight_g:
-              product.metal_weight_g != null && Number.isFinite(Number(product.metal_weight_g))
-                ? Number(product.metal_weight_g)
+              activeProduct.metal_weight_g != null && Number.isFinite(Number(activeProduct.metal_weight_g))
+                ? Number(activeProduct.metal_weight_g)
                 : null,
-            meta_title: product.meta_title,
-            meta_description: product.meta_description,
-            status: product.status,
-            is_featured: product.is_featured,
-            is_new_arrival: product.is_new_arrival,
-            is_best_seller: product.is_best_seller,
-            is_coming_soon: product.is_coming_soon,
-            making_charge_pct: Number(product.making_charge_pct ?? 8),
-            has_stone: Boolean(product.has_stone),
-            stone_lines: product.stone_lines ?? [],
+            meta_title: activeProduct.meta_title,
+            meta_description: activeProduct.meta_description,
+            status: activeProduct.status,
+            is_featured: activeProduct.is_featured,
+            is_new_arrival: activeProduct.is_new_arrival,
+            is_best_seller: activeProduct.is_best_seller,
+            is_coming_soon: activeProduct.is_coming_soon,
+            making_charge_pct: Number(activeProduct.making_charge_pct ?? 8),
+            has_stone: Boolean(activeProduct.has_stone),
+            stone_lines: activeProduct.stone_lines ?? [],
           },
           colorVariants,
           matrix,

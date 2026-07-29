@@ -25,6 +25,7 @@ export type VariantSizeStock = {
   size_label: string
   size_type: 'ring_us' | 'chain_inch'
   stock_qty?: number
+  metal_weight_g?: number | null
   price_override?: number | null
   is_active?: boolean
 }

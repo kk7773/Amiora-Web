@@ -84,7 +84,7 @@ async function fetchProductSizeStocks(
 ): Promise<VariantSizeRow[]> {
   const { data, error } = await supabase
     .from('product_variant_sizes')
-    .select('id, variant_id, size_label, size_type, stock_qty, price_override, is_active')
+    .select('id, variant_id, size_label, size_type, stock_qty, metal_weight_g, price_override, is_active')
     .eq('product_id', productId)
     .order('size_label', { ascending: true })
 
@@ -119,6 +119,7 @@ async function fetchProductSizeStocks(
       size_label: row.size_label,
       size_type: row.size_type === 'chain_inch' ? 'chain_inch' : 'ring_us',
       stock_qty: Number(row.stock_qty ?? 0),
+      metal_weight_g: row.metal_weight_g != null ? Number(row.metal_weight_g) : null,
       price_override: row.price_override != null ? Number(row.price_override) : null,
       is_active: row.is_active !== false,
     }]

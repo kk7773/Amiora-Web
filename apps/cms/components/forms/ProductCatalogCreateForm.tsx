@@ -35,6 +35,7 @@ type SizeStockUi = {
   size_label: string
   size_type: 'ring_us' | 'chain_inch'
   stock_qty: string
+  metal_weight_g: string
   price_override: string
   is_active: boolean
 }
@@ -486,6 +487,8 @@ function newSizeStockRow(params: {
   purity_id: string
   size_label: string
   size_type: 'ring_us' | 'chain_inch'
+  metal_weight_g?: string
+  price_override?: string
 }): SizeStockUi {
   return {
     key: `sz-${params.color_id}-${params.purity_id}-${params.size_label}-${Date.now()}-${Math.random()
@@ -496,7 +499,8 @@ function newSizeStockRow(params: {
     size_label: params.size_label,
     size_type: params.size_type,
     stock_qty: '',
-    price_override: '',
+    metal_weight_g: params.metal_weight_g ?? '',
+    price_override: params.price_override ?? '',
     is_active: true,
   }
 }
@@ -518,6 +522,12 @@ function sizeStocksFromDb(raw: unknown): SizeStockUi[] {
           : typeof record.stock_qty === 'string' && record.stock_qty.trim() !== ''
             ? record.stock_qty.trim()
             : '0'
+      const metalWeight =
+        typeof record.metal_weight_g === 'number' && Number.isFinite(record.metal_weight_g)
+          ? String(record.metal_weight_g)
+          : typeof record.metal_weight_g === 'string' && record.metal_weight_g.trim() !== ''
+            ? record.metal_weight_g.trim()
+            : ''
       const priceOverride =
         typeof record.price_override === 'number' && Number.isFinite(record.price_override)
           ? String(record.price_override)
@@ -531,6 +541,7 @@ function sizeStocksFromDb(raw: unknown): SizeStockUi[] {
         size_label: sizeLabel,
         size_type: sizeType,
         stock_qty: stockQty,
+        metal_weight_g: metalWeight,
         price_override: priceOverride,
         is_active: record.is_active !== false,
       } satisfies SizeStockUi
@@ -673,6 +684,35 @@ export function ProductCatalogCreateForm({
         return next
       }
       return [...prev, nextRow]
+    })
+  }
+
+  function syncRingWeightAcrossPurities(colorId: string, sizeLabel: string, weight: string) {
+    setSizeStocks((prev) => {
+      const next = [...prev]
+      for (const purity of puritiesForProduct) {
+        const index = next.findIndex(
+          (row) =>
+            row.color_id === colorId &&
+            row.purity_id === purity.id &&
+            row.size_type === 'ring_us' &&
+            row.size_label === sizeLabel,
+        )
+        if (index >= 0) {
+          next[index] = { ...next[index]!, metal_weight_g: weight }
+          continue
+        }
+        next.push(
+          newSizeStockRow({
+            color_id: colorId,
+            purity_id: purity.id,
+            size_label: sizeLabel,
+            size_type: 'ring_us',
+            metal_weight_g: weight,
+          }),
+        )
+      }
+      return next
     })
   }
 
@@ -940,6 +980,23 @@ export function ProductCatalogCreateForm({
     })
   }
 
+  function syncMatrixWeightAcrossAllCells(weight: string) {
+    setCells((prev) => {
+      const next: Record<string, CellState> = { ...prev }
+      for (const row of colorRows) {
+        for (const purity of puritiesForProduct) {
+          const key = buildCellKey(row.color_id, purity.id)
+          const current = next[key] ?? { gross_weight_g: '', stock_qty: '1', is_active: false }
+          next[key] = {
+            ...current,
+            gross_weight_g: weight,
+          }
+        }
+      }
+      return next
+    })
+  }
+
   function computeCellPrice(
     grossWeightText: string,
     purityCode: string,
@@ -1091,8 +1148,12 @@ export function ProductCatalogCreateForm({
               size_label: row.size_label.trim(),
               size_type: row.size_type,
               stock_qty: Math.max(0, Math.floor(Number(row.stock_qty) || 0)),
+              metal_weight_g:
+                row.size_type === 'ring_us' && row.metal_weight_g.trim() !== '' && Number.isFinite(parseFloat(row.metal_weight_g))
+                  ? parseFloat(row.metal_weight_g)
+                  : null,
               price_override:
-                row.price_override.trim() !== '' && Number.isFinite(parseFloat(row.price_override))
+                row.size_type === 'chain_inch' && row.price_override.trim() !== '' && Number.isFinite(parseFloat(row.price_override))
                   ? parseFloat(row.price_override)
                   : null,
               is_active: row.is_active,
@@ -1860,10 +1921,7 @@ export function ProductCatalogCreateForm({
                             placeholder="Metal weight (g)"
                             value={cell.gross_weight_g}
                             onChange={(e) =>
-                              setCellValue(row.color_id, purity.id, (current) => ({
-                                ...current,
-                                gross_weight_g: e.target.value,
-                              }))
+                              syncMatrixWeightAcrossAllCells(e.target.value)
                             }
                             className="w-full border rounded px-2 py-1 mb-2"
                           />
@@ -2005,8 +2063,40 @@ export function ProductCatalogCreateForm({
                     <div className="mt-4 grid gap-2">
                       {(isChainProduct ? CHAIN_LENGTH_OPTIONS : RING_SIZE_OPTIONS).map((sizeLabel) => {
                         const current = entries.find((entry) => entry.size_label === sizeLabel)
+                        const sharedRingWeight =
+                          sizeStocks.find(
+                            (entry) =>
+                              entry.color_id === row.color_id &&
+                              entry.size_type === 'ring_us' &&
+                              entry.size_label === sizeLabel &&
+                              entry.metal_weight_g.trim() !== '',
+                          )?.metal_weight_g ?? ''
+                        const ringWeight = current?.metal_weight_g ?? sharedRingWeight ?? ''
+                        const ringBasePrice =
+                          isChainProduct
+                            ? null
+                            : ringWeight.trim() !== '' && Number.isFinite(parseFloat(ringWeight))
+                              ? Math.round(
+                                  parseFloat(ringWeight) *
+                                    resolveLiveRate(
+                                      purity.metal,
+                                      pricingContext.currentGoldPerGram,
+                                      pricingContext.currentSilverPerGram,
+                                      purity.code,
+                                      pricingContext.goldPurityRates,
+                                    ) *
+                                    100,
+                                ) / 100
+                              : null
                         return (
-                          <div key={sizeLabel} className="grid grid-cols-[72px_110px_1fr] sm:grid-cols-[72px_110px_140px_1fr] gap-2 items-center rounded-lg border border-white bg-white px-3 py-2">
+                          <div
+                            key={sizeLabel}
+                            className={`grid gap-2 items-center rounded-lg border border-white bg-white px-3 py-2 ${
+                              isChainProduct
+                                ? 'grid-cols-[72px_110px_140px_1fr]'
+                                : 'grid-cols-[72px_110px_120px_140px_1fr]'
+                            }`}
+                          >
                             <span className="text-sm font-medium text-ink">{sizeLabel}{isChainProduct ? '"' : ''}</span>
                             <input
                               type="number"
@@ -2038,7 +2128,22 @@ export function ProductCatalogCreateForm({
                                 placeholder="Chain price"
                               />
                             ) : (
-                              <span className="text-xs text-ink-muted">Ring stock</span>
+                            <input
+                              type="number"
+                              min={0}
+                              step="0.001"
+                              value={ringWeight}
+                              onChange={(e) =>
+                                  syncRingWeightAcrossPurities(row.color_id, sizeLabel, e.target.value)
+                                }
+                              className="w-full border rounded-lg px-3 py-2 text-sm"
+                              placeholder="Weight (g)"
+                            />
+                            )}
+                            {!isChainProduct && (
+                              <div className="w-full rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-ink-muted">
+                                Price: {ringBasePrice != null ? formatINR(ringBasePrice) : '—'}
+                              </div>
                             )}
                             <label className="flex items-center gap-2 text-xs text-ink-muted">
                               <input

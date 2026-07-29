@@ -16,7 +16,13 @@ import { ProductShare }   from './ProductShare'
 import { StarRating }     from '@/components/ui/StarRating'
 import { useCartStore }   from '@/stores/cartStore'
 import { useWishlist }    from '@/hooks/useWishlist'
-import { breakdownToDisplayRows, computeCatalogVariantPrice, formatINR, resolveLiveRate } from '@amiora/pricing'
+import {
+  breakdownToDisplayRows,
+  computeCatalogVariantPrice,
+  formatINR,
+  getRingSizeMultiplier,
+  resolveLiveRate,
+} from '@amiora/pricing'
 import { useCatalogPrices, type CatalogPricingContext } from '@/hooks/useCatalogPrices'
 import { MetalPurityTable, formatWeightGrams } from './MetalPurityTable'
 import { MOBILE_NAV_HEIGHT } from '@/components/layout/MobileBottomNav'
@@ -118,6 +124,7 @@ type VariantSizeRow = {
   size_label: string
   size_type: 'ring_us' | 'chain_inch'
   stock_qty: number
+  metal_weight_g: number | null
   price_override: number | null
   is_active: boolean
 }
@@ -250,6 +257,10 @@ function normalizeVariantSizes(raw: unknown): VariantSizeRow[] {
         size_label: sizeLabel,
         size_type: sizeType,
         stock_qty: Number(record.stock_qty ?? 0),
+        metal_weight_g:
+          record.metal_weight_g != null && Number.isFinite(Number(record.metal_weight_g))
+            ? Number(record.metal_weight_g)
+            : null,
         price_override:
           record.price_override != null && Number.isFinite(Number(record.price_override))
             ? Number(record.price_override)
@@ -346,7 +357,15 @@ export function ProductDetailClient({
       ) ?? null,
     [activeVariantSizes, selectedChainLength],
   )
+  const selectedRingSizeRow = useMemo(
+    () =>
+      activeVariantSizes.find(
+        (row) => row.size_type === 'ring_us' && String(row.size_label) === String(sel.sizeLabel ?? ''),
+      ) ?? null,
+    [activeVariantSizes, sel.sizeLabel],
+  )
   const selectedRingStockQty = sel.sizeLabel ? (ringSizeStockMap[sel.sizeLabel] ?? 0) : null
+  const ringSizeMultiplier = isRingProduct ? getRingSizeMultiplier(sel.sizeLabel) : 1
 
   const galleryImages = useMemo(() => {
     const grp = catalog.colorGroups.find((g) => g.colorId === sel.colorId)
@@ -377,6 +396,37 @@ export function ProductDetailClient({
   const activePurity = activeVariant
     ? catalog.purities.find((purity) => purity.id === activeVariant.purity_id) ?? null
     : null
+  const ringBreakdown = useMemo(() => {
+    if (!isRingProduct || !activeVariant || !activePurity) return null
+    const ringWeight = selectedRingSizeRow?.metal_weight_g ?? activeVariant.metal_weight_g
+    if (ringWeight == null || !Number.isFinite(ringWeight) || ringWeight <= 0) return null
+    return computeCatalogVariantPrice({
+      metalWeightG: ringWeight,
+      purityCode: activePurity.code,
+      metalType: activePurity.metal,
+      makingChargePct: pricingContext.makingChargePct,
+      stoneLines: pricingContext.stoneLines,
+      goldPerGram,
+      goldPurityRates: pricingContext.goldPurityRates,
+      silverPerGram,
+      diamondPricePerCarat: pricingContext.initialDiamondPerCarat,
+      makingChargeDiscountPct: pricingContext.makingChargeDiscountPct,
+      gemPriceDiscountPct: pricingContext.gemPriceDiscountPct,
+    })
+  }, [
+    isRingProduct,
+    activeVariant,
+    activePurity,
+    selectedRingSizeRow?.metal_weight_g,
+    pricingContext.makingChargePct,
+    pricingContext.stoneLines,
+    pricingContext.goldPurityRates,
+    pricingContext.makingChargeDiscountPct,
+    pricingContext.gemPriceDiscountPct,
+    pricingContext.initialDiamondPerCarat,
+    goldPerGram,
+    silverPerGram,
+  ])
   const selectedChainOption = useMemo(
     () => chainLengthOptions.find((length) => String(length.length_inch) === selectedChainLength) ?? null,
     [chainLengthOptions, selectedChainLength],
@@ -411,8 +461,14 @@ export function ProductDetailClient({
     goldPerGram,
     silverPerGram,
   ])
-  const displayBreakdown = isChainProduct && chainBreakdown ? chainBreakdown : activeBreakdown
-  const displayPrice = displayBreakdown?.finalPrice ?? 0
+  const displayBreakdown =
+    isChainProduct && chainBreakdown ? chainBreakdown
+    : isRingProduct && ringBreakdown ? ringBreakdown
+    : activeBreakdown
+  const displayPrice =
+    displayBreakdown != null
+      ? Math.round(displayBreakdown.finalPrice * (isRingProduct ? ringSizeMultiplier : 1) * 100) / 100
+      : 0
   const displayVariant =
     isChainProduct && activeVariant
       ? {
@@ -484,8 +540,9 @@ export function ProductDetailClient({
   const TABS = ['Metal & Purity', 'Price Breakup', 'Care Guide']
   const liveBreakupRows = useMemo(() => {
     if (!displayBreakdown) return null
-    return breakdownToDisplayRows(displayBreakdown, pricingContext.makingChargePct)
-  }, [displayBreakdown, pricingContext.makingChargePct])
+    const sizePremiumPct = isRingProduct ? (ringSizeMultiplier - 1) * 100 : 0
+    return breakdownToDisplayRows(displayBreakdown, pricingContext.makingChargePct, sizePremiumPct)
+  }, [displayBreakdown, pricingContext.makingChargePct, isRingProduct, ringSizeMultiplier])
 
   const canAddToCart =
     !!activeVariant &&

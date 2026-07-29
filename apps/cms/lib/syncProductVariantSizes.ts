@@ -39,6 +39,10 @@ export async function syncProductVariantSizes(
         size_label: sizeLabel,
         size_type: row.size_type,
         stock_qty: Math.max(0, Math.floor(Number(row.stock_qty ?? 0))),
+        metal_weight_g:
+          row.metal_weight_g != null && Number.isFinite(Number(row.metal_weight_g))
+            ? Math.round(Number(row.metal_weight_g) * 1000) / 1000
+            : null,
         price_override:
           row.price_override != null && Number.isFinite(Number(row.price_override))
             ? Math.round(Number(row.price_override) * 100) / 100
@@ -52,6 +56,7 @@ export async function syncProductVariantSizes(
       size_label: string
       size_type: 'ring_us' | 'chain_inch'
       stock_qty: number
+      metal_weight_g: number | null
       price_override: number | null
       is_active: boolean
     } => row != null)

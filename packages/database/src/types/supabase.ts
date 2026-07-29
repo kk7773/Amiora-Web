@@ -420,6 +420,7 @@ export interface Database {
           size_label: string
           size_type: 'ring_us' | 'chain_inch'
           stock_qty: number
+          metal_weight_g: number | null
           price_override: number | null
           is_active: boolean
           created_at: string
@@ -432,6 +433,7 @@ export interface Database {
           size_label: string
           size_type: 'ring_us' | 'chain_inch'
           stock_qty?: number
+          metal_weight_g?: number | null
           price_override?: number | null
           is_active?: boolean
           created_at?: string

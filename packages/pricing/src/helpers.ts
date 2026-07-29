@@ -6,6 +6,9 @@ export type GoldPurityRates = Partial<Record<GoldPurityRateKey, number | null>>
 
 const DEFAULT_GOLD_PER_GRAM   = 7200
 const DEFAULT_SILVER_PER_GRAM = 90
+const RING_SIZE_GROUP_START = 6
+const RING_SIZE_GROUP_STEP = 3
+const RING_SIZE_GROUP_INCREMENT = 0.08
 
 /** Map metal_purities.code from DB to calculator purity string. */
 export function purityCodeToCalcInput(code: string, metal?: MetalType): string {
@@ -176,6 +179,18 @@ export function sumStoneLinesPrice(stoneLines: unknown, diamondPricePerCarat = 0
   return Math.round(total * 100) / 100
 }
 
+export function getRingSizeGroupIndex(sizeLabel: string | number | null | undefined): number | null {
+  const parsed = typeof sizeLabel === 'number' ? sizeLabel : Number(String(sizeLabel ?? '').trim())
+  if (!Number.isFinite(parsed) || parsed < RING_SIZE_GROUP_START) return null
+  return Math.floor((parsed - RING_SIZE_GROUP_START) / RING_SIZE_GROUP_STEP)
+}
+
+export function getRingSizeMultiplier(sizeLabel: string | number | null | undefined): number {
+  const groupIndex = getRingSizeGroupIndex(sizeLabel)
+  if (groupIndex == null) return 1
+  return 1 + (groupIndex * RING_SIZE_GROUP_INCREMENT)
+}
+
 export interface ComputeCatalogVariantInput {
   metalWeightG: number | null | undefined
   purityCode: string
@@ -269,7 +284,9 @@ export function applyManualPriceOverride(
 export function breakdownToDisplayRows(
   breakdown: PriceBreakdown,
   makingChargePct?: number | null,
+  sizePremiumPct?: number | null,
 ): Array<{ label: string; amount: number }> {
+  let total = breakdown.finalPrice
   const rows: Array<{ label: string; amount: number }> = [
     { label: 'Metal value', amount: breakdown.baseMetalPrice },
   ]
@@ -294,6 +311,13 @@ export function breakdownToDisplayRows(
   if (breakdown.gstAmount > 0) {
     rows.push({ label: 'Taxes', amount: breakdown.gstAmount })
   }
-  rows.push({ label: 'Total', amount: breakdown.finalPrice })
+  if (sizePremiumPct != null && Number.isFinite(sizePremiumPct) && sizePremiumPct > 0) {
+    const premium = Math.round(breakdown.finalPrice * (sizePremiumPct / 100) * 100) / 100
+    if (premium > 0) {
+      rows.push({ label: `Ring size premium (${sizePremiumPct}%)`, amount: premium })
+      total = Math.round((total + premium) * 100) / 100
+    }
+  }
+  rows.push({ label: 'Total', amount: total })
   return rows
 }

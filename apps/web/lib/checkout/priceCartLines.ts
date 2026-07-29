@@ -1,4 +1,4 @@
-import { computeCatalogVariantPrice, resolveLiveRate } from '@amiora/pricing'
+import { computeCatalogVariantPrice, getRingSizeMultiplier, resolveLiveRate } from '@amiora/pricing'
 import { getLatestPrices } from '@/lib/pricing/engine'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { CartLine } from '@/lib/coupons/evaluateCoupon'
@@ -50,6 +50,7 @@ type VariantSizeRow = {
   size_label: string
   size_type: 'ring_us' | 'chain_inch'
   stock_qty: number
+  metal_weight_g: number | null
   price_override: number | null
   is_active: boolean
 }
@@ -108,7 +109,7 @@ export async function priceCartLines(
     variantIds.length > 0
       ? supabase
           .from('product_variant_sizes')
-          .select('id, variant_id, size_label, size_type, stock_qty, price_override, is_active')
+          .select('id, variant_id, size_label, size_type, stock_qty, metal_weight_g, price_override, is_active')
           .in('variant_id', variantIds)
       : Promise.resolve({ data: [] as VariantSizeRow[] }),
   ])
@@ -232,8 +233,13 @@ export async function priceCartLines(
     const purity = purityMap.get(normalizeLookupKey(variant.purity_id))
     const metalRate = resolveLiveRate(purity?.metal ?? undefined, goldPerGram, silverPerGram, purity?.code ?? '', goldPurityRates)
 
+    const ringWeight =
+      selectedSizeRow?.size_type === 'ring_us'
+        ? selectedSizeRow.metal_weight_g
+        : variant.metal_weight_g
+
     const breakdown = computeCatalogVariantPrice({
-      metalWeightG: variant.metal_weight_g,
+      metalWeightG: ringWeight,
       purityCode: purity?.code ?? '',
       metalType: purity?.metal ?? undefined,
       makingChargePct: Number(product.making_charge_pct ?? 8),
@@ -259,7 +265,11 @@ export async function priceCartLines(
       continue
     }
 
-    const unitPrice = Math.round(breakdown.finalPrice)
+    const ringSizeMultiplier =
+      selectedSizeRow?.size_type === 'ring_us'
+        ? getRingSizeMultiplier(selectedSizeRow.size_label)
+        : 1
+    const unitPrice = Math.round(breakdown.finalPrice * ringSizeMultiplier)
     making += breakdown.makingChargeNet * qty
     gem += breakdown.gemPriceNet * qty
 
@@ -269,7 +279,7 @@ export async function priceCartLines(
       quantity: qty,
       unit_price: unitPrice,
       line_total: unitPrice * qty,
-      metal_weight_g: variant.metal_weight_g != null ? Number(variant.metal_weight_g) : null,
+      metal_weight_g: ringWeight != null ? Number(ringWeight) : null,
       metal_rate_per_gram: metalRate,
       in_stock: inStock,
       product_name: product.name,

@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS public.product_variant_sizes (
   size_label    text NOT NULL,
   size_type     text NOT NULL CHECK (size_type IN ('ring_us', 'chain_inch')),
   stock_qty     integer NOT NULL DEFAULT 0,
+  metal_weight_g numeric(12,3),
   price_override numeric(12,2),
   is_active     boolean NOT NULL DEFAULT true,
   created_at    timestamptz NOT NULL DEFAULT now(),

@@ -416,7 +416,7 @@ export default async function ProductPage({ params }: Props) {
 
   const { data: sizeStockRowsRaw, error: sizeStockFetchError } = await supabase
     .from('product_variant_sizes')
-    .select('id, variant_id, size_label, size_type, stock_qty, price_override, is_active')
+    .select('id, variant_id, size_label, size_type, stock_qty, metal_weight_g, price_override, is_active')
     .eq('product_id', product.id)
 
   if (sizeStockFetchError) {

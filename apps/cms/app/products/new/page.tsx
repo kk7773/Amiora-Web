@@ -1,10 +1,12 @@
 import { createServerClient } from '@amiora/database'
 import { ProductCatalogCreateForm } from '@/components/forms/ProductCatalogCreateForm'
 import { ensureGoldMetalPurities } from '@/lib/ensureMetalPurities'
+import { fetchCmsPricingContext } from '@/lib/fetchCmsPricingContext'
 
 export default async function NewProductPage() {
   const supabase = createServerClient()
   await ensureGoldMetalPurities(supabase)
+  const pricingContext = await fetchCmsPricingContext(supabase)
 
   const [{ data: collections }, { data: categories }, { data: tags }, { data: metalColors }, { data: metalPurities }] =
     await Promise.all([
@@ -36,10 +38,11 @@ export default async function NewProductPage() {
       <ProductCatalogCreateForm
         collections={collections ?? []}
         tags={tags ?? []}
-        categories={(categories ?? []) as Parameters<typeof ProductCatalogCreateForm>[0]['categories']}
-        metalColors={(metalColors ?? []) as Parameters<typeof ProductCatalogCreateForm>[0]['metalColors']}
-        metalPurities={(metalPurities ?? []) as Parameters<typeof ProductCatalogCreateForm>[0]['metalPurities']}
-      />
-    </div>
+      categories={(categories ?? []) as Parameters<typeof ProductCatalogCreateForm>[0]['categories']}
+      metalColors={(metalColors ?? []) as Parameters<typeof ProductCatalogCreateForm>[0]['metalColors']}
+      metalPurities={(metalPurities ?? []) as Parameters<typeof ProductCatalogCreateForm>[0]['metalPurities']}
+      pricingContext={pricingContext}
+    />
+  </div>
   )
 }

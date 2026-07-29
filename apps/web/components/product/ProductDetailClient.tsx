@@ -36,6 +36,7 @@ interface ProductDetailClientProps {
     diamond_clarity:    string | null
     size_range:         string | null
     chain_lengths:      unknown
+    variant_sizes:      unknown
     making_charge_pct:  number
     avgRating:          number
     reviewCount:        number
@@ -110,6 +111,15 @@ type PriceBreakupPayload = {
 type ChainLengthRow = {
   length_inch: number
   weight_g: number
+}
+
+type VariantSizeRow = {
+  variant_id: string
+  size_label: string
+  size_type: 'ring_us' | 'chain_inch'
+  stock_qty: number
+  price_override: number | null
+  is_active: boolean
 }
 
 function prettifyLabel(raw: string): string {
@@ -225,6 +235,31 @@ function normalizeChainLengths(raw: unknown): ChainLengthRow[] {
   return rows
 }
 
+function normalizeVariantSizes(raw: unknown): VariantSizeRow[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null
+      const record = item as Record<string, unknown>
+      const variantId = typeof record.variant_id === 'string' ? record.variant_id : ''
+      const sizeLabel = typeof record.size_label === 'string' ? record.size_label.trim() : ''
+      const sizeType = record.size_type === 'chain_inch' ? 'chain_inch' : 'ring_us'
+      if (!variantId || !sizeLabel) return null
+      return {
+        variant_id: variantId,
+        size_label: sizeLabel,
+        size_type: sizeType,
+        stock_qty: Number(record.stock_qty ?? 0),
+        price_override:
+          record.price_override != null && Number.isFinite(Number(record.price_override))
+            ? Number(record.price_override)
+            : null,
+        is_active: record.is_active !== false,
+      } satisfies VariantSizeRow
+    })
+    .filter((row): row is VariantSizeRow => row != null)
+}
+
 export function ProductDetailClient({
   product,
   catalog,
@@ -242,6 +277,7 @@ export function ProductDetailClient({
     /necklace|chain/i.test(product.categorySlug ?? '') ||
     /necklace|chain/i.test(product.categoryName ?? '')
   const chainLengthOptions = useMemo(() => normalizeChainLengths(product.chain_lengths), [product.chain_lengths])
+  const variantSizeRows = useMemo(() => normalizeVariantSizes(product.variant_sizes), [product.variant_sizes])
   const purityById = new Map(catalog.purities.map((purity) => [purity.id, purity]))
   const activeColorIds = new Set(
     catalog.variants.filter((variant) => variant.is_active).map((variant) => variant.color_id),
@@ -290,6 +326,28 @@ export function ProductDetailClient({
     }
   }, [isChainProduct, chainLengthOptions, selectedChainLength])
 
+  const activeVariantSizes = useMemo(
+    () => variantSizeRows.filter((row) => row.variant_id === sel.variantId && row.is_active),
+    [variantSizeRows, sel.variantId],
+  )
+  const ringSizeStockMap = useMemo(
+    () =>
+      Object.fromEntries(
+        activeVariantSizes
+          .filter((row) => row.size_type === 'ring_us')
+          .map((row) => [row.size_label, row.stock_qty]),
+      ) as Record<string, number>,
+    [activeVariantSizes],
+  )
+  const selectedChainSizeRow = useMemo(
+    () =>
+      activeVariantSizes.find(
+        (row) => row.size_type === 'chain_inch' && String(row.size_label) === selectedChainLength,
+      ) ?? null,
+    [activeVariantSizes, selectedChainLength],
+  )
+  const selectedRingStockQty = sel.sizeLabel ? (ringSizeStockMap[sel.sizeLabel] ?? 0) : null
+
   const galleryImages = useMemo(() => {
     const grp = catalog.colorGroups.find((g) => g.colorId === sel.colorId)
     const hasVariantMedia = grp && (grp.images.length > 0 || (grp.videos?.length ?? 0) > 0)
@@ -331,6 +389,7 @@ export function ProductDetailClient({
       metalType: activePurity.metal,
       makingChargePct: pricingContext.makingChargePct,
       stoneLines: pricingContext.stoneLines,
+      addonPriceOverride: selectedChainSizeRow?.price_override ?? 0,
       goldPerGram,
       goldPurityRates: pricingContext.goldPurityRates,
       silverPerGram,
@@ -342,6 +401,7 @@ export function ProductDetailClient({
     isChainProduct,
     selectedChainOption,
     activePurity,
+    selectedChainSizeRow?.price_override,
     pricingContext.makingChargePct,
     pricingContext.stoneLines,
     pricingContext.goldPurityRates,
@@ -369,7 +429,11 @@ export function ProductDetailClient({
   )
 
   const inStock =
-    !!activeVariant && activeVariant.is_active && activeVariant.stock_qty > 0
+    !!activeVariant &&
+    activeVariant.is_active &&
+    activeVariant.stock_qty > 0 &&
+    (!isRingProduct || selectedRingStockQty == null || selectedRingStockQty > 0) &&
+    (!isChainProduct || (selectedChainSizeRow?.stock_qty ?? 0) > 0)
 
   const handleAddToCart = () => {
     if (!activeVariant || !inStock) {
@@ -380,7 +444,11 @@ export function ProductDetailClient({
       toast.error('Select ring size', { description: 'Choose a size from 6 to 28 before adding this ring.' })
       return
     }
-    if (isChainProduct && !selectedChainOption) {
+    if (isRingProduct && sel.sizeLabel && (ringSizeStockMap[sel.sizeLabel] ?? 0) <= 0) {
+      toast.error('Ring size unavailable', { description: 'Pick a size that is in stock.' })
+      return
+    }
+    if (isChainProduct && (!selectedChainOption || (selectedChainSizeRow?.stock_qty ?? 0) <= 0)) {
       toast.error('Select chain length', { description: 'Choose a chain length before adding this piece.' })
       return
     }
@@ -416,10 +484,15 @@ export function ProductDetailClient({
   const TABS = ['Metal & Purity', 'Price Breakup', 'Care Guide']
   const liveBreakupRows = useMemo(() => {
     if (!displayBreakdown) return null
-    return breakdownToDisplayRows(displayBreakdown)
-  }, [displayBreakdown])
+    return breakdownToDisplayRows(displayBreakdown, pricingContext.makingChargePct)
+  }, [displayBreakdown, pricingContext.makingChargePct])
 
-  const addToCartLabel = !activeVariant ? 'Select options' : inStock ? 'Add to Cart' : 'Out of Stock'
+  const canAddToCart =
+    !!activeVariant &&
+    inStock &&
+    (!isRingProduct || !!sel.sizeLabel) &&
+    (!isChainProduct || !!selectedChainOption)
+  const addToCartLabel = !activeVariant ? 'Select options' : !canAddToCart ? 'Choose size' : 'Add to Cart'
 
   return (
     <>
@@ -487,6 +560,7 @@ export function ProductDetailClient({
             purities={catalog.purities}
             variants={catalog.variants}
             sizeOptions={ringSizeOptions}
+            sizeStockMap={ringSizeStockMap}
             onChange={handleVariantChange}
           />
 
@@ -500,11 +574,26 @@ export function ProductDetailClient({
                   className="w-full rounded-lg border border-divider bg-white px-3 py-3 text-sm text-ink outline-none transition-colors focus:border-teal focus:ring-1 focus:ring-teal"
                 >
                   {chainLengthOptions.map((length) => (
-                    <option key={length.length_inch} value={String(length.length_inch)}>
+                    <option
+                      key={length.length_inch}
+                      value={String(length.length_inch)}
+                      disabled={(activeVariantSizes.find((row) => row.size_type === 'chain_inch' && String(row.size_label) === String(length.length_inch))?.stock_qty ?? 0) <= 0}
+                    >
                       {length.length_inch}" · {length.weight_g.toFixed(3)} g
+                      {activeVariantSizes.find((row) => row.size_type === 'chain_inch' && String(row.size_label) === String(length.length_inch))?.stock_qty != null
+                        ? ` · Stock ${(activeVariantSizes.find((row) => row.size_type === 'chain_inch' && String(row.size_label) === String(length.length_inch))?.stock_qty ?? 0)}`
+                        : ''}
                     </option>
                   ))}
                 </select>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-ink-muted">
+                <div className="rounded-lg bg-white px-3 py-2">
+                  Chain stock: <span className="text-ink">{selectedChainSizeRow?.stock_qty ?? 0}</span>
+                </div>
+                <div className="rounded-lg bg-white px-3 py-2">
+                  Chain cost: <span className="text-ink">{selectedChainSizeRow?.price_override != null ? formatINR(selectedChainSizeRow.price_override) : '—'}</span>
+                </div>
               </div>
               <div className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 text-sm">
                 <span className="text-ink-muted">Selected length price</span>
@@ -521,7 +610,7 @@ export function ProductDetailClient({
             <button
               type="button"
               onClick={handleAddToCart}
-              disabled={!inStock}
+              disabled={!canAddToCart}
               className="w-full py-4 bg-deep-teal text-cream text-sm font-medium uppercase tracking-widest rounded-xl hover:bg-teal disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {addToCartLabel}
@@ -660,7 +749,7 @@ export function ProductDetailClient({
         <button
           type="button"
           onClick={handleAddToCart}
-          disabled={!inStock}
+          disabled={!canAddToCart}
           className="flex-1 py-3.5 bg-deep-teal text-cream text-sm font-medium uppercase tracking-widest rounded-xl hover:bg-teal disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {addToCartLabel}

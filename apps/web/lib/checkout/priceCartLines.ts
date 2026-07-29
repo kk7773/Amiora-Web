@@ -44,6 +44,16 @@ type VariantRow = {
   gem_price_discount_pct: number | null
 }
 
+type VariantSizeRow = {
+  id: string
+  variant_id: string
+  size_label: string
+  size_type: 'ring_us' | 'chain_inch'
+  stock_qty: number
+  price_override: number | null
+  is_active: boolean
+}
+
 type PurityRow = {
   id: string
   code: string
@@ -82,7 +92,7 @@ export async function priceCartLines(
   const requestedProductIds = [...new Set(items.map((i) => i.product_id))]
   const variantIds = [...new Set(items.map((i) => i.variant_id).filter(Boolean))]
 
-  const [{ data: variantsById }, { data: variantsByProduct }] = await Promise.all([
+  const [{ data: variantsById }, { data: variantsByProduct }, { data: sizeRows }] = await Promise.all([
     variantIds.length > 0
       ? supabase
           .from('product_variants')
@@ -95,6 +105,12 @@ export async function priceCartLines(
           .select('id, product_id, sku, price, metal_weight_g, purity_id, is_active, stock_qty, making_charge_discount_pct, gem_price_discount_pct')
           .in('product_id', requestedProductIds)
       : Promise.resolve({ data: [] as VariantRow[] }),
+    variantIds.length > 0
+      ? supabase
+          .from('product_variant_sizes')
+          .select('id, variant_id, size_label, size_type, stock_qty, price_override, is_active')
+          .in('variant_id', variantIds)
+      : Promise.resolve({ data: [] as VariantSizeRow[] }),
   ])
 
   const mergedVariants = [
@@ -141,6 +157,14 @@ export async function priceCartLines(
   const purityMap = new Map(
     (purities ?? []).map((p) => [normalizeLookupKey((p as PurityRow).id), p as PurityRow]),
   )
+  const sizeRowsByVariant = new Map<string, VariantSizeRow[]>()
+  for (const row of sizeRows ?? []) {
+    const sizeRow = row as VariantSizeRow
+    const key = normalizeLookupKey(sizeRow.variant_id)
+    const list = sizeRowsByVariant.get(key) ?? []
+    list.push(sizeRow)
+    sizeRowsByVariant.set(key, list)
+  }
 
   for (const line of items) {
     const qty = clampQty(line.quantity)
@@ -187,12 +211,20 @@ export async function priceCartLines(
     }
 
     const stockQty = Number(variant.stock_qty ?? 0)
-    const inStock = stockQty >= qty
+    const sizeLabel = line.size_label?.trim() ?? ''
+    const sizeRowsForVariant = sizeLabel ? sizeRowsByVariant.get(normalizeLookupKey(variant.id)) ?? [] : []
+    const selectedSizeRow =
+      sizeLabel
+        ? sizeRowsForVariant.find((row) => row.is_active !== false && row.size_label === sizeLabel)
+        : null
+    const inStock = stockQty >= qty && (!selectedSizeRow || Number(selectedSizeRow.stock_qty ?? 0) >= qty)
     if (validateStock && !inStock) {
       errors.push(
-        stockQty <= 0
-          ? `${product.name} is out of stock`
-          : `${product.name}: only ${stockQty} left in stock`,
+        selectedSizeRow && Number(selectedSizeRow.stock_qty ?? 0) < qty
+          ? `${product.name}: only ${Number(selectedSizeRow.stock_qty ?? 0)} left for ${sizeLabel}`
+          : stockQty <= 0
+            ? `${product.name} is out of stock`
+            : `${product.name}: only ${stockQty} left in stock`,
       )
       continue
     }
@@ -206,6 +238,7 @@ export async function priceCartLines(
       metalType: purity?.metal ?? undefined,
       makingChargePct: Number(product.making_charge_pct ?? 8),
       stoneLines: product.stone_lines,
+      addonPriceOverride: selectedSizeRow?.size_type === 'chain_inch' ? Number(selectedSizeRow.price_override ?? 0) : null,
       goldPerGram,
       goldPurityRates,
       silverPerGram,

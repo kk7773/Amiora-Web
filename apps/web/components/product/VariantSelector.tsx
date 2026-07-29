@@ -44,6 +44,7 @@ interface VariantSelectorProps {
   purities:    CatalogPurity[]
   variants:    CatalogVariantRow[]
   sizeOptions?: string[]
+  sizeStockMap?: Record<string, number>
   onChange:    (state: SelectedVariantState & { variant: CatalogVariantRow | null }) => void
 }
 
@@ -58,7 +59,7 @@ function isYellowColor(group: Pick<CatalogColorGroup, 'code' | 'label'>): boolea
   return code.includes('yellow') || label.includes('yellow')
 }
 
-export function VariantSelector({ colorGroups, purities, variants, sizeOptions = [], onChange }: VariantSelectorProps) {
+export function VariantSelector({ colorGroups, purities, variants, sizeOptions = [], sizeStockMap = {}, onChange }: VariantSelectorProps) {
   const activeVariants = useMemo(
     () => variants.filter((variant) => variant.is_active),
     [variants],
@@ -112,6 +113,13 @@ export function VariantSelector({ colorGroups, purities, variants, sizeOptions =
   useEffect(() => {
     setSizeLabel(null)
   }, [sizeOptions])
+
+  useEffect(() => {
+    if (!sizeLabel) return
+    if (!sizeOptions.includes(sizeLabel) || (sizeStockMap[sizeLabel] ?? 0) <= 0) {
+      setSizeLabel(null)
+    }
+  }, [sizeLabel, sizeOptions, sizeStockMap])
 
   useEffect(() => {
     const availableColors = new Set(activeVariants.map((variant) => variant.color_id))
@@ -208,8 +216,8 @@ export function VariantSelector({ colorGroups, purities, variants, sizeOptions =
           >
             <option value="">Select size</option>
             {sizeOptions.map((size) => (
-              <option key={size} value={size}>
-                {size}
+              <option key={size} value={size} disabled={(sizeStockMap[size] ?? 0) <= 0}>
+                {size}{sizeStockMap[size] != null ? ` (${sizeStockMap[size]})` : ''}
               </option>
             ))}
           </select>

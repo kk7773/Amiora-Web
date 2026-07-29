@@ -178,6 +178,7 @@ export function CheckoutClient({
         quantity:   i.quantity,
         variant_sku: i.variantSku || i.variantLabel || i.variantId,
         unit_price: i.unitPrice,
+        size_label: i.sizeLabel,
       })),
     [items],
   )

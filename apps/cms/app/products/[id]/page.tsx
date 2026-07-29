@@ -4,6 +4,7 @@ import { createServerClient } from '@amiora/database'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { ProductCatalogCreateForm } from '@/components/forms/ProductCatalogCreateForm'
 import { ensureGoldMetalPurities } from '@/lib/ensureMetalPurities'
+import { fetchCmsPricingContext } from '@/lib/fetchCmsPricingContext'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -17,8 +18,24 @@ type ColorGroupRow = {
   display_order: number
 }
 
+type VariantSizeRow = {
+  id: string
+  variant_id: string
+  color_id: string
+  purity_id: string
+  size_label: string
+  size_type: 'ring_us' | 'chain_inch'
+  stock_qty: number
+  price_override: number | null
+  is_active: boolean
+}
+
 function isMissingChainLengthsColumn(error: { message: string; code?: string } | null | undefined) {
   return !!error && /chain_lengths/i.test(error.message) && /(column|schema cache|does not exist|42703)/i.test(error.message)
+}
+
+function isMissingProductVariantSizesTable(error: { message: string; code?: string } | null | undefined) {
+  return !!error && /product_variant_sizes/i.test(error.message) && /(schema cache|does not exist|42703|relation)/i.test(error.message)
 }
 
 async function fetchProductColorGroups(
@@ -61,10 +78,58 @@ async function fetchProductColorGroups(
   }))
 }
 
+async function fetchProductSizeStocks(
+  supabase: SupabaseClient,
+  productId: string,
+): Promise<VariantSizeRow[]> {
+  const { data, error } = await supabase
+    .from('product_variant_sizes')
+    .select('id, variant_id, size_label, size_type, stock_qty, price_override, is_active')
+    .eq('product_id', productId)
+    .order('size_label', { ascending: true })
+
+  if (error) {
+    if (isMissingProductVariantSizesTable(error)) return []
+    console.error('[EditProductPage] product_variant_sizes:', error.message)
+    return []
+  }
+
+  const variantIds = [...new Set((data ?? []).map((row) => row.variant_id).filter(Boolean))]
+  if (variantIds.length === 0) return []
+
+  const { data: variants, error: variantError } = await supabase
+    .from('product_variants')
+    .select('id, color_id, purity_id')
+    .in('id', variantIds)
+
+  if (variantError) {
+    console.error('[EditProductPage] product_variants for size stocks:', variantError.message)
+    return []
+  }
+
+  const variantMap = new Map((variants ?? []).map((row) => [row.id, row]))
+  return (data ?? []).flatMap((row) => {
+    const variant = variantMap.get(row.variant_id)
+    if (!variant?.id || !variant.color_id || !variant.purity_id) return []
+    return [{
+      id: row.id,
+      variant_id: row.variant_id,
+      color_id: variant.color_id,
+      purity_id: variant.purity_id,
+      size_label: row.size_label,
+      size_type: row.size_type === 'chain_inch' ? 'chain_inch' : 'ring_us',
+      stock_qty: Number(row.stock_qty ?? 0),
+      price_override: row.price_override != null ? Number(row.price_override) : null,
+      is_active: row.is_active !== false,
+    }]
+  })
+}
+
 export default async function EditProductPage({ params }: Props) {
   const { id } = await params
   const supabase = createServerClient()
   await ensureGoldMetalPurities(supabase)
+  const pricingContext = await fetchCmsPricingContext(supabase)
 
   const productSelectWithChain = `
           id, name, slug, category_id, collection_id, product_number, design_number, short_desc, description,
@@ -136,6 +201,7 @@ export default async function EditProductPage({ params }: Props) {
   const tag_ids = (tagLinks ?? []).map((r) => r.tag_id)
 
   const colorGroupRows = await fetchProductColorGroups(supabase, activeProduct.id)
+  const sizeStockRows = await fetchProductSizeStocks(supabase, activeProduct.id)
 
   const colorVariants = (colorGroupRows as Array<{
     id: string
@@ -200,6 +266,7 @@ export default async function EditProductPage({ params }: Props) {
         categories={(categories ?? []) as Parameters<typeof ProductCatalogCreateForm>[0]['categories']}
         metalColors={(metalColors ?? []) as Parameters<typeof ProductCatalogCreateForm>[0]['metalColors']}
         metalPurities={(metalPurities ?? []) as Parameters<typeof ProductCatalogCreateForm>[0]['metalPurities']}
+        pricingContext={pricingContext}
         initialData={{
           id: activeProduct.id,
           product: {
@@ -231,10 +298,11 @@ export default async function EditProductPage({ params }: Props) {
             is_new_arrival: activeProduct.is_new_arrival,
             is_best_seller: activeProduct.is_best_seller,
             is_coming_soon: activeProduct.is_coming_soon,
-            making_charge_pct: Number(activeProduct.making_charge_pct ?? 8),
-            has_stone: Boolean(activeProduct.has_stone),
-            stone_lines: activeProduct.stone_lines ?? [],
-          },
+          making_charge_pct: Number(activeProduct.making_charge_pct ?? 8),
+          has_stone: Boolean(activeProduct.has_stone),
+          stone_lines: activeProduct.stone_lines ?? [],
+          size_stocks: sizeStockRows,
+        },
           colorVariants,
           matrix,
         }}

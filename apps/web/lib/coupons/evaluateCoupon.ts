@@ -10,6 +10,7 @@ export type CartLine = {
   quantity: number
   variant_sku?: string | null
   unit_price?: number | null
+  size_label?: string | null
 }
 
 export type CouponRow = {

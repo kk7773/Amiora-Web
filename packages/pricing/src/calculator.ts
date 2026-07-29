@@ -54,6 +54,7 @@ export interface PriceInput {
   livePricePerGram999: number
   makingChargePct?: number
   gemPriceOverride?: number | null
+  addonPriceOverride?: number | null
   makingChargeDiscountPct?: number
   gemPriceDiscountPct?: number
   variantMakingChargeDiscountPct?: number | null
@@ -69,6 +70,9 @@ export interface PriceBreakdown {
   gemPrice: number
   gemPriceDiscount: number
   gemPriceNet: number
+  addonPrice: number
+  addonPriceDiscount: number
+  addonPriceNet: number
   productDiscount: number
   subtotalBeforeGst: number
   gstAmount: number
@@ -86,6 +90,7 @@ export function calculateVariantPrice(input: PriceInput): PriceBreakdown {
     livePricePerGram999,
     makingChargePct          = 8,
     gemPriceOverride         = null,
+    addonPriceOverride       = null,
     makingChargeDiscountPct  = 0,
     gemPriceDiscountPct      = 0,
     variantMakingChargeDiscountPct,
@@ -106,18 +111,22 @@ export function calculateVariantPrice(input: PriceInput): PriceBreakdown {
   const purePrice      = weightGrams * livePricePerGram999
   // CMS stores net/pure metal weight per purity row, so do not apply purity again.
   const baseMetalPrice = purePrice
-  const makingCharge   = baseMetalPrice * (makingChargePct / 100)
   const gemPrice       = gemPriceOverride ?? 0
+  const addonPrice     = addonPriceOverride ?? 0
+  const makingChargeBase = baseMetalPrice + gemPrice + addonPrice
+  const makingCharge   = makingChargeBase * (makingChargePct / 100)
 
   const makingChargeDiscount = round2(makingCharge * (effMakingDiscPct / 100))
   const gemPriceDiscount     = round2(gemPrice     * (effGemDiscPct     / 100))
+  const addonPriceDiscount    = 0
   const makingChargeNet      = round2(makingCharge - makingChargeDiscount)
   const gemPriceNet          = round2(gemPrice     - gemPriceDiscount)
+  const addonPriceNet        = round2(addonPrice - addonPriceDiscount)
   const productDiscount      = round2(makingChargeDiscount + gemPriceDiscount)
-  const subtotalBeforeGst    = round2(baseMetalPrice + makingChargeNet + gemPriceNet)
+  const subtotalBeforeGst    = round2(baseMetalPrice + gemPriceNet + addonPriceNet + makingChargeNet)
   const gstAmount            = round2(subtotalBeforeGst * GST_RATE)
   const finalPrice           = round2(subtotalBeforeGst + gstAmount)
-  const listSubtotalBeforeGst = round2(baseMetalPrice + makingCharge + gemPrice)
+  const listSubtotalBeforeGst = round2(baseMetalPrice + gemPrice + addonPrice + makingCharge)
   const listGstAmount        = round2(listSubtotalBeforeGst * GST_RATE)
   const listTotalBeforeDiscount = round2(listSubtotalBeforeGst + listGstAmount)
   const savedVsList          = round2(listTotalBeforeDiscount - finalPrice)
@@ -135,6 +144,9 @@ export function calculateVariantPrice(input: PriceInput): PriceBreakdown {
     gemPrice:             round2(gemPrice),
     gemPriceDiscount,
     gemPriceNet,
+    addonPrice:           round2(addonPrice),
+    addonPriceDiscount,
+    addonPriceNet,
     productDiscount,
     subtotalBeforeGst,
     gstAmount,

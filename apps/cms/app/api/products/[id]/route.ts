@@ -4,6 +4,7 @@ import { computeCatalogVariantPrice, readManualPriceOverride } from '@amiora/pri
 import { generateAmioraSKU } from '@/lib/sku'
 import { normalizeStoneLines } from '@/lib/normalizeStoneLines'
 import { normalizeChainLengths } from '@/lib/normalizeChainLengths'
+import { syncProductVariantSizes } from '@/lib/syncProductVariantSizes'
 import { requireCmsAccess, writeAuditLog } from '@/lib/rbac'
 import { insertProductColorGroup, updateProductColorGroup } from '@/lib/productColorGroupsDb'
 
@@ -69,6 +70,16 @@ type Body = {
     has_stone?: boolean
     stone_lines?: unknown
   }
+  size_stocks?: Array<{
+    id?: string
+    color_id: string
+    purity_id: string
+    size_label: string
+    size_type: 'ring_us' | 'chain_inch'
+    stock_qty?: number
+    price_override?: number | null
+    is_active?: boolean
+  }>
   collection_ids?: string[]
   tag_ids?: string[]
   color_variants: ColorVariantIn[]
@@ -359,6 +370,27 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
           return NextResponse.json({ error: error.message }, { status: 500 })
         }
       }
+    }
+
+    const { data: currentVariants, error: currentVariantsError } = await supabase
+      .from('product_variants')
+      .select('id, color_id, purity_id')
+      .eq('product_id', id)
+
+    if (currentVariantsError) {
+      console.error('[PATCH /api/products/:id] read variants for size sync', currentVariantsError)
+      return NextResponse.json({ error: currentVariantsError.message }, { status: 500 })
+    }
+
+    const variantMap = new Map<string, string>()
+    for (const row of currentVariants ?? []) {
+      variantMap.set(`${row.color_id}:${row.purity_id}`, row.id)
+    }
+
+    const sizeSync = await syncProductVariantSizes(supabase, id, body.size_stocks, variantMap)
+    if (sizeSync.error) {
+      console.error('[PATCH /api/products/:id] sync size stocks', sizeSync.error)
+      return NextResponse.json({ error: sizeSync.error.message }, { status: 500 })
     }
 
     const { syncCollectionProducts } = await import('@/lib/syncCollectionProducts')

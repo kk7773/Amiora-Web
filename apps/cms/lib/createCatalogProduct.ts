@@ -4,6 +4,7 @@ import { generateAmioraSKU } from '@/lib/sku'
 import { insertProductColorGroup } from '@/lib/productColorGroupsDb'
 import { normalizeStoneLines, parseOptionalGrams } from '@/lib/normalizeStoneLines'
 import { normalizeChainLengths } from '@/lib/normalizeChainLengths'
+import { syncProductVariantSizes } from '@/lib/syncProductVariantSizes'
 import type { CatalogProductPayload } from '@/lib/catalogProductTypes'
 import { fetchNextProductNumber } from '@/lib/productIdentity'
 
@@ -206,11 +207,28 @@ export async function createCatalogProduct(
     return { ok: false, error: 'No valid variant rows — check metal weights' }
   }
 
-  const { error: vErr } = await supabase.from('product_variants').insert(variantRows)
+  const { data: insertedVariants, error: vErr } = await supabase
+    .from('product_variants')
+    .insert(variantRows)
+    .select('id, color_id, purity_id')
   if (vErr) {
     console.error('[createCatalogProduct] variants', vErr)
     await supabase.from('products').delete().eq('id', productId)
     return { ok: false, error: vErr.message }
+  }
+
+  const variantMap = new Map<string, string>()
+  for (const row of insertedVariants ?? []) {
+    variantMap.set(`${row.color_id}:${row.purity_id}`, row.id)
+  }
+
+  if (body.size_stocks && body.size_stocks.length > 0) {
+    const sizeSync = await syncProductVariantSizes(supabase, productId, body.size_stocks, variantMap)
+    if (sizeSync.error) {
+      console.error('[createCatalogProduct] size stocks', sizeSync.error)
+      await supabase.from('products').delete().eq('id', productId)
+      return { ok: false, error: sizeSync.error.message }
+    }
   }
 
   const collectionIds = body.collection_ids ?? (

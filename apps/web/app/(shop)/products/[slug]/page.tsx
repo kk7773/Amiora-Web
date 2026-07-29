@@ -42,6 +42,16 @@ type CatalogBundle = {
   }[]
 }
 
+type CatalogVariantSizeRow = {
+  id: string
+  variant_id: string
+  size_label: string
+  size_type: 'ring_us' | 'chain_inch'
+  stock_qty: number
+  price_override: number | null
+  is_active: boolean
+}
+
 function isCatalogVariantRow(r: Record<string, unknown>): boolean {
   return (
     typeof r.color_id === 'string' &&
@@ -200,6 +210,10 @@ function isChainLengthsColumnMissing(message: string) {
 
 function isShortDescriptionColumnMissing(message: string) {
   return /short_description/i.test(message) && /(column|schema cache|does not exist|42703)/i.test(message)
+}
+
+function isMissingProductVariantSizesTable(message: string) {
+  return /product_variant_sizes/i.test(message) && /(schema cache|does not exist|42703|relation)/i.test(message)
 }
 
 /** Tolerates DBs that have not yet applied migration 018 (product_color_groups.videos). */
@@ -399,6 +413,19 @@ export default async function ProductPage({ params }: Props) {
   const variantRecords = (variantRowsRaw ?? []) as Record<string, unknown>[]
   const catalogVariantSource = variantRecords.filter(isCatalogVariantRow)
   const useLegacyVariants      = catalogVariantSource.length === 0 && variantRecords.length > 0
+
+  const { data: sizeStockRowsRaw, error: sizeStockFetchError } = await supabase
+    .from('product_variant_sizes')
+    .select('id, variant_id, size_label, size_type, stock_qty, price_override, is_active')
+    .eq('product_id', product.id)
+
+  if (sizeStockFetchError) {
+    if (isMissingProductVariantSizesTable(sizeStockFetchError.message)) {
+      // Older databases may not have the table yet; treat size stocks as unavailable.
+    } else {
+      console.error('[ProductPage] product_variant_sizes fetch error:', sizeStockFetchError.message, '| slug:', slug)
+    }
+  }
 
   type PurRow = { id: string; label: string; code: string; display_order: number }
   const purityIdsForLookup = [
@@ -721,6 +748,7 @@ export default async function ProductPage({ params }: Props) {
           diamond_clarity:  product.diamond_clarity,
           size_range:       product.size_range,
           chain_lengths:    (product as { chain_lengths?: unknown }).chain_lengths ?? [],
+          variant_sizes:    (sizeStockRowsRaw ?? []) as CatalogVariantSizeRow[],
           making_charge_pct: Number(product.making_charge_pct ?? 0),
           avgRating,
           reviewCount:     safeReviews.length,

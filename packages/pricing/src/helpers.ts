@@ -182,6 +182,7 @@ export interface ComputeCatalogVariantInput {
   metalType?: MetalType
   makingChargePct?: number
   stoneLines?: unknown
+  addonPriceOverride?: number | null | undefined
   goldPerGram: number | null | undefined
   goldPurityRates?: GoldPurityRates
   silverPerGram: number | null | undefined
@@ -213,6 +214,7 @@ export function computeCatalogVariantPrice(input: ComputeCatalogVariantInput): P
     livePricePerGram999: liveRate,
     makingChargePct: input.makingChargePct ?? 8,
     gemPriceOverride: gemTotal > 0 ? gemTotal : null,
+    addonPriceOverride: input.addonPriceOverride ?? null,
     makingChargeDiscountPct: input.makingChargeDiscountPct ?? 0,
     gemPriceDiscountPct: input.gemPriceDiscountPct ?? 0,
     variantMakingChargeDiscountPct: input.variantMakingChargeDiscountPct,
@@ -241,6 +243,9 @@ export function applyManualPriceOverride(
       gemPrice: 0,
       gemPriceDiscount: 0,
       gemPriceNet: 0,
+      addonPrice: 0,
+      addonPriceDiscount: 0,
+      addonPriceNet: 0,
       productDiscount: 0,
       subtotalBeforeGst: override,
       gstAmount: 0,
@@ -263,11 +268,26 @@ export function applyManualPriceOverride(
 /** Build price breakup rows for PDP table display. */
 export function breakdownToDisplayRows(
   breakdown: PriceBreakdown,
+  makingChargePct?: number | null,
 ): Array<{ label: string; amount: number }> {
   const rows: Array<{ label: string; amount: number }> = [
     { label: 'Metal value', amount: breakdown.baseMetalPrice },
-    { label: 'Making charge', amount: breakdown.makingChargeNet },
   ]
+  if (breakdown.addonPrice > 0) {
+    rows.push({ label: 'Chain cost', amount: breakdown.addonPrice })
+  }
+  rows.push(
+    {
+      label:
+        makingChargePct != null && Number.isFinite(makingChargePct) && makingChargePct > 0
+          ? `Making charge `
+          : 'Making charge',
+      amount: breakdown.makingCharge,
+    },
+  )
+  if (breakdown.makingChargeDiscount > 0) {
+    rows.push({ label: 'Making charge discount', amount: -breakdown.makingChargeDiscount })
+  }
   if (breakdown.gemPriceNet > 0) {
     rows.push({ label: 'Diamond / stone', amount: breakdown.gemPriceNet })
   }

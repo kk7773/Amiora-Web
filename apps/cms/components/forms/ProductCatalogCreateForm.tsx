@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Plus, Trash2, ChevronUp, ChevronDown, X, Film } from 'lucide-react'
+import { formatINR, resolveLiveRate } from '@amiora/pricing'
 import { useCloudinaryUpload } from '@/hooks/useCloudinaryUpload'
 import { generateAmioraSKU, slugifyName } from '@/lib/sku'
 import { isBulkImportPlaceholder } from '@/lib/bulkImportConstants'
@@ -27,7 +28,19 @@ type ChainLengthUi = {
   weight_g: string
 }
 
+type SizeStockUi = {
+  key: string
+  color_id: string
+  purity_id: string
+  size_label: string
+  size_type: 'ring_us' | 'chain_inch'
+  stock_qty: string
+  price_override: string
+  is_active: boolean
+}
+
 const CHAIN_LENGTH_OPTIONS = ['14', '16', '18', '20', '22'] as const
+const RING_SIZE_OPTIONS = Array.from({ length: 23 }, (_, index) => String(index + 6))
 
 const DIAMOND_SHAPE_OPTIONS = [
   'Round',
@@ -107,6 +120,7 @@ type InitialData = {
     diamond_clarity: string | null
     size_range: string | null
     chain_lengths?: unknown
+    size_stocks?: unknown
     metal_weight_g?: number | null
     meta_title: string | null
     meta_description: string | null
@@ -136,31 +150,25 @@ export type ProductCatalogCreateFormProps = {
   metalColors: MetalColor[]
   metalPurities: MetalPurity[]
   initialData?: InitialData
+  pricingContext: {
+    currentGoldPerGram: number
+    currentSilverPerGram: number
+    currentDiamondPerCarat: number
+    goldPurityRates: {
+      '09': number | null
+      '14': number | null
+      '18': number | null
+      '22': number | null
+    }
+  }
 }
 
 type CellState = {
   id?: string
   gross_weight_g: string
-  manual_price: string
   stock_qty: string
   is_active: boolean
-}
-
-function purityCodeToWeightMultiplier(code: string): number {
-  const normalized = code.trim().toLowerCase()
-  if (!normalized) return 1
-
-  if (/^\d{3}$/.test(normalized)) {
-    const fineness = parseInt(normalized, 10)
-    return Number.isFinite(fineness) && fineness > 0 ? fineness / 1000 : 1
-  }
-
-  const karat = parseInt(normalized, 10)
-  if (Number.isFinite(karat) && karat > 0 && karat <= 24) {
-    return karat / 24
-  }
-
-  return 1
+  seed_price?: number
 }
 
 function buildCellKey(colorId: string, purityId: string) {
@@ -268,33 +276,21 @@ function VariantColorMedia({
 
 function buildCellState(
   matrix: MatrixSeedCell[],
-  purityLookup: Map<string, { code: string }>,
-  fallbackWeightG?: number | null,
 ) {
-  const fallback =
-    fallbackWeightG != null && Number.isFinite(Number(fallbackWeightG))
-      ? String(Number(fallbackWeightG))
-      : ''
   return Object.fromEntries(
     matrix.map((cell) => [
       buildCellKey(cell.color_id, cell.purity_id),
       {
         id: cell.id,
-        gross_weight_g: (() => {
-          if (cell.metal_weight_g != null && Number.isFinite(Number(cell.metal_weight_g))) {
-            const purityCode = purityLookup.get(cell.purity_id)?.code ?? ''
-            const multiplier = purityCodeToWeightMultiplier(purityCode)
-            const grossWeight = multiplier > 0 ? Number(cell.metal_weight_g) / multiplier : Number(cell.metal_weight_g)
-            return String(Math.round(grossWeight * 1000) / 1000)
-          }
-          return fallback
-        })(),
-        manual_price:
-          typeof cell.price === 'number' && Number.isFinite(cell.price) && cell.price > 0
-            ? String(cell.price)
-            : '',
+        gross_weight_g: cell.metal_weight_g != null && Number.isFinite(Number(cell.metal_weight_g))
+          ? String(Math.round(Number(cell.metal_weight_g) * 1000) / 1000)
+          : '',
         stock_qty: String(cell.stock_qty),
         is_active: cell.is_active,
+        seed_price:
+          typeof cell.price === 'number' && Number.isFinite(cell.price) && cell.price > 0
+            ? cell.price
+            : undefined,
       } satisfies CellState,
     ]),
   ) as Record<string, CellState>
@@ -481,6 +477,67 @@ function chainLengthsFromDb(raw: unknown): ChainLengthUi[] {
     .filter((row): row is ChainLengthUi => row != null)
 }
 
+function buildSizeStockKey(colorId: string, purityId: string, sizeLabel: string) {
+  return `${colorId}:${purityId}:${sizeLabel}`
+}
+
+function newSizeStockRow(params: {
+  color_id: string
+  purity_id: string
+  size_label: string
+  size_type: 'ring_us' | 'chain_inch'
+}): SizeStockUi {
+  return {
+    key: `sz-${params.color_id}-${params.purity_id}-${params.size_label}-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`,
+    color_id: params.color_id,
+    purity_id: params.purity_id,
+    size_label: params.size_label,
+    size_type: params.size_type,
+    stock_qty: '',
+    price_override: '',
+    is_active: true,
+  }
+}
+
+function sizeStocksFromDb(raw: unknown): SizeStockUi[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((item, index) => {
+      if (!item || typeof item !== 'object') return null
+      const record = item as Record<string, unknown>
+      const colorId = typeof record.color_id === 'string' ? record.color_id : ''
+      const purityId = typeof record.purity_id === 'string' ? record.purity_id : ''
+      const sizeLabel = typeof record.size_label === 'string' ? record.size_label.trim() : ''
+      const sizeType = record.size_type === 'chain_inch' ? 'chain_inch' : 'ring_us'
+      if (!colorId || !purityId || !sizeLabel) return null
+      const stockQty =
+        typeof record.stock_qty === 'number' && Number.isFinite(record.stock_qty)
+          ? String(record.stock_qty)
+          : typeof record.stock_qty === 'string' && record.stock_qty.trim() !== ''
+            ? record.stock_qty.trim()
+            : '0'
+      const priceOverride =
+        typeof record.price_override === 'number' && Number.isFinite(record.price_override)
+          ? String(record.price_override)
+          : typeof record.price_override === 'string' && record.price_override.trim() !== ''
+            ? record.price_override.trim()
+            : ''
+      return {
+        key: `sz-${index}-${colorId}-${purityId}-${sizeLabel}`,
+        color_id: colorId,
+        purity_id: purityId,
+        size_label: sizeLabel,
+        size_type: sizeType,
+        stock_qty: stockQty,
+        price_override: priceOverride,
+        is_active: record.is_active !== false,
+      } satisfies SizeStockUi
+    })
+    .filter((row): row is SizeStockUi => row != null)
+}
+
 export function ProductCatalogCreateForm({
   categories,
   collections,
@@ -488,6 +545,7 @@ export function ProductCatalogCreateForm({
   metalColors,
   metalPurities,
   initialData,
+  pricingContext,
 }: ProductCatalogCreateFormProps) {
   const router = useRouter()
   const { uploading, uploadFiles } = useCloudinaryUpload('amiora/products/colors')
@@ -514,11 +572,6 @@ export function ProductCatalogCreateForm({
         .sort((a, b) => a.display_order - b.display_order || a.code.localeCompare(b.code)),
     [normalizedPurities, productMetalType],
   )
-  const purityLookup = useMemo(
-    () => new Map(normalizedPurities.map((purity) => [purity.id, { code: purity.code }])),
-    [normalizedPurities],
-  )
-
   const hasMetalColors = metalColors.length > 0
   const hasMetalPurities = metalPurities.length > 0
   const isGoldProduct = productMetalType === 'gold'
@@ -557,6 +610,9 @@ export function ProductCatalogCreateForm({
   const [chainLengths, setChainLengths] = useState<ChainLengthUi[]>(
     () => chainLengthsFromDb(initialData?.product.chain_lengths),
   )
+  const [sizeStocks, setSizeStocks] = useState<SizeStockUi[]>(() =>
+    sizeStocksFromDb(initialData?.product.size_stocks),
+  )
 
   const [metaTitle, setMetaTitle] = useState(initialData?.product.meta_title ?? '')
   const [metaDesc, setMetaDesc] = useState(initialData?.product.meta_description ?? '')
@@ -574,16 +630,18 @@ export function ProductCatalogCreateForm({
     const rows = stoneLinesFromDb(initialData?.product.stone_lines)
     return rows.length > 0 ? rows : []
   })
+  const selectedCategory = categories.find((category) => category.id === categoryId)
+  const isRingProduct = /ring/i.test(
+    `${selectedCategory?.name ?? ''} ${selectedCategory?.code ?? ''}`,
+  )
+  const isChainProduct = /necklace|chain/i.test(
+    `${selectedCategory?.name ?? ''} ${selectedCategory?.code ?? ''}`,
+  )
 
   useEffect(() => {
     if (!hasStone) return
     setStoneRows((prev) => (prev.length === 0 ? [newStoneRow()] : prev))
   }, [hasStone])
-
-  const selectedCategory = categories.find((category) => category.id === categoryId)
-  const isChainProduct = /necklace|chain/i.test(
-    `${selectedCategory?.name ?? ''} ${selectedCategory?.code ?? ''}`,
-  )
 
   useEffect(() => {
     if (!isChainProduct) return
@@ -592,6 +650,30 @@ export function ProductCatalogCreateForm({
 
   function updateChainLength(rowKey: string, updater: (row: ChainLengthUi) => ChainLengthUi) {
     setChainLengths((prev) => prev.map((row) => (row.key === rowKey ? updater(row) : row)))
+  }
+
+  function updateSizeStock(colorId: string, purityId: string, sizeLabel: string, updater: (row: SizeStockUi) => SizeStockUi) {
+    setSizeStocks((prev) => {
+      const index = prev.findIndex(
+        (row) => row.color_id === colorId && row.purity_id === purityId && row.size_label === sizeLabel,
+      )
+      const current =
+        index >= 0
+          ? prev[index]!
+          : newSizeStockRow({
+              color_id: colorId,
+              purity_id: purityId,
+              size_label: sizeLabel,
+              size_type: isChainProduct ? 'chain_inch' : 'ring_us',
+            })
+      const nextRow = updater(current)
+      if (index >= 0) {
+        const next = [...prev]
+        next[index] = nextRow
+        return next
+      }
+      return [...prev, nextRow]
+    })
   }
 
   const [colorRows, setColorRows] = useState<ColorRow[]>(
@@ -605,8 +687,39 @@ export function ProductCatalogCreateForm({
     })) ?? [],
   )
 
+  useEffect(() => {
+    if (!(isRingProduct || isChainProduct)) return
+    const sizeLabels = isRingProduct ? RING_SIZE_OPTIONS : CHAIN_LENGTH_OPTIONS
+    setSizeStocks((prev) => {
+      const next = [...prev]
+      for (const row of colorRows) {
+        for (const purity of puritiesForProduct) {
+          for (const sizeLabel of sizeLabels) {
+            const exists = next.some(
+              (entry) =>
+                entry.color_id === row.color_id &&
+                entry.purity_id === purity.id &&
+                entry.size_label === sizeLabel,
+            )
+            if (!exists) {
+              next.push(
+                newSizeStockRow({
+                  color_id: row.color_id,
+                  purity_id: purity.id,
+                  size_label: sizeLabel,
+                  size_type: isChainProduct ? 'chain_inch' : 'ring_us',
+                }),
+              )
+            }
+          }
+        }
+      }
+      return next
+    })
+  }, [colorRows, puritiesForProduct, isRingProduct, isChainProduct])
+
   const [cells, setCells] = useState<Record<string, CellState>>(
-    buildCellState(initialData?.matrix ?? [], purityLookup, initialData?.product.metal_weight_g),
+    buildCellState(initialData?.matrix ?? []),
   )
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
@@ -823,12 +936,40 @@ export function ProductCatalogCreateForm({
     const key = buildCellKey(colorId, purityId)
     setCells((prev) => {
       const current = prev[key] ?? { gross_weight_g: '', stock_qty: '1', is_active: false }
-      const normalizedCurrent =
-        'manual_price' in current
-          ? current
-          : { ...current, manual_price: '' }
-      return { ...prev, [key]: updater(normalizedCurrent) }
+      return { ...prev, [key]: updater(current) }
     })
+  }
+
+  function computeCellPrice(
+    grossWeightText: string,
+    purityCode: string,
+    metalType: MetalPurity['metal'],
+  ): { pureWeight: number | null; price: number | null } {
+    const grossWeight = parseFloat(grossWeightText)
+    if (!Number.isFinite(grossWeight) || grossWeight <= 0) {
+      return { pureWeight: null, price: null }
+    }
+
+    const pureWeight = Math.round(grossWeight * 1000) / 1000
+    if (!Number.isFinite(pureWeight) || pureWeight <= 0) {
+      return { pureWeight: null, price: null }
+    }
+
+    const metalRate = resolveLiveRate(
+      metalType ?? undefined,
+      pricingContext.currentGoldPerGram,
+      pricingContext.currentSilverPerGram,
+      purityCode,
+      pricingContext.goldPurityRates,
+    )
+    if (!Number.isFinite(metalRate) || metalRate <= 0) {
+      return { pureWeight: null, price: null }
+    }
+
+    return {
+      pureWeight,
+      price: Math.round(pureWeight * metalRate * 100) / 100,
+    }
   }
 
   function updateStoneRow(rowKey: string, updater: (row: StoneLineUi) => StoneLineUi) {
@@ -923,25 +1064,41 @@ export function ProductCatalogCreateForm({
         const current = cells[buildCellKey(row.color_id, purity.id)]
         if (!current) continue
         const grossWeightTrim = current.gross_weight_g.trim()
-        const grossWeightParsed = grossWeightTrim !== '' ? parseFloat(grossWeightTrim) : NaN
-        const manualPriceTrim = current.manual_price.trim()
-        const manualPrice = manualPriceTrim !== '' ? parseFloat(manualPriceTrim) : NaN
-        const multiplier = purityCodeToWeightMultiplier(purity.code)
-        const pureWeight = Number.isFinite(grossWeightParsed) && grossWeightParsed > 0
-          ? Math.round(grossWeightParsed * multiplier * 1000) / 1000
-          : NaN
-        if (!Number.isFinite(pureWeight) || pureWeight <= 0) continue
+        const computed = computeCellPrice(grossWeightTrim, purity.code, purity.metal)
+        if (computed.price == null || computed.pureWeight == null) {
+          toast.error(`Price could not be calculated for ${purity.label}`)
+          return
+        }
         matrix.push({
           id: current.id,
           color_id: row.color_id,
           purity_id: purity.id,
-          price: Number.isFinite(manualPrice) && manualPrice > 0 ? Math.round(manualPrice * 100) / 100 : undefined,
+          price: Math.round(computed.price * 100) / 100,
           stock_qty: Math.max(0, Math.floor(Number(current.stock_qty) || 0)),
           is_active: current.is_active,
-          metal_weight_g: pureWeight,
+          metal_weight_g: computed.pureWeight,
         })
       }
     }
+
+    const sizeStocksPayload =
+      isRingProduct || isChainProduct
+        ? sizeStocks
+            .filter((row) => row.size_type === (isChainProduct ? 'chain_inch' : 'ring_us'))
+            .map((row) => ({
+              color_id: row.color_id,
+              purity_id: row.purity_id,
+              size_label: row.size_label.trim(),
+              size_type: row.size_type,
+              stock_qty: Math.max(0, Math.floor(Number(row.stock_qty) || 0)),
+              price_override:
+                row.price_override.trim() !== '' && Number.isFinite(parseFloat(row.price_override))
+                  ? parseFloat(row.price_override)
+                  : null,
+              is_active: row.is_active,
+            }))
+            .filter((row) => row.size_label !== '')
+        : []
 
     if (matrix.length === 0) {
       toast.error('Enter at least one variant with product weight (g)')
@@ -1068,6 +1225,7 @@ export function ProductCatalogCreateForm({
           tag_ids: tagIds,
           color_variants: colorVariants,
           matrix,
+          size_stocks: sizeStocksPayload,
         }),
       })
 
@@ -1647,9 +1805,9 @@ export function ProductCatalogCreateForm({
 
       <section className="bg-white rounded-xl border border-divider p-6 space-y-4 overflow-x-auto">
         <h3 className="font-display text-lg text-deep-teal">Weight &amp; stock matrix</h3>
-        <p className="text-sm text-ink-muted">
-          Top field mein product weight dalo. Uske neeche pure metal weight purity ke hisaab se auto-calculate hoga, aur pricing usi pure weight se niklegi.
-        </p>
+        {/* <p className="text-sm text-ink-muted">
+          Top field mein direct metal weight dalo. Neeche calculated price auto-update hoga current kt rate aur making charge ke hisaab se.
+        </p> */}
         {!hasMetalPurities ? (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             `metal_purities` table empty hai. Supabase me seed / migration chalao — gold (22/18/14/09) aur silver (925/835) columns yahan dikhenge.
@@ -1685,18 +1843,13 @@ export function ProductCatalogCreateForm({
                     {puritiesForProduct.map((purity) => {
                       const cell = cells[buildCellKey(row.color_id, purity.id)] ?? {
                         gross_weight_g: '',
-                        manual_price: '',
                         stock_qty: '1',
                         is_active: false,
+                        seed_price: undefined,
                       }
-                      const grossWeightNum =
-                        cell.gross_weight_g.trim() !== '' ? parseFloat(cell.gross_weight_g) : NaN
-                      const purityMultiplier = purityCodeToWeightMultiplier(purity.code)
-                      const pureMetalWeight =
-                        Number.isFinite(grossWeightNum) && grossWeightNum > 0
-                          ? Math.round(grossWeightNum * purityMultiplier * 1000) / 1000
-                          : null
-                      const isCellComplete = pureMetalWeight != null
+                      const computedPrice = computeCellPrice(cell.gross_weight_g, purity.code, purity.metal)
+                      const displayPrice = computedPrice.price ?? cell.seed_price ?? null
+                      const isCellComplete = computedPrice.pureWeight != null
                       const isCellActive = isCellComplete && cell.is_active
                       return (
                         <td key={purity.id} className="px-2 py-2 border-b align-top min-w-[11rem]">
@@ -1704,7 +1857,7 @@ export function ProductCatalogCreateForm({
                             type="number"
                             min={0}
                             step="0.001"
-                            placeholder="Product weight (g)"
+                            placeholder="Metal weight (g)"
                             value={cell.gross_weight_g}
                             onChange={(e) =>
                               setCellValue(row.color_id, purity.id, (current) => ({
@@ -1714,23 +1867,12 @@ export function ProductCatalogCreateForm({
                             }
                             className="w-full border rounded px-2 py-1 mb-2"
                           />
-                          <div className="w-full border rounded px-2 py-1 mb-2 bg-surface text-sm text-ink-muted">
-                            Pure metal weight: {pureMetalWeight != null ? `${pureMetalWeight.toFixed(3)} g` : '—'}
+                          <div className="w-full border rounded px-2 py-1 mb-2 bg-white text-sm text-ink-muted">
+                            Entered metal weight: {cell.gross_weight_g.trim() !== '' ? `${Number(cell.gross_weight_g).toFixed(3)} g` : '—'}
                           </div>
-                          <input
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            placeholder="Manual price (₹)"
-                            value={cell.manual_price}
-                            onChange={(e) =>
-                              setCellValue(row.color_id, purity.id, (current) => ({
-                                ...current,
-                                manual_price: e.target.value,
-                              }))
-                            }
-                            className="w-full border rounded px-2 py-1 mb-2"
-                          />
+                          <div className="w-full border rounded px-2 py-1 mb-2 bg-surface text-sm text-ink-muted">
+                            Metal price: {displayPrice != null ? formatINR(displayPrice) : '—'}
+                          </div>
                           <input
                             type="number"
                             min={0}
@@ -1776,9 +1918,9 @@ export function ProductCatalogCreateForm({
             <h3 className="font-display text-lg text-deep-teal">Chain lengths</h3>
             <span className="text-xs uppercase tracking-widest text-ink-faint">14 / 16 / 18 / 20 / 22 in</span>
           </div>
-          <p className="text-sm text-ink-muted">
+          {/* <p className="text-sm text-ink-muted">
             Har length ke liye weight daalo. Frontend par user length choose karega aur price live auto-calculate hoga.
-          </p>
+          </p> */}
           <div className="space-y-3">
             {chainLengths.map((row, index) => (
               <div key={row.key} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr] gap-3 rounded-lg border border-divider bg-surface/40 p-4">
@@ -1807,11 +1949,118 @@ export function ProductCatalogCreateForm({
                     placeholder="0.000"
                   />
                 </label>
-                <p className="sm:col-span-2 text-xs text-ink-faint">
+                {/* <p className="sm:col-span-2 text-xs text-ink-faint">
                   Row {index + 1}: price product page par selected purity ke basis par auto calculate hoga.
-                </p>
+                </p> */}
               </div>
             ))}
+          </div>
+        </section>
+      )}
+
+      {(isRingProduct || isChainProduct) && (
+        <section className="bg-white rounded-xl border border-divider p-6 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="font-display text-lg text-deep-teal">
+              {isChainProduct ? 'Chain stock & price matrix' : 'Ring size stock matrix'}
+            </h3>
+            <span className="text-xs uppercase tracking-widest text-ink-faint">
+              {isChainProduct ? '14 / 16 / 18 / 20 / 22 in' : '6 / 7 / 8 / 9 / 10 / 11 / 12 / 13 / 14 / 15 / 16 / 17 / 18 / 19 / 20 / 21 / 22 / 23 / 24 / 25 / 26 / 27 / 28'}
+            </span>
+          </div>
+          {/* <p className="text-sm text-ink-muted">
+            Har variant ke liye size-wise stock maintain karo. Chains me manual price bhi yahi dalna hai; frontend ussi ko final price me add karega.
+          </p> */}
+          <div className="space-y-4">
+            {colorRows.map((row) => {
+              const color = metalColors.find((entry) => entry.id === row.color_id)
+              return puritiesForProduct.map((purity) => {
+                const entries = sizeStocks
+                  .filter(
+                    (entry) =>
+                      entry.color_id === row.color_id &&
+                      entry.purity_id === purity.id &&
+                      entry.size_type === (isChainProduct ? 'chain_inch' : 'ring_us'),
+                  )
+                  .slice()
+                  .sort((a, b) => Number(a.size_label) - Number(b.size_label))
+                return (
+                  <details
+                    key={`${row.key}-${purity.id}`}
+                    className="rounded-xl border border-divider bg-surface/40 p-4"
+                  >
+                    <summary className="cursor-pointer list-none flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="font-medium text-ink">
+                          {color?.label ?? row.color_id} · {purity.label}
+                        </p>
+                        <p className="text-xs text-ink-faint font-mono">
+                          {skuPreview(color?.code ?? '', purity.code)}
+                        </p>
+                      </div>
+                      <p className="text-xs text-ink-muted">
+                        {entries.length} size rows · click to expand
+                      </p>
+                    </summary>
+                    <div className="mt-4 grid gap-2">
+                      {(isChainProduct ? CHAIN_LENGTH_OPTIONS : RING_SIZE_OPTIONS).map((sizeLabel) => {
+                        const current = entries.find((entry) => entry.size_label === sizeLabel)
+                        return (
+                          <div key={sizeLabel} className="grid grid-cols-[72px_110px_1fr] sm:grid-cols-[72px_110px_140px_1fr] gap-2 items-center rounded-lg border border-white bg-white px-3 py-2">
+                            <span className="text-sm font-medium text-ink">{sizeLabel}{isChainProduct ? '"' : ''}</span>
+                            <input
+                              type="number"
+                              min={0}
+                              step={1}
+                              value={current?.stock_qty ?? '0'}
+                              onChange={(e) =>
+                                updateSizeStock(row.color_id, purity.id, sizeLabel, (existing) => ({
+                                  ...existing,
+                                  stock_qty: e.target.value,
+                                }))
+                              }
+                              className="w-full border rounded-lg px-3 py-2 text-sm"
+                              placeholder="Stock"
+                            />
+                            {isChainProduct ? (
+                              <input
+                                type="number"
+                                min={0}
+                                step="0.01"
+                                value={current?.price_override ?? ''}
+                                onChange={(e) =>
+                                  updateSizeStock(row.color_id, purity.id, sizeLabel, (existing) => ({
+                                    ...existing,
+                                    price_override: e.target.value,
+                                  }))
+                                }
+                                className="w-full border rounded-lg px-3 py-2 text-sm"
+                                placeholder="Chain price"
+                              />
+                            ) : (
+                              <span className="text-xs text-ink-muted">Ring stock</span>
+                            )}
+                            <label className="flex items-center gap-2 text-xs text-ink-muted">
+                              <input
+                                type="checkbox"
+                                checked={current?.is_active ?? true}
+                                onChange={(e) =>
+                                  updateSizeStock(row.color_id, purity.id, sizeLabel, (existing) => ({
+                                    ...existing,
+                                    is_active: e.target.checked,
+                                  }))
+                                }
+                              />
+                              Active
+                            </label>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </details>
+                )
+              })
+            })}
           </div>
         </section>
       )}

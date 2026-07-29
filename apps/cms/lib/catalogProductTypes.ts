@@ -17,6 +17,18 @@ export type MatrixCell = {
   metal_weight_g: number
 }
 
+export type VariantSizeStock = {
+  id?: string
+  variant_id?: string
+  color_id: string
+  purity_id: string
+  size_label: string
+  size_type: 'ring_us' | 'chain_inch'
+  stock_qty?: number
+  price_override?: number | null
+  is_active?: boolean
+}
+
 export type CatalogProductPayload = {
   product: {
     name: string
@@ -53,4 +65,5 @@ export type CatalogProductPayload = {
   tag_ids?: string[]
   color_variants: ColorVariantIn[]
   matrix: MatrixCell[]
+  size_stocks?: VariantSizeStock[]
 }

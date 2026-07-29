@@ -411,6 +411,36 @@ export interface Database {
         Relationships: []
       }
 
+      // ── product_variant_sizes ─────────────────────────────────────────────
+      product_variant_sizes: {
+        Row: {
+          id: string
+          product_id: string
+          variant_id: string
+          size_label: string
+          size_type: 'ring_us' | 'chain_inch'
+          stock_qty: number
+          price_override: number | null
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          product_id: string
+          variant_id: string
+          size_label: string
+          size_type: 'ring_us' | 'chain_inch'
+          stock_qty?: number
+          price_override?: number | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Record<string, unknown>
+        Relationships: []
+      }
+
       // ── product_images ─────────────────────────────────────────────────────
       product_images: {
         Row: {

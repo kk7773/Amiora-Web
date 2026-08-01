@@ -42,6 +42,8 @@ type SizeStockUi = {
 
 const CHAIN_LENGTH_OPTIONS = ['14', '16', '18', '20', '22'] as const
 const RING_SIZE_OPTIONS = Array.from({ length: 23 }, (_, index) => String(index + 6))
+const RING_SIZE_GROUP_BASE_INDEX = 2
+const RING_SIZE_GROUP_STEP_PCT = 0.08
 
 const DIAMOND_SHAPE_OPTIONS = [
   'Round',
@@ -482,6 +484,59 @@ function buildSizeStockKey(colorId: string, purityId: string, sizeLabel: string)
   return `${colorId}:${purityId}:${sizeLabel}`
 }
 
+function getRingSizeGroupIndex(sizeLabel: string): number | null {
+  const size = Number(sizeLabel)
+  if (!Number.isInteger(size) || size < 6 || size > 28) return null
+  return Math.floor((size - 6) / 3)
+}
+
+function getRingSizeGroupMultiplier(groupIndex: number): number {
+  return 1 + (groupIndex - RING_SIZE_GROUP_BASE_INDEX) * RING_SIZE_GROUP_STEP_PCT
+}
+
+function formatRingWeight(weight: number): string {
+  return (Math.round(weight * 1000) / 1000).toFixed(3)
+}
+
+function buildRingGroupWeightMap(sourceSizeLabel: string, weightText: string): Map<string, string> {
+  const trimmedWeight = weightText.trim()
+  const result = new Map<string, string>()
+
+  if (trimmedWeight === '') {
+    for (const sizeLabel of RING_SIZE_OPTIONS) {
+      result.set(sizeLabel, '')
+    }
+    return result
+  }
+
+  const enteredWeight = parseFloat(trimmedWeight)
+  const sourceGroupIndex = getRingSizeGroupIndex(sourceSizeLabel)
+  if (!Number.isFinite(enteredWeight) || enteredWeight <= 0 || sourceGroupIndex == null) {
+    for (const sizeLabel of RING_SIZE_OPTIONS) {
+      result.set(sizeLabel, '')
+    }
+    return result
+  }
+
+  const sourceMultiplier = getRingSizeGroupMultiplier(sourceGroupIndex)
+  const baseGroupWeight = enteredWeight / sourceMultiplier
+
+  for (const sizeLabel of RING_SIZE_OPTIONS) {
+    const groupIndex = getRingSizeGroupIndex(sizeLabel)
+    if (groupIndex == null) {
+      result.set(sizeLabel, '')
+      continue
+    }
+    result.set(sizeLabel, formatRingWeight(baseGroupWeight * getRingSizeGroupMultiplier(groupIndex)))
+  }
+
+  return result
+}
+
+function hasRingWeightValue(value: string | null | undefined): boolean {
+  return typeof value === 'string' && value.trim() !== '' && Number.isFinite(parseFloat(value))
+}
+
 function newSizeStockRow(params: {
   color_id: string
   purity_id: string
@@ -687,30 +742,83 @@ export function ProductCatalogCreateForm({
     })
   }
 
-  function syncRingWeightAcrossPurities(colorId: string, sizeLabel: string, weight: string) {
+  function syncRingWeightForVariant(colorId: string, purityId: string, sourceSizeLabel: string, weight: string) {
+    const groupedWeights = buildRingGroupWeightMap(sourceSizeLabel, weight)
     setSizeStocks((prev) => {
       const next = [...prev]
-      for (const purity of puritiesForProduct) {
+      for (const ringSizeLabel of RING_SIZE_OPTIONS) {
         const index = next.findIndex(
           (row) =>
             row.color_id === colorId &&
-            row.purity_id === purity.id &&
+            row.purity_id === purityId &&
             row.size_type === 'ring_us' &&
-            row.size_label === sizeLabel,
+            row.size_label === ringSizeLabel,
         )
+        const nextWeight = groupedWeights.get(ringSizeLabel) ?? ''
         if (index >= 0) {
-          next[index] = { ...next[index]!, metal_weight_g: weight }
+          next[index] = { ...next[index]!, metal_weight_g: nextWeight }
           continue
         }
         next.push(
           newSizeStockRow({
             color_id: colorId,
-            purity_id: purity.id,
-            size_label: sizeLabel,
+            purity_id: purityId,
+            size_label: ringSizeLabel,
             size_type: 'ring_us',
-            metal_weight_g: weight,
+            metal_weight_g: nextWeight,
           }),
         )
+      }
+      return next
+    })
+  }
+
+  function syncRingWeightAcrossPurities(colorId: string, sizeLabel: string, weight: string) {
+    for (const purity of puritiesForProduct) {
+      syncRingWeightForVariant(colorId, purity.id, sizeLabel, weight)
+    }
+  }
+
+  function syncChainLengthWeight(sizeLabel: string, weight: string) {
+    setChainLengths((prev) =>
+      prev.map((row) =>
+        row.length_inch === sizeLabel
+          ? {
+              ...row,
+              weight_g: weight,
+            }
+          : row,
+      ),
+    )
+
+    setSizeStocks((prev) => {
+      const next = [...prev]
+      for (const row of colorRows) {
+        for (const purity of puritiesForProduct) {
+          const index = next.findIndex(
+            (entry) =>
+              entry.color_id === row.color_id &&
+              entry.purity_id === purity.id &&
+              entry.size_type === 'chain_inch' &&
+              entry.size_label === sizeLabel,
+          )
+          if (index >= 0) {
+            next[index] = {
+              ...next[index]!,
+              metal_weight_g: weight,
+            }
+            continue
+          }
+          next.push(
+            newSizeStockRow({
+              color_id: row.color_id,
+              purity_id: purity.id,
+              size_label: sizeLabel,
+              size_type: 'chain_inch',
+              metal_weight_g: weight,
+            }),
+          )
+        }
       }
       return next
     })
@@ -997,6 +1105,70 @@ export function ProductCatalogCreateForm({
     })
   }
 
+  useEffect(() => {
+    if (!isRingProduct) return
+    for (const row of colorRows) {
+      for (const purity of puritiesForProduct) {
+        const cell = cells[buildCellKey(row.color_id, purity.id)]
+        if (!hasRingWeightValue(cell?.gross_weight_g)) continue
+        const variantRows = sizeStocks.filter(
+          (entry) =>
+            entry.color_id === row.color_id &&
+            entry.purity_id === purity.id &&
+            entry.size_type === 'ring_us',
+        )
+        const hasAnyVariantWeight = variantRows.some((entry) => hasRingWeightValue(entry.metal_weight_g))
+        if (!hasAnyVariantWeight) {
+          syncRingWeightForVariant(row.color_id, purity.id, '12', cell!.gross_weight_g)
+        }
+      }
+    }
+  }, [isRingProduct, colorRows, puritiesForProduct, cells, sizeStocks])
+
+  useEffect(() => {
+    if (!isChainProduct) return
+    setSizeStocks((prev) => {
+      let changed = false
+      const next = [...prev]
+      for (const chainLength of chainLengths) {
+        const weight = chainLength.weight_g.trim()
+        if (chainLength.length_inch.trim() === '' || weight === '') continue
+        for (const row of colorRows) {
+          for (const purity of puritiesForProduct) {
+            const index = next.findIndex(
+              (entry) =>
+                entry.color_id === row.color_id &&
+                entry.purity_id === purity.id &&
+                entry.size_type === 'chain_inch' &&
+                entry.size_label === chainLength.length_inch,
+            )
+            if (index >= 0) {
+              if (next[index]!.metal_weight_g !== weight) {
+                next[index] = {
+                  ...next[index]!,
+                  metal_weight_g: weight,
+                }
+                changed = true
+              }
+              continue
+            }
+            next.push(
+              newSizeStockRow({
+                color_id: row.color_id,
+                purity_id: purity.id,
+                size_label: chainLength.length_inch,
+                size_type: 'chain_inch',
+                metal_weight_g: weight,
+              }),
+            )
+            changed = true
+          }
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [isChainProduct, chainLengths, colorRows, puritiesForProduct])
+
   function computeCellPrice(
     grossWeightText: string,
     purityCode: string,
@@ -1027,6 +1199,13 @@ export function ProductCatalogCreateForm({
       pureWeight,
       price: Math.round(pureWeight * metalRate * 100) / 100,
     }
+  }
+
+  function isMatrixVariantActive(colorId: string, purity: MetalPurity): boolean {
+    const current = cells[buildCellKey(colorId, purity.id)]
+    if (!current?.is_active) return false
+    const computed = computeCellPrice(current.gross_weight_g, purity.code, purity.metal)
+    return computed.pureWeight != null
   }
 
   function updateStoneRow(rowKey: string, updater: (row: StoneLineUi) => StoneLineUi) {
@@ -1141,23 +1320,47 @@ export function ProductCatalogCreateForm({
     const sizeStocksPayload =
       isRingProduct || isChainProduct
         ? sizeStocks
+            .filter((row) => {
+              const purity = puritiesForProduct.find((entry) => entry.id === row.purity_id)
+              return purity ? isMatrixVariantActive(row.color_id, purity) : false
+            })
             .filter((row) => row.size_type === (isChainProduct ? 'chain_inch' : 'ring_us'))
-            .map((row) => ({
-              color_id: row.color_id,
-              purity_id: row.purity_id,
-              size_label: row.size_label.trim(),
-              size_type: row.size_type,
-              stock_qty: Math.max(0, Math.floor(Number(row.stock_qty) || 0)),
-              metal_weight_g:
-                row.size_type === 'ring_us' && row.metal_weight_g.trim() !== '' && Number.isFinite(parseFloat(row.metal_weight_g))
+            .map((row) => {
+              const purity = puritiesForProduct.find((entry) => entry.id === row.purity_id)
+              const parsedSizeWeight =
+                row.metal_weight_g.trim() !== '' && Number.isFinite(parseFloat(row.metal_weight_g))
                   ? parseFloat(row.metal_weight_g)
-                  : null,
-              price_override:
-                row.size_type === 'chain_inch' && row.price_override.trim() !== '' && Number.isFinite(parseFloat(row.price_override))
-                  ? parseFloat(row.price_override)
-                  : null,
-              is_active: row.is_active,
-            }))
+                  : null
+              const chainPriceOverride =
+                row.size_type === 'chain_inch' &&
+                parsedSizeWeight != null &&
+                purity
+                  ? Math.round(
+                      parsedSizeWeight *
+                        resolveLiveRate(
+                          purity.metal,
+                          pricingContext.currentGoldPerGram,
+                          pricingContext.currentSilverPerGram,
+                          purity.code,
+                          pricingContext.goldPurityRates,
+                        ) *
+                        100,
+                    ) / 100
+                  : null
+              return {
+                color_id: row.color_id,
+                purity_id: row.purity_id,
+                size_label: row.size_label.trim(),
+                size_type: row.size_type,
+                stock_qty: Math.max(0, Math.floor(Number(row.stock_qty) || 0)),
+                metal_weight_g:
+                  (row.size_type === 'ring_us' || row.size_type === 'chain_inch') && parsedSizeWeight != null
+                    ? parsedSizeWeight
+                    : null,
+                price_override: chainPriceOverride,
+                is_active: row.is_active,
+              }
+            })
             .filter((row) => row.size_label !== '')
         : []
 
@@ -1920,9 +2123,18 @@ export function ProductCatalogCreateForm({
                             step="0.001"
                             placeholder="Metal weight (g)"
                             value={cell.gross_weight_g}
-                            onChange={(e) =>
-                              syncMatrixWeightAcrossAllCells(e.target.value)
-                            }
+                            onChange={(e) => {
+                              const nextWeight = e.target.value
+                              if (isRingProduct) {
+                                setCellValue(row.color_id, purity.id, (current) => ({
+                                  ...current,
+                                  gross_weight_g: nextWeight,
+                                }))
+                                syncRingWeightForVariant(row.color_id, purity.id, '12', nextWeight)
+                              } else {
+                                syncMatrixWeightAcrossAllCells(nextWeight)
+                              }
+                            }}
                             className="w-full border rounded px-2 py-1 mb-2"
                           />
                           <div className="w-full border rounded px-2 py-1 mb-2 bg-white text-sm text-ink-muted">
@@ -2033,6 +2245,7 @@ export function ProductCatalogCreateForm({
             {colorRows.map((row) => {
               const color = metalColors.find((entry) => entry.id === row.color_id)
               return puritiesForProduct.map((purity) => {
+                if (!isMatrixVariantActive(row.color_id, purity)) return null
                 const entries = sizeStocks
                   .filter(
                     (entry) =>
@@ -2063,6 +2276,8 @@ export function ProductCatalogCreateForm({
                     <div className="mt-4 grid gap-2">
                       {(isChainProduct ? CHAIN_LENGTH_OPTIONS : RING_SIZE_OPTIONS).map((sizeLabel) => {
                         const current = entries.find((entry) => entry.size_label === sizeLabel)
+                        const sharedChainWeight =
+                          chainLengths.find((entry) => String(entry.length_inch) === sizeLabel)?.weight_g ?? ''
                         const sharedRingWeight =
                           sizeStocks.find(
                             (entry) =>
@@ -2071,7 +2286,24 @@ export function ProductCatalogCreateForm({
                               entry.size_label === sizeLabel &&
                               entry.metal_weight_g.trim() !== '',
                           )?.metal_weight_g ?? ''
-                        const ringWeight = current?.metal_weight_g ?? sharedRingWeight ?? ''
+                        const chainWeight = current?.metal_weight_g?.trim() ? current.metal_weight_g : sharedChainWeight
+                        const ringWeight = current?.metal_weight_g?.trim() ? current.metal_weight_g : sharedRingWeight
+                        const chainBasePrice =
+                          isChainProduct
+                            ? chainWeight.trim() !== '' && Number.isFinite(parseFloat(chainWeight))
+                              ? Math.round(
+                                  parseFloat(chainWeight) *
+                                    resolveLiveRate(
+                                      purity.metal,
+                                      pricingContext.currentGoldPerGram,
+                                      pricingContext.currentSilverPerGram,
+                                      purity.code,
+                                      pricingContext.goldPurityRates,
+                                    ) *
+                                    100,
+                                ) / 100
+                              : null
+                            : null
                         const ringBasePrice =
                           isChainProduct
                             ? null
@@ -2092,9 +2324,7 @@ export function ProductCatalogCreateForm({
                           <div
                             key={sizeLabel}
                             className={`grid gap-2 items-center rounded-lg border border-white bg-white px-3 py-2 ${
-                              isChainProduct
-                                ? 'grid-cols-[72px_110px_140px_1fr]'
-                                : 'grid-cols-[72px_110px_120px_140px_1fr]'
+                              'grid-cols-[72px_110px_120px_140px_1fr]'
                             }`}
                           >
                             <span className="text-sm font-medium text-ink">{sizeLabel}{isChainProduct ? '"' : ''}</span>
@@ -2116,16 +2346,13 @@ export function ProductCatalogCreateForm({
                               <input
                                 type="number"
                                 min={0}
-                                step="0.01"
-                                value={current?.price_override ?? ''}
+                                step="0.001"
+                                value={chainWeight}
                                 onChange={(e) =>
-                                  updateSizeStock(row.color_id, purity.id, sizeLabel, (existing) => ({
-                                    ...existing,
-                                    price_override: e.target.value,
-                                  }))
+                                  syncChainLengthWeight(sizeLabel, e.target.value)
                                 }
                                 className="w-full border rounded-lg px-3 py-2 text-sm"
-                                placeholder="Chain price"
+                                placeholder="Weight (g)"
                               />
                             ) : (
                             <input
@@ -2143,6 +2370,11 @@ export function ProductCatalogCreateForm({
                             {!isChainProduct && (
                               <div className="w-full rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-ink-muted">
                                 Price: {ringBasePrice != null ? formatINR(ringBasePrice) : '—'}
+                              </div>
+                            )}
+                            {isChainProduct && (
+                              <div className="w-full rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-ink-muted">
+                                Price: {chainBasePrice != null ? formatINR(chainBasePrice) : '—'}
                               </div>
                             )}
                             <label className="flex items-center gap-2 text-xs text-ink-muted">

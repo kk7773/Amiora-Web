@@ -20,7 +20,6 @@ import {
   breakdownToDisplayRows,
   computeCatalogVariantPrice,
   formatINR,
-  getRingSizeMultiplier,
   resolveLiveRate,
 } from '@amiora/pricing'
 import { useCatalogPrices, type CatalogPricingContext } from '@/hooks/useCatalogPrices'
@@ -342,12 +341,12 @@ export function ProductDetailClient({
     [variantSizeRows, sel.variantId],
   )
   const ringSizeStockMap = useMemo(
-    () =>
-      Object.fromEntries(
-        activeVariantSizes
-          .filter((row) => row.size_type === 'ring_us')
-          .map((row) => [row.size_label, row.stock_qty]),
-      ) as Record<string, number>,
+    () => {
+      const entries = activeVariantSizes
+        .filter((row) => row.size_type === 'ring_us')
+        .map((row) => [row.size_label, row.stock_qty] as const)
+      return Object.fromEntries(entries) as Record<string, number>
+    },
     [activeVariantSizes],
   )
   const selectedChainSizeRow = useMemo(
@@ -364,8 +363,10 @@ export function ProductDetailClient({
       ) ?? null,
     [activeVariantSizes, sel.sizeLabel],
   )
-  const selectedRingStockQty = sel.sizeLabel ? (ringSizeStockMap[sel.sizeLabel] ?? 0) : null
-  const ringSizeMultiplier = isRingProduct ? getRingSizeMultiplier(sel.sizeLabel) : 1
+  const selectedRingStockQty =
+    sel.sizeLabel && Object.prototype.hasOwnProperty.call(ringSizeStockMap, sel.sizeLabel)
+      ? ringSizeStockMap[sel.sizeLabel]
+      : null
 
   const galleryImages = useMemo(() => {
     const grp = catalog.colorGroups.find((g) => g.colorId === sel.colorId)
@@ -467,10 +468,15 @@ export function ProductDetailClient({
     : activeBreakdown
   const displayPrice =
     displayBreakdown != null
-      ? Math.round(displayBreakdown.finalPrice * (isRingProduct ? ringSizeMultiplier : 1) * 100) / 100
+      ? Math.round(displayBreakdown.finalPrice * 100) / 100
       : 0
   const displayVariant =
-    isChainProduct && activeVariant
+    activeVariant && isRingProduct
+      ? {
+          ...activeVariant,
+          metal_weight_g: selectedRingSizeRow?.metal_weight_g ?? activeVariant.metal_weight_g,
+        }
+    : isChainProduct && activeVariant
       ? {
           ...activeVariant,
           metal_weight_g: selectedChainOption?.weight_g ?? activeVariant.metal_weight_g,
@@ -500,7 +506,12 @@ export function ProductDetailClient({
       toast.error('Select ring size', { description: 'Choose a size from 6 to 28 before adding this ring.' })
       return
     }
-    if (isRingProduct && sel.sizeLabel && (ringSizeStockMap[sel.sizeLabel] ?? 0) <= 0) {
+    if (
+      isRingProduct &&
+      sel.sizeLabel &&
+      Object.prototype.hasOwnProperty.call(ringSizeStockMap, sel.sizeLabel) &&
+      (ringSizeStockMap[sel.sizeLabel] ?? 0) <= 0
+    ) {
       toast.error('Ring size unavailable', { description: 'Pick a size that is in stock.' })
       return
     }
@@ -525,7 +536,7 @@ export function ProductDetailClient({
       productSlug:  product.slug,
       collectionSlug: product.collectionSlug ?? null,
       categorySlug:   product.categorySlug ?? null,
-      metalWeightG: activeVariant.metal_weight_g ?? undefined,
+      metalWeightG: displayVariant?.metal_weight_g ?? undefined,
       metalRatePerGram: resolveLiveRate(
         catalog.purities.find((p) => p.id === activeVariant.purity_id)?.metal,
         goldPerGram,
@@ -540,9 +551,8 @@ export function ProductDetailClient({
   const TABS = ['Metal & Purity', 'Price Breakup', 'Care Guide']
   const liveBreakupRows = useMemo(() => {
     if (!displayBreakdown) return null
-    const sizePremiumPct = isRingProduct ? (ringSizeMultiplier - 1) * 100 : 0
-    return breakdownToDisplayRows(displayBreakdown, pricingContext.makingChargePct, sizePremiumPct)
-  }, [displayBreakdown, pricingContext.makingChargePct, isRingProduct, ringSizeMultiplier])
+    return breakdownToDisplayRows(displayBreakdown, pricingContext.makingChargePct)
+  }, [displayBreakdown, pricingContext.makingChargePct])
 
   const canAddToCart =
     !!activeVariant &&
@@ -603,9 +613,9 @@ export function ProductDetailClient({
                 <span className="min-w-0 break-all text-xs text-ink-muted font-mono">{activeVariant.sku}</span>
               )}
             </div>
-            {activeVariant?.metal_weight_g != null && (
+            {displayVariant?.metal_weight_g != null && (
               <p className="text-sm text-ink-muted">
-                Net metal weight: <span className="text-ink tabular-nums">{formatWeightGrams(activeVariant.metal_weight_g)}</span>
+                Net metal weight: <span className="text-ink tabular-nums">{formatWeightGrams(displayVariant.metal_weight_g)}</span>
               </p>
             )}
           </div>
@@ -618,6 +628,7 @@ export function ProductDetailClient({
             variants={catalog.variants}
             sizeOptions={ringSizeOptions}
             sizeStockMap={ringSizeStockMap}
+            showColorSelector={!isRingProduct}
             onChange={handleVariantChange}
           />
 
@@ -797,9 +808,9 @@ export function ProductDetailClient({
           <p className="font-display text-xl text-ink tabular-nums leading-none">
             {displayPrice > 0 ? formatINR(displayPrice) : '—'}
           </p>
-          {activeVariant?.metal_weight_g != null && (
+          {displayVariant?.metal_weight_g != null && (
             <p className="text-2xs text-ink-muted mt-0.5 tabular-nums">
-              {formatWeightGrams(activeVariant.metal_weight_g)}
+              {formatWeightGrams(displayVariant.metal_weight_g)}
             </p>
           )}
         </div>

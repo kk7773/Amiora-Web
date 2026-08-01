@@ -1,4 +1,4 @@
-import { computeCatalogVariantPrice, getRingSizeMultiplier, resolveLiveRate } from '@amiora/pricing'
+import { computeCatalogVariantPrice, resolveLiveRate } from '@amiora/pricing'
 import { getLatestPrices } from '@/lib/pricing/engine'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { CartLine } from '@/lib/coupons/evaluateCoupon'
@@ -265,11 +265,7 @@ export async function priceCartLines(
       continue
     }
 
-    const ringSizeMultiplier =
-      selectedSizeRow?.size_type === 'ring_us'
-        ? getRingSizeMultiplier(selectedSizeRow.size_label)
-        : 1
-    const unitPrice = Math.round(breakdown.finalPrice * ringSizeMultiplier)
+    const unitPrice = Math.round(breakdown.finalPrice)
     making += breakdown.makingChargeNet * qty
     gem += breakdown.gemPriceNet * qty
 

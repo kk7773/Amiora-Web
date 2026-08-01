@@ -26,6 +26,7 @@ type VariantSizeRow = {
   size_label: string
   size_type: 'ring_us' | 'chain_inch'
   stock_qty: number
+  metal_weight_g: number | null
   price_override: number | null
   is_active: boolean
 }
@@ -36,6 +37,10 @@ function isMissingChainLengthsColumn(error: { message: string; code?: string } |
 
 function isMissingProductVariantSizesTable(error: { message: string; code?: string } | null | undefined) {
   return !!error && /product_variant_sizes/i.test(error.message) && /(schema cache|does not exist|42703|relation)/i.test(error.message)
+}
+
+function isMissingProductVariantSizesMetalWeight(error: { message: string; code?: string } | null | undefined) {
+  return !!error && /metal_weight_g/i.test(error.message) && /product_variant_sizes/i.test(error.message) && /(schema cache|does not exist|42703|column)/i.test(error.message)
 }
 
 async function fetchProductColorGroups(
@@ -82,11 +87,23 @@ async function fetchProductSizeStocks(
   supabase: SupabaseClient,
   productId: string,
 ): Promise<VariantSizeRow[]> {
-  const { data, error } = await supabase
+  const withMetalWeight = await supabase
     .from('product_variant_sizes')
     .select('id, variant_id, size_label, size_type, stock_qty, metal_weight_g, price_override, is_active')
     .eq('product_id', productId)
     .order('size_label', { ascending: true })
+
+  const withoutMetalWeight =
+    isMissingProductVariantSizesMetalWeight(withMetalWeight.error)
+      ? await supabase
+          .from('product_variant_sizes')
+          .select('id, variant_id, size_label, size_type, stock_qty, price_override, is_active')
+          .eq('product_id', productId)
+          .order('size_label', { ascending: true })
+      : null
+
+  const data = withoutMetalWeight?.data ?? withMetalWeight.data
+  const error = withoutMetalWeight?.error ?? withMetalWeight.error
 
   if (error) {
     if (isMissingProductVariantSizesTable(error)) return []
@@ -119,7 +136,7 @@ async function fetchProductSizeStocks(
       size_label: row.size_label,
       size_type: row.size_type === 'chain_inch' ? 'chain_inch' : 'ring_us',
       stock_qty: Number(row.stock_qty ?? 0),
-      metal_weight_g: row.metal_weight_g != null ? Number(row.metal_weight_g) : null,
+      metal_weight_g: 'metal_weight_g' in row && row.metal_weight_g != null ? Number(row.metal_weight_g) : null,
       price_override: row.price_override != null ? Number(row.price_override) : null,
       is_active: row.is_active !== false,
     }]

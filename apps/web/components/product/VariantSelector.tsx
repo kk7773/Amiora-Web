@@ -45,7 +45,13 @@ interface VariantSelectorProps {
   variants:    CatalogVariantRow[]
   sizeOptions?: string[]
   sizeStockMap?: Record<string, number>
+  showColorSelector?: boolean
   onChange:    (state: SelectedVariantState & { variant: CatalogVariantRow | null }) => void
+}
+
+function getPreferredRingSize(sizeOptions: string[]): string | null {
+  if (sizeOptions.includes('13')) return '13'
+  return sizeOptions[0] ?? null
 }
 
 function readPurityRank(code: string): number {
@@ -59,7 +65,15 @@ function isYellowColor(group: Pick<CatalogColorGroup, 'code' | 'label'>): boolea
   return code.includes('yellow') || label.includes('yellow')
 }
 
-export function VariantSelector({ colorGroups, purities, variants, sizeOptions = [], sizeStockMap = {}, onChange }: VariantSelectorProps) {
+export function VariantSelector({
+  colorGroups,
+  purities,
+  variants,
+  sizeOptions = [],
+  sizeStockMap = {},
+  showColorSelector = true,
+  onChange,
+}: VariantSelectorProps) {
   const activeVariants = useMemo(
     () => variants.filter((variant) => variant.is_active),
     [variants],
@@ -107,17 +121,16 @@ export function VariantSelector({ colorGroups, purities, variants, sizeOptions =
 
   const [colorId, setColorId]   = useState(initialColorId)
   const [purityId, setPurityId] = useState(initialPurityId)
-  const [sizeLabel, setSizeLabel] = useState<string | null>(null)
+  const [sizeLabel, setSizeLabel] = useState<string | null>(() => getPreferredRingSize(sizeOptions))
   const [quantity, setQuantity] = useState(1)
 
   useEffect(() => {
-    setSizeLabel(null)
-  }, [sizeOptions])
-
-  useEffect(() => {
-    if (!sizeLabel) return
-    if (!sizeOptions.includes(sizeLabel) || (sizeStockMap[sizeLabel] ?? 0) <= 0) {
+    if (sizeOptions.length === 0) {
       setSizeLabel(null)
+      return
+    }
+    if (!sizeLabel || !sizeOptions.includes(sizeLabel)) {
+      setSizeLabel(getPreferredRingSize(sizeOptions))
     }
   }, [sizeLabel, sizeOptions, sizeStockMap])
 
@@ -161,7 +174,7 @@ export function VariantSelector({ colorGroups, purities, variants, sizeOptions =
 
   return (
     <div className="space-y-5">
-      {colorGroups.length > 1 && (
+      {showColorSelector && colorGroups.length > 1 && (
         <div>
           <p className="text-xs uppercase tracking-widest text-ink-muted mb-2">Colour</p>
           <div className="flex flex-wrap gap-3">
@@ -216,7 +229,7 @@ export function VariantSelector({ colorGroups, purities, variants, sizeOptions =
           >
             <option value="">Select size</option>
             {sizeOptions.map((size) => (
-              <option key={size} value={size} disabled={(sizeStockMap[size] ?? 0) <= 0}>
+              <option key={size} value={size}>
                 {size}{sizeStockMap[size] != null ? ` (${sizeStockMap[size]})` : ''}
               </option>
             ))}

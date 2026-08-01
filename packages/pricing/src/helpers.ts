@@ -284,14 +284,15 @@ export function applyManualPriceOverride(
 export function breakdownToDisplayRows(
   breakdown: PriceBreakdown,
   makingChargePct?: number | null,
-  sizePremiumPct?: number | null,
 ): Array<{ label: string; amount: number }> {
-  let total = breakdown.finalPrice
   const rows: Array<{ label: string; amount: number }> = [
     { label: 'Metal value', amount: breakdown.baseMetalPrice },
   ]
   if (breakdown.addonPrice > 0) {
     rows.push({ label: 'Chain cost', amount: breakdown.addonPrice })
+  }
+  if (breakdown.gemPriceNet > 0) {
+    rows.push({ label: 'Diamond / stone', amount: breakdown.gemPriceNet })
   }
   rows.push(
     {
@@ -305,19 +306,9 @@ export function breakdownToDisplayRows(
   if (breakdown.makingChargeDiscount > 0) {
     rows.push({ label: 'Making charge discount', amount: -breakdown.makingChargeDiscount })
   }
-  if (breakdown.gemPriceNet > 0) {
-    rows.push({ label: 'Diamond / stone', amount: breakdown.gemPriceNet })
-  }
   if (breakdown.gstAmount > 0) {
     rows.push({ label: 'Taxes', amount: breakdown.gstAmount })
   }
-  if (sizePremiumPct != null && Number.isFinite(sizePremiumPct) && sizePremiumPct > 0) {
-    const premium = Math.round(breakdown.finalPrice * (sizePremiumPct / 100) * 100) / 100
-    if (premium > 0) {
-      rows.push({ label: `Ring size premium (${sizePremiumPct}%)`, amount: premium })
-      total = Math.round((total + premium) * 100) / 100
-    }
-  }
-  rows.push({ label: 'Total', amount: total })
+  rows.push({ label: 'Total', amount: breakdown.finalPrice })
   return rows
 }

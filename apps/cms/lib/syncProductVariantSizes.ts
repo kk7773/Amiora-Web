@@ -7,6 +7,10 @@ function buildVariantKey(colorId: string, purityId: string) {
   return `${colorId}:${purityId}`
 }
 
+function isMissingMetalWeightColumn(error: { message?: string | null; code?: string } | null | undefined) {
+  return !!error?.message && /metal_weight_g/i.test(error.message) && /(column|schema cache|does not exist|42703)/i.test(error.message)
+}
+
 export async function syncProductVariantSizes(
   supabase: SupabaseClient,
   productId: string,
@@ -66,5 +70,15 @@ export async function syncProductVariantSizes(
   }
 
   const { error: insertError } = await supabase.from('product_variant_sizes').insert(insertRows)
-  return { error: insertError ?? null }
+  if (!insertError) {
+    return { error: null }
+  }
+
+  if (!isMissingMetalWeightColumn(insertError)) {
+    return { error: insertError }
+  }
+
+  const fallbackRows = insertRows.map(({ metal_weight_g: _metalWeightG, ...row }) => row)
+  const { error: fallbackError } = await supabase.from('product_variant_sizes').insert(fallbackRows)
+  return { error: fallbackError ?? null }
 }

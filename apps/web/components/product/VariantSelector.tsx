@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { cn } from '@amiora/ui'
 
 export type CatalogColorGroup = {
@@ -46,6 +46,7 @@ interface VariantSelectorProps {
   sizeOptions?: string[]
   sizeStockMap?: Record<string, number>
   showColorSelector?: boolean
+  extraControls?: ReactNode
   onChange:    (state: SelectedVariantState & { variant: CatalogVariantRow | null }) => void
 }
 
@@ -72,11 +73,16 @@ export function VariantSelector({
   sizeOptions = [],
   sizeStockMap = {},
   showColorSelector = true,
+  extraControls,
   onChange,
 }: VariantSelectorProps) {
   const activeVariants = useMemo(
     () => variants.filter((variant) => variant.is_active),
     [variants],
+  )
+  const selectableVariants = useMemo(
+    () => (activeVariants.length > 0 ? activeVariants : variants),
+    [activeVariants, variants],
   )
 
   const sortedPurities = useMemo(
@@ -86,11 +92,11 @@ export function VariantSelector({
 
   const initialVariant = useMemo(() => {
     const purityById = new Map(purities.map((purity) => [purity.id, purity]))
-    const activeColorIds = new Set(activeVariants.map((variant) => variant.color_id))
+    const activeColorIds = new Set(selectableVariants.map((variant) => variant.color_id))
     const preferredYellowColorId =
       colorGroups.find((group) => activeColorIds.has(group.colorId) && isYellowColor(group))?.colorId ?? null
 
-    return [...activeVariants].sort((a, b) => {
+    return [...selectableVariants].sort((a, b) => {
       if (preferredYellowColorId) {
         const aIsPreferred = a.color_id === preferredYellowColorId
         const bIsPreferred = b.color_id === preferredYellowColorId
@@ -107,7 +113,7 @@ export function VariantSelector({
 
       return a.sku.localeCompare(b.sku)
     })[0] ?? null
-  }, [activeVariants, colorGroups, purities])
+  }, [selectableVariants, colorGroups, purities])
 
   const initialColorId =
     initialVariant?.color_id ??
@@ -135,24 +141,24 @@ export function VariantSelector({
   }, [sizeLabel, sizeOptions, sizeStockMap])
 
   useEffect(() => {
-    const availableColors = new Set(activeVariants.map((variant) => variant.color_id))
+    const availableColors = new Set(selectableVariants.map((variant) => variant.color_id))
     const fallbackColor = colorGroups.find((group) => availableColors.has(group.colorId))?.colorId ?? colorGroups[0]?.colorId
     if (fallbackColor && (!colorGroups.some((group) => group.colorId === colorId) || !availableColors.has(colorId))) {
       setColorId(fallbackColor)
     }
-  }, [activeVariants, colorGroups, colorId])
+  }, [selectableVariants, colorGroups, colorId])
 
   useEffect(() => {
-    const available = new Set(activeVariants.filter((variant) => variant.color_id === colorId).map((variant) => variant.purity_id))
+    const available = new Set(selectableVariants.filter((variant) => variant.color_id === colorId).map((variant) => variant.purity_id))
     if (available.has(purityId)) return
 
     const fallback = sortedPurities.find((p) => available.has(p.id))
     if (fallback) setPurityId(fallback.id)
-  }, [activeVariants, colorId, sortedPurities, purityId])
+  }, [selectableVariants, colorId, sortedPurities, purityId])
 
   const matchedVariant = useMemo(() => {
-    return activeVariants.find((variant) => variant.color_id === colorId && variant.purity_id === purityId) ?? null
-  }, [activeVariants, colorId, purityId])
+    return selectableVariants.find((variant) => variant.color_id === colorId && variant.purity_id === purityId) ?? null
+  }, [selectableVariants, colorId, purityId])
 
   useEffect(() => {
     onChange({
@@ -165,9 +171,9 @@ export function VariantSelector({
   }, [matchedVariant, quantity, colorId, sizeLabel, onChange])
 
   const purityOptionsForColor = useMemo(() => {
-    const set = new Set(activeVariants.filter((variant) => variant.color_id === colorId).map((variant) => variant.purity_id))
+    const set = new Set(selectableVariants.filter((variant) => variant.color_id === colorId).map((variant) => variant.purity_id))
     return sortedPurities.filter((p) => set.has(p.id))
-  }, [activeVariants, colorId, sortedPurities])
+  }, [selectableVariants, colorId, sortedPurities])
 
   const inStock =
     !!matchedVariant && matchedVariant.is_active && matchedVariant.stock_qty > 0
@@ -236,6 +242,8 @@ export function VariantSelector({
           </select>
         </div>
       )}
+
+      {extraControls}
 
       {matchedVariant && (
         <div className="text-sm space-y-1">

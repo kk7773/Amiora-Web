@@ -118,6 +118,11 @@ type ChainLengthRow = {
   weight_g: number
 }
 
+const DEFAULT_CHAIN_LENGTH_OPTIONS: ChainLengthRow[] = [14, 16, 18, 20, 22].map((length) => ({
+  length_inch: length,
+  weight_g: 7,
+}))
+
 type VariantSizeRow = {
   variant_id: string
   size_label: string
@@ -222,7 +227,7 @@ function displayMoney(value: number | string): string {
 }
 
 function normalizeChainLengths(raw: unknown): ChainLengthRow[] {
-  if (!Array.isArray(raw)) return []
+  if (!Array.isArray(raw)) return DEFAULT_CHAIN_LENGTH_OPTIONS
 
   const rows: ChainLengthRow[] = []
   for (const item of raw) {
@@ -238,7 +243,7 @@ function normalizeChainLengths(raw: unknown): ChainLengthRow[] {
     })
   }
 
-  return rows
+  return rows.length > 0 ? rows : DEFAULT_CHAIN_LENGTH_OPTIONS
 }
 
 function normalizeVariantSizes(raw: unknown): VariantSizeRow[] {
@@ -268,6 +273,35 @@ function normalizeVariantSizes(raw: unknown): VariantSizeRow[] {
       } satisfies VariantSizeRow
     })
     .filter((row): row is VariantSizeRow => row != null)
+}
+
+const RING_SIZE_GROUP_BASE_INDEX = 2
+const RING_SIZE_GROUP_STEP_PCT = 0.08
+
+function getRingSizeGroupIndex(sizeLabel: string | null | undefined): number | null {
+  const size = Number(sizeLabel)
+  if (!Number.isInteger(size) || size < 6 || size > 28) return null
+  return Math.floor((size - 6) / 3)
+}
+
+function getRingSizeGroupMultiplier(groupIndex: number): number {
+  return 1 + (groupIndex - RING_SIZE_GROUP_BASE_INDEX) * RING_SIZE_GROUP_STEP_PCT
+}
+
+function resolveRingSizeWeight(
+  sizeLabel: string | null | undefined,
+  explicitWeight: number | null | undefined,
+  baseWeight: number | null | undefined,
+): number | null {
+  if (explicitWeight != null && Number.isFinite(explicitWeight) && explicitWeight > 0) {
+    return explicitWeight
+  }
+  if (baseWeight == null || !Number.isFinite(baseWeight) || baseWeight <= 0) {
+    return null
+  }
+  const groupIndex = getRingSizeGroupIndex(sizeLabel)
+  if (groupIndex == null) return baseWeight
+  return Math.round(baseWeight * getRingSizeGroupMultiplier(groupIndex) * 1000) / 1000
 }
 
 export function ProductDetailClient({
@@ -382,6 +416,15 @@ export function ProductDetailClient({
   }, [catalog.colorGroups, sel.colorId, fallbackImages, product.name])
 
   const activeVariant = sel.variant
+  const selectedRingWeight = useMemo(
+    () =>
+      resolveRingSizeWeight(
+        sel.sizeLabel,
+        selectedRingSizeRow?.metal_weight_g,
+        activeVariant?.metal_weight_g ?? null,
+      ),
+    [sel.sizeLabel, selectedRingSizeRow?.metal_weight_g, activeVariant?.metal_weight_g],
+  )
   const { isWishlisted, toggle: toggleWishlist } = useWishlist(
     product.id,
     activeVariant?.id ?? null,
@@ -399,7 +442,7 @@ export function ProductDetailClient({
     : null
   const ringBreakdown = useMemo(() => {
     if (!isRingProduct || !activeVariant || !activePurity) return null
-    const ringWeight = selectedRingSizeRow?.metal_weight_g ?? activeVariant.metal_weight_g
+    const ringWeight = selectedRingWeight
     if (ringWeight == null || !Number.isFinite(ringWeight) || ringWeight <= 0) return null
     return computeCatalogVariantPrice({
       metalWeightG: ringWeight,
@@ -418,7 +461,7 @@ export function ProductDetailClient({
     isRingProduct,
     activeVariant,
     activePurity,
-    selectedRingSizeRow?.metal_weight_g,
+    selectedRingWeight,
     pricingContext.makingChargePct,
     pricingContext.stoneLines,
     pricingContext.goldPurityRates,
@@ -432,15 +475,57 @@ export function ProductDetailClient({
     () => chainLengthOptions.find((length) => String(length.length_inch) === selectedChainLength) ?? null,
     [chainLengthOptions, selectedChainLength],
   )
+  const selectedChainWeight = useMemo(
+    () => selectedChainOption?.weight_g ?? null,
+    [selectedChainOption],
+  )
+  const selectedChainStockQty = useMemo(() => {
+    const chainStock = selectedChainSizeRow?.stock_qty ?? 0
+    const variantStock = activeVariant?.stock_qty ?? 0
+    return Math.max(chainStock, variantStock)
+  }, [selectedChainSizeRow?.stock_qty, activeVariant?.stock_qty])
+  const selectedChainTotalWeight = useMemo(() => {
+    if (!isChainProduct) return null
+    const baseWeight = activeVariant?.metal_weight_g ?? null
+    if (baseWeight == null || !Number.isFinite(baseWeight) || baseWeight <= 0) return null
+    if (selectedChainWeight == null || !Number.isFinite(selectedChainWeight) || selectedChainWeight <= 0) {
+      return baseWeight
+    }
+    return Math.round((baseWeight + selectedChainWeight) * 1000) / 1000
+  }, [isChainProduct, activeVariant?.metal_weight_g, selectedChainWeight])
+  const selectedChainMetalPrice = useMemo(() => {
+    if (!isChainProduct || !activePurity) return null
+    if (selectedChainWeight == null || !Number.isFinite(selectedChainWeight) || selectedChainWeight <= 0) return null
+    return Math.round(
+      selectedChainWeight *
+        resolveLiveRate(
+          activePurity.metal,
+          goldPerGram,
+          silverPerGram,
+          activePurity.code,
+          pricingContext.goldPurityRates,
+        ) *
+        100,
+    ) / 100
+  }, [
+    isChainProduct,
+    activePurity,
+    selectedChainWeight,
+    goldPerGram,
+    silverPerGram,
+    pricingContext.goldPurityRates,
+  ])
   const chainBreakdown = useMemo(() => {
     if (!isChainProduct || !selectedChainOption || !activePurity) return null
+    if (selectedChainTotalWeight == null || !Number.isFinite(selectedChainTotalWeight) || selectedChainTotalWeight <= 0) {
+      return null
+    }
     return computeCatalogVariantPrice({
-      metalWeightG: selectedChainOption.weight_g,
+      metalWeightG: selectedChainTotalWeight,
       purityCode: activePurity.code,
       metalType: activePurity.metal,
       makingChargePct: pricingContext.makingChargePct,
       stoneLines: pricingContext.stoneLines,
-      addonPriceOverride: selectedChainSizeRow?.price_override ?? 0,
       goldPerGram,
       goldPurityRates: pricingContext.goldPurityRates,
       silverPerGram,
@@ -452,7 +537,7 @@ export function ProductDetailClient({
     isChainProduct,
     selectedChainOption,
     activePurity,
-    selectedChainSizeRow?.price_override,
+    selectedChainTotalWeight,
     pricingContext.makingChargePct,
     pricingContext.stoneLines,
     pricingContext.goldPurityRates,
@@ -474,12 +559,12 @@ export function ProductDetailClient({
     activeVariant && isRingProduct
       ? {
           ...activeVariant,
-          metal_weight_g: selectedRingSizeRow?.metal_weight_g ?? activeVariant.metal_weight_g,
+          metal_weight_g: selectedRingWeight ?? activeVariant.metal_weight_g,
         }
     : isChainProduct && activeVariant
       ? {
           ...activeVariant,
-          metal_weight_g: selectedChainOption?.weight_g ?? activeVariant.metal_weight_g,
+          metal_weight_g: selectedChainTotalWeight ?? activeVariant.metal_weight_g,
         }
       : activeVariant
 
@@ -495,7 +580,7 @@ export function ProductDetailClient({
     activeVariant.is_active &&
     activeVariant.stock_qty > 0 &&
     (!isRingProduct || selectedRingStockQty == null || selectedRingStockQty > 0) &&
-    (!isChainProduct || (selectedChainSizeRow?.stock_qty ?? 0) > 0)
+    (!isChainProduct || selectedChainStockQty > 0)
 
   const handleAddToCart = () => {
     if (!activeVariant || !inStock) {
@@ -515,8 +600,12 @@ export function ProductDetailClient({
       toast.error('Ring size unavailable', { description: 'Pick a size that is in stock.' })
       return
     }
-    if (isChainProduct && (!selectedChainOption || (selectedChainSizeRow?.stock_qty ?? 0) <= 0)) {
+    if (isChainProduct && !selectedChainOption) {
       toast.error('Select chain length', { description: 'Choose a chain length before adding this piece.' })
+      return
+    }
+    if (isChainProduct && selectedChainStockQty <= 0) {
+      toast.error('Chain length unavailable', { description: 'Pick a chain length that is in stock.' })
       return
     }
     const thumb =
@@ -559,7 +648,14 @@ export function ProductDetailClient({
     inStock &&
     (!isRingProduct || !!sel.sizeLabel) &&
     (!isChainProduct || !!selectedChainOption)
-  const addToCartLabel = !activeVariant ? 'Select options' : !canAddToCart ? 'Choose size' : 'Add to Cart'
+  const addToCartLabel =
+    !activeVariant
+      ? 'Select options'
+      : isChainProduct && !selectedChainOption
+        ? 'Choose chain length'
+        : !canAddToCart
+          ? 'Choose size'
+          : 'Add to Cart'
 
   return (
     <>
@@ -629,48 +725,43 @@ export function ProductDetailClient({
             sizeOptions={ringSizeOptions}
             sizeStockMap={ringSizeStockMap}
             showColorSelector={!isRingProduct}
+            extraControls={
+              isChainProduct && chainLengthOptions.length > 0 ? (
+                <div className="space-y-2">
+                  <label htmlFor="chain-length" className="block text-xs uppercase tracking-widest text-ink-muted">
+                    Chain Length
+                  </label>
+                  <select
+                    id="chain-length"
+                    value={selectedChainLength}
+                    onChange={(e) => setSelectedChainLength(e.target.value)}
+                    className="w-full max-w-[18rem] rounded-lg border border-divider bg-bg px-3 py-3 text-sm text-ink outline-none transition-colors focus:border-teal focus:ring-1 focus:ring-teal"
+                  >
+                    {chainLengthOptions.map((length) => {
+                      const chainSizeRow = activeVariantSizes.find(
+                        (row) => row.size_type === 'chain_inch' && String(row.size_label) === String(length.length_inch),
+                      )
+                      return (
+                        <option key={length.length_inch} value={String(length.length_inch)}>
+                          {length.length_inch}" · {length.weight_g.toFixed(3)} g
+                          {chainSizeRow?.stock_qty != null ? ` · Stock ${chainSizeRow.stock_qty}` : ''}
+                        </option>
+                      )
+                    })}
+                  </select>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-muted">
+                    <span>
+                      Chain stock: <span className="text-ink">{selectedChainStockQty}</span>
+                    </span>
+                    <span>
+                      Chain cost: <span className="text-ink">{selectedChainMetalPrice != null ? formatINR(selectedChainMetalPrice) : '—'}</span>
+                    </span>
+                  </div>
+                </div>
+              ) : null
+            }
             onChange={handleVariantChange}
           />
-
-          {isChainProduct && chainLengthOptions.length > 0 && (
-            <div className="rounded-2xl border border-divider bg-surface/40 p-4 space-y-3">
-              <div>
-                <p className="text-xs uppercase tracking-widest text-ink-muted mb-2">Chain Length</p>
-                <select
-                  value={selectedChainLength}
-                  onChange={(e) => setSelectedChainLength(e.target.value)}
-                  className="w-full rounded-lg border border-divider bg-white px-3 py-3 text-sm text-ink outline-none transition-colors focus:border-teal focus:ring-1 focus:ring-teal"
-                >
-                  {chainLengthOptions.map((length) => (
-                    <option
-                      key={length.length_inch}
-                      value={String(length.length_inch)}
-                      disabled={(activeVariantSizes.find((row) => row.size_type === 'chain_inch' && String(row.size_label) === String(length.length_inch))?.stock_qty ?? 0) <= 0}
-                    >
-                      {length.length_inch}" · {length.weight_g.toFixed(3)} g
-                      {activeVariantSizes.find((row) => row.size_type === 'chain_inch' && String(row.size_label) === String(length.length_inch))?.stock_qty != null
-                        ? ` · Stock ${(activeVariantSizes.find((row) => row.size_type === 'chain_inch' && String(row.size_label) === String(length.length_inch))?.stock_qty ?? 0)}`
-                        : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-ink-muted">
-                <div className="rounded-lg bg-white px-3 py-2">
-                  Chain stock: <span className="text-ink">{selectedChainSizeRow?.stock_qty ?? 0}</span>
-                </div>
-                <div className="rounded-lg bg-white px-3 py-2">
-                  Chain cost: <span className="text-ink">{selectedChainSizeRow?.price_override != null ? formatINR(selectedChainSizeRow.price_override) : '—'}</span>
-                </div>
-              </div>
-              <div className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 text-sm">
-                <span className="text-ink-muted">Selected length price</span>
-                <span className="font-display text-lg text-ink tabular-nums">
-                  {displayBreakdown ? formatINR(displayBreakdown.finalPrice) : '—'}
-                </span>
-              </div>
-            </div>
-          )}
 
           <div className="w-full h-px bg-divider" />
 

@@ -1327,6 +1327,11 @@ export function ProductCatalogCreateForm({
             .filter((row) => row.size_type === (isChainProduct ? 'chain_inch' : 'ring_us'))
             .map((row) => {
               const purity = puritiesForProduct.find((entry) => entry.id === row.purity_id)
+              const baseMatrixWeightText = cells[buildCellKey(row.color_id, row.purity_id)]?.gross_weight_g ?? ''
+              const parsedBaseMatrixWeight =
+                baseMatrixWeightText.trim() !== '' && Number.isFinite(parseFloat(baseMatrixWeightText))
+                  ? parseFloat(baseMatrixWeightText)
+                  : null
               const parsedSizeWeight =
                 row.metal_weight_g.trim() !== '' && Number.isFinite(parseFloat(row.metal_weight_g))
                   ? parseFloat(row.metal_weight_g)
@@ -1334,9 +1339,10 @@ export function ProductCatalogCreateForm({
               const chainPriceOverride =
                 row.size_type === 'chain_inch' &&
                 parsedSizeWeight != null &&
+                parsedBaseMatrixWeight != null &&
                 purity
                   ? Math.round(
-                      parsedSizeWeight *
+                      (parsedBaseMatrixWeight + parsedSizeWeight) *
                         resolveLiveRate(
                           purity.metal,
                           pricingContext.currentGoldPerGram,
@@ -2276,6 +2282,7 @@ export function ProductCatalogCreateForm({
                     <div className="mt-4 grid gap-2">
                       {(isChainProduct ? CHAIN_LENGTH_OPTIONS : RING_SIZE_OPTIONS).map((sizeLabel) => {
                         const current = entries.find((entry) => entry.size_label === sizeLabel)
+                        const baseMatrixWeight = cells[buildCellKey(row.color_id, purity.id)]?.gross_weight_g ?? ''
                         const sharedChainWeight =
                           chainLengths.find((entry) => String(entry.length_inch) === sizeLabel)?.weight_g ?? ''
                         const sharedRingWeight =
@@ -2290,9 +2297,12 @@ export function ProductCatalogCreateForm({
                         const ringWeight = current?.metal_weight_g?.trim() ? current.metal_weight_g : sharedRingWeight
                         const chainBasePrice =
                           isChainProduct
-                            ? chainWeight.trim() !== '' && Number.isFinite(parseFloat(chainWeight))
+                            ? baseMatrixWeight.trim() !== '' &&
+                              chainWeight.trim() !== '' &&
+                              Number.isFinite(parseFloat(baseMatrixWeight)) &&
+                              Number.isFinite(parseFloat(chainWeight))
                               ? Math.round(
-                                  parseFloat(chainWeight) *
+                                  (parseFloat(baseMatrixWeight) + parseFloat(chainWeight)) *
                                     resolveLiveRate(
                                       purity.metal,
                                       pricingContext.currentGoldPerGram,

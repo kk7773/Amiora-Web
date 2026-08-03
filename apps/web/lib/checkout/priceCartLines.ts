@@ -237,14 +237,23 @@ export async function priceCartLines(
       selectedSizeRow?.size_type === 'ring_us'
         ? selectedSizeRow.metal_weight_g
         : variant.metal_weight_g
+    const totalChainWeight =
+      selectedSizeRow?.size_type === 'chain_inch'
+        ? (() => {
+            const baseWeight = variant.metal_weight_g != null ? Number(variant.metal_weight_g) : null
+            const chainWeight = selectedSizeRow.metal_weight_g != null ? Number(selectedSizeRow.metal_weight_g) : null
+            if (baseWeight == null || !Number.isFinite(baseWeight) || baseWeight <= 0) return null
+            if (chainWeight == null || !Number.isFinite(chainWeight) || chainWeight <= 0) return baseWeight
+            return Math.round((baseWeight + chainWeight) * 1000) / 1000
+          })()
+        : null
 
     const breakdown = computeCatalogVariantPrice({
-      metalWeightG: ringWeight,
+      metalWeightG: totalChainWeight ?? ringWeight,
       purityCode: purity?.code ?? '',
       metalType: purity?.metal ?? undefined,
       makingChargePct: Number(product.making_charge_pct ?? 8),
       stoneLines: product.stone_lines,
-      addonPriceOverride: selectedSizeRow?.size_type === 'chain_inch' ? Number(selectedSizeRow.price_override ?? 0) : null,
       goldPerGram,
       goldPurityRates,
       silverPerGram,
@@ -275,7 +284,7 @@ export async function priceCartLines(
       quantity: qty,
       unit_price: unitPrice,
       line_total: unitPrice * qty,
-      metal_weight_g: ringWeight != null ? Number(ringWeight) : null,
+      metal_weight_g: totalChainWeight ?? (ringWeight != null ? Number(ringWeight) : null),
       metal_rate_per_gram: metalRate,
       in_stock: inStock,
       product_name: product.name,

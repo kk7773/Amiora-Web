@@ -1,3 +1,4 @@
+import { type GoldPurityRates } from '@amiora/pricing'
 import { attachCardPrice, type PurityMeta } from '@/lib/pricing/attachCardPrice'
 import { resolveProductCardImages } from '@/lib/shop/resolveProductCardImages'
 
@@ -39,6 +40,7 @@ export function mapProductForCard(
   silverPrice: number,
   purityMap: Record<string, PurityMeta> = {},
   diamondPricePerCarat = 0,
+  goldPurityRates: GoldPurityRates = {},
 ) {
   const images = resolveProductCardImages(raw.name, raw.product_images, raw.product_color_groups)
   return attachCardPrice(
@@ -53,5 +55,6 @@ export function mapProductForCard(
     silverPrice,
     purityMap,
     diamondPricePerCarat,
+    goldPurityRates,
   )
 }

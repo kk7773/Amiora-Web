@@ -129,6 +129,7 @@ async function fetchShopListingImpl(
   const goldPerGram = prices.gold?.pricePerGram ?? 7200
   const silverPerGram = prices.silver?.pricePerGram ?? 90
   const diamondPerCarat = prices.diamond?.pricePerGram ?? 0
+  const goldPurityRates = prices.goldPurityRates ?? {}
 
   const idSets: string[][] = []
 
@@ -322,6 +323,7 @@ async function fetchShopListingImpl(
       silverPerGram,
       purityMap,
       diamondPerCarat,
+      goldPurityRates,
     ) as ShopListingProduct
   })
 

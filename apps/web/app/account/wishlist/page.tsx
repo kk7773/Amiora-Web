@@ -31,18 +31,19 @@ export default async function WishlistPage() {
 
   const [{ data: wishlists }, prices] = await Promise.all([
     Promise.resolve(wishlistRows),
-    getLatestPrices().catch(() => ({ gold: null, silver: null, diamond: null })),
+    getLatestPrices().catch(() => ({ gold: null, silver: null, diamond: null, goldPurityRates: {} })),
   ])
 
   const gold   = prices.gold?.pricePerGram ?? 7200
   const silver = prices.silver?.pricePerGram ?? 90
   const diamond = prices.diamond?.pricePerGram ?? 0
+  const goldPurityRates = prices.goldPurityRates ?? {}
 
   const rawProducts = (wishlists ?? []).map((w) => w.product).filter(Boolean)
   const purityMap = await fetchPurityMapForProducts(supabase, rawProducts)
 
   const products = rawProducts.map((p) =>
-    mapProductForCard(p as ProductCardRaw, gold, silver, purityMap, diamond),
+    mapProductForCard(p as ProductCardRaw, gold, silver, purityMap, diamond, goldPurityRates),
   ) as Parameters<typeof WishlistGrid>[0]['products']
 
   return (

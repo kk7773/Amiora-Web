@@ -61,9 +61,10 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const goldPrice = prices.gold?.pricePerGram ?? 7200
   const silverPrice = prices.silver?.pricePerGram ?? 90
   const diamondPrice = prices.diamond?.pricePerGram ?? 0
+  const goldPurityRates = prices.goldPurityRates ?? {}
 
   const products = (rows ?? []).map((p) =>
-    mapProductForCard(p as ProductCardRaw, goldPrice, silverPrice, purityMap, diamondPrice),
+    mapProductForCard(p as ProductCardRaw, goldPrice, silverPrice, purityMap, diamondPrice, goldPurityRates),
   )
 
   const schemaProducts = products.map((p) =>

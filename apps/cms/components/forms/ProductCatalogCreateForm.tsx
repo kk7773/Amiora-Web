@@ -2248,165 +2248,216 @@ export function ProductCatalogCreateForm({
             Har variant ke liye size-wise stock maintain karo. Chains me manual price bhi yahi dalna hai; frontend ussi ko final price me add karega.
           </p> */}
           <div className="space-y-4">
-            {colorRows.map((row) => {
-              const color = metalColors.find((entry) => entry.id === row.color_id)
-              return puritiesForProduct.map((purity) => {
-                if (!isMatrixVariantActive(row.color_id, purity)) return null
-                const entries = sizeStocks
-                  .filter(
-                    (entry) =>
-                      entry.color_id === row.color_id &&
-                      entry.purity_id === purity.id &&
-                      entry.size_type === (isChainProduct ? 'chain_inch' : 'ring_us'),
-                  )
-                  .slice()
-                  .sort((a, b) => Number(a.size_label) - Number(b.size_label))
-                return (
-                  <details
-                    key={`${row.key}-${purity.id}`}
-                    className="rounded-xl border border-divider bg-surface/40 p-4"
-                  >
-                    <summary className="cursor-pointer list-none flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <p className="font-medium text-ink">
-                          {color?.label ?? row.color_id} · {purity.label}
-                        </p>
-                        <p className="text-xs text-ink-faint font-mono">
-                          {skuPreview(color?.code ?? '', purity.code)}
+            {puritiesForProduct.map((purity, purityIndex) => {
+              const activeColorColumns = colorRows
+                .map((row) => ({
+                  row,
+                  color: metalColors.find((entry) => entry.id === row.color_id),
+                }))
+                .filter(({ row }) => isMatrixVariantActive(row.color_id, purity))
+
+              if (activeColorColumns.length === 0) return null
+
+              return (
+                <details
+                  key={purity.id}
+                  open={purityIndex === 0}
+                  className="group rounded-2xl border border-divider bg-white shadow-sm"
+                >
+                  <summary className="cursor-pointer list-none px-5 py-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-3">
+                          <p className="font-display text-lg text-deep-teal">{purity.label}</p>
+                          <span className="rounded-full bg-surface px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+                            {activeColorColumns.length} colours
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-ink-muted">
+                          {activeColorColumns.map(({ color }) => color?.label ?? '').filter(Boolean).join(' / ')} · {(isChainProduct ? CHAIN_LENGTH_OPTIONS : RING_SIZE_OPTIONS).length} rows
                         </p>
                       </div>
-                      <p className="text-xs text-ink-muted">
-                        {entries.length} size rows · click to expand
-                      </p>
-                    </summary>
-                    <div className="mt-4 grid gap-2">
-                      {(isChainProduct ? CHAIN_LENGTH_OPTIONS : RING_SIZE_OPTIONS).map((sizeLabel) => {
-                        const current = entries.find((entry) => entry.size_label === sizeLabel)
-                        const baseMatrixWeight = cells[buildCellKey(row.color_id, purity.id)]?.gross_weight_g ?? ''
-                        const sharedChainWeight =
-                          chainLengths.find((entry) => String(entry.length_inch) === sizeLabel)?.weight_g ?? ''
-                        const sharedRingWeight =
-                          sizeStocks.find(
+                      <div className="flex items-center gap-3 text-xs text-ink-faint">
+                        <span>click to expand</span>
+                        <span className="text-lg leading-none transition-transform group-open:rotate-180">⌄</span>
+                      </div>
+                    </div>
+                  </summary>
+
+                  <div className="border-t border-divider px-5 py-5">
+                    <div
+                      className={`grid gap-4 ${
+                        activeColorColumns.length === 1
+                          ? 'grid-cols-1'
+                          : activeColorColumns.length === 2
+                            ? 'grid-cols-1 xl:grid-cols-2'
+                            : 'grid-cols-1 xl:grid-cols-3'
+                      }`}
+                    >
+                      {activeColorColumns.map(({ row, color }) => {
+                        const entries = sizeStocks
+                          .filter(
                             (entry) =>
                               entry.color_id === row.color_id &&
-                              entry.size_type === 'ring_us' &&
-                              entry.size_label === sizeLabel &&
-                              entry.metal_weight_g.trim() !== '',
-                          )?.metal_weight_g ?? ''
-                        const chainWeight = current?.metal_weight_g?.trim() ? current.metal_weight_g : sharedChainWeight
-                        const ringWeight = current?.metal_weight_g?.trim() ? current.metal_weight_g : sharedRingWeight
-                        const chainBasePrice =
-                          isChainProduct
-                            ? baseMatrixWeight.trim() !== '' &&
-                              chainWeight.trim() !== '' &&
-                              Number.isFinite(parseFloat(baseMatrixWeight)) &&
-                              Number.isFinite(parseFloat(chainWeight))
-                              ? Math.round(
-                                  (parseFloat(baseMatrixWeight) + parseFloat(chainWeight)) *
-                                    resolveLiveRate(
-                                      purity.metal,
-                                      pricingContext.currentGoldPerGram,
-                                      pricingContext.currentSilverPerGram,
-                                      purity.code,
-                                      pricingContext.goldPurityRates,
-                                    ) *
-                                    100,
-                                ) / 100
-                              : null
-                            : null
-                        const ringBasePrice =
-                          isChainProduct
-                            ? null
-                            : ringWeight.trim() !== '' && Number.isFinite(parseFloat(ringWeight))
-                              ? Math.round(
-                                  parseFloat(ringWeight) *
-                                    resolveLiveRate(
-                                      purity.metal,
-                                      pricingContext.currentGoldPerGram,
-                                      pricingContext.currentSilverPerGram,
-                                      purity.code,
-                                      pricingContext.goldPurityRates,
-                                    ) *
-                                    100,
-                                ) / 100
-                              : null
+                              entry.purity_id === purity.id &&
+                              entry.size_type === (isChainProduct ? 'chain_inch' : 'ring_us'),
+                          )
+                          .slice()
+                          .sort((a, b) => Number(a.size_label) - Number(b.size_label))
+
                         return (
                           <div
-                            key={sizeLabel}
-                            className={`grid gap-2 items-center rounded-lg border border-white bg-white px-3 py-2 ${
-                              'grid-cols-[72px_110px_120px_140px_1fr]'
-                            }`}
+                            key={`${purity.id}-${row.color_id}`}
+                            className="overflow-hidden rounded-2xl border border-divider bg-surface/30"
                           >
-                            <span className="text-sm font-medium text-ink">{sizeLabel}{isChainProduct ? '"' : ''}</span>
-                            <input
-                              type="number"
-                              min={0}
-                              step={1}
-                              value={current?.stock_qty ?? '0'}
-                              onChange={(e) =>
-                                updateSizeStock(row.color_id, purity.id, sizeLabel, (existing) => ({
-                                  ...existing,
-                                  stock_qty: e.target.value,
-                                }))
-                              }
-                              className="w-full border rounded-lg px-3 py-2 text-sm"
-                              placeholder="Stock"
-                            />
-                            {isChainProduct ? (
-                              <input
-                                type="number"
-                                min={0}
-                                step="0.001"
-                                value={chainWeight}
-                                onChange={(e) =>
-                                  syncChainLengthWeight(sizeLabel, e.target.value)
-                                }
-                                className="w-full border rounded-lg px-3 py-2 text-sm"
-                                placeholder="Weight (g)"
-                              />
-                            ) : (
-                            <input
-                              type="number"
-                              min={0}
-                              step="0.001"
-                              value={ringWeight}
-                              onChange={(e) =>
-                                  syncRingWeightAcrossPurities(row.color_id, sizeLabel, e.target.value)
-                                }
-                              className="w-full border rounded-lg px-3 py-2 text-sm"
-                              placeholder="Weight (g)"
-                            />
-                            )}
-                            {!isChainProduct && (
-                              <div className="w-full rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-ink-muted">
-                                Price: {ringBasePrice != null ? formatINR(ringBasePrice) : '—'}
+                            <div className="flex items-center justify-between gap-3 border-b border-divider bg-white px-4 py-3">
+                              <div>
+                                <p className="font-medium text-ink">{color?.label ?? row.color_id}</p>
+                                <p className="text-[11px] text-ink-faint font-mono break-all">
+                                  {skuPreview(color?.code ?? '', purity.code)}
+                                </p>
                               </div>
-                            )}
-                            {isChainProduct && (
-                              <div className="w-full rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-ink-muted">
-                                Price: {chainBasePrice != null ? formatINR(chainBasePrice) : '—'}
-                              </div>
-                            )}
-                            <label className="flex items-center gap-2 text-xs text-ink-muted">
-                              <input
-                                type="checkbox"
-                                checked={current?.is_active ?? true}
-                                onChange={(e) =>
-                                  updateSizeStock(row.color_id, purity.id, sizeLabel, (existing) => ({
-                                    ...existing,
-                                    is_active: e.target.checked,
-                                  }))
-                                }
-                              />
-                              Active
-                            </label>
+                              <span className="rounded-full border border-divider bg-surface px-2.5 py-1 text-[11px] uppercase tracking-wide text-ink-muted">
+                                {entries.length} rows
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-[52px_100px_120px_130px_88px] gap-2 border-b border-divider bg-surface/60 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+                              <span>Size</span>
+                              <span>Stock</span>
+                              <span>Weight</span>
+                              <span>Price</span>
+                              <span>Active</span>
+                            </div>
+
+                            <div className="max-h-[42rem] overflow-y-auto px-3 py-3 space-y-2">
+                              {(isChainProduct ? CHAIN_LENGTH_OPTIONS : RING_SIZE_OPTIONS).map((sizeLabel) => {
+                                const current = entries.find((entry) => entry.size_label === sizeLabel)
+                                const baseMatrixWeight = cells[buildCellKey(row.color_id, purity.id)]?.gross_weight_g ?? ''
+                                const sharedChainWeight =
+                                  chainLengths.find((entry) => String(entry.length_inch) === sizeLabel)?.weight_g ?? ''
+                                const sharedRingWeight =
+                                  sizeStocks.find(
+                                    (entry) =>
+                                      entry.color_id === row.color_id &&
+                                      entry.size_type === 'ring_us' &&
+                                      entry.size_label === sizeLabel &&
+                                      entry.metal_weight_g.trim() !== '',
+                                  )?.metal_weight_g ?? ''
+                                const chainWeight = current?.metal_weight_g?.trim() ? current.metal_weight_g : sharedChainWeight
+                                const ringWeight = current?.metal_weight_g?.trim() ? current.metal_weight_g : sharedRingWeight
+                                const chainBasePrice =
+                                  isChainProduct
+                                    ? baseMatrixWeight.trim() !== '' &&
+                                      chainWeight.trim() !== '' &&
+                                      Number.isFinite(parseFloat(baseMatrixWeight)) &&
+                                      Number.isFinite(parseFloat(chainWeight))
+                                      ? Math.round(
+                                          (parseFloat(baseMatrixWeight) + parseFloat(chainWeight)) *
+                                            resolveLiveRate(
+                                              purity.metal,
+                                              pricingContext.currentGoldPerGram,
+                                              pricingContext.currentSilverPerGram,
+                                              purity.code,
+                                              pricingContext.goldPurityRates,
+                                            ) *
+                                            100,
+                                        ) / 100
+                                      : null
+                                    : null
+                                const ringBasePrice =
+                                  isChainProduct
+                                    ? null
+                                    : ringWeight.trim() !== '' && Number.isFinite(parseFloat(ringWeight))
+                                      ? Math.round(
+                                          parseFloat(ringWeight) *
+                                            resolveLiveRate(
+                                              purity.metal,
+                                              pricingContext.currentGoldPerGram,
+                                              pricingContext.currentSilverPerGram,
+                                              purity.code,
+                                              pricingContext.goldPurityRates,
+                                            ) *
+                                            100,
+                                        ) / 100
+                                      : null
+
+                                return (
+                                  <div
+                                    key={`${purity.id}-${row.color_id}-${sizeLabel}`}
+                                    className="grid grid-cols-[52px_100px_120px_130px_88px] items-center gap-2 rounded-xl border border-divider bg-white px-2 py-2.5"
+                                  >
+                                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-divider bg-surface text-sm font-medium text-ink">
+                                      {sizeLabel}
+                                    </span>
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      step={1}
+                                      value={current?.stock_qty ?? '0'}
+                                      onChange={(e) =>
+                                        updateSizeStock(row.color_id, purity.id, sizeLabel, (existing) => ({
+                                          ...existing,
+                                          stock_qty: e.target.value,
+                                        }))
+                                      }
+                                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                                      placeholder="Stock"
+                                    />
+                                    {isChainProduct ? (
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        step="0.001"
+                                        value={chainWeight}
+                                        onChange={(e) =>
+                                          syncChainLengthWeight(sizeLabel, e.target.value)
+                                        }
+                                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                                        placeholder="Weight (g)"
+                                      />
+                                    ) : (
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        step="0.001"
+                                        value={ringWeight}
+                                        onChange={(e) =>
+                                          syncRingWeightAcrossPurities(row.color_id, sizeLabel, e.target.value)
+                                        }
+                                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                                        placeholder="Weight (g)"
+                                      />
+                                    )}
+                                    <div className="rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-ink-muted">
+                                      {isChainProduct
+                                        ? chainBasePrice != null ? formatINR(chainBasePrice) : '—'
+                                        : ringBasePrice != null ? formatINR(ringBasePrice) : '—'}
+                                    </div>
+                                    <label className="flex items-center justify-center gap-2 text-xs text-ink-muted">
+                                      <input
+                                        type="checkbox"
+                                        checked={current?.is_active ?? true}
+                                        onChange={(e) =>
+                                          updateSizeStock(row.color_id, purity.id, sizeLabel, (existing) => ({
+                                            ...existing,
+                                            is_active: e.target.checked,
+                                          }))
+                                        }
+                                      />
+                                      <span className="hidden 2xl:inline">Active</span>
+                                    </label>
+                                  </div>
+                                )
+                              })}
+                            </div>
                           </div>
                         )
                       })}
                     </div>
-                  </details>
-                )
-              })
+                  </div>
+                </details>
+              )
             })}
           </div>
         </section>

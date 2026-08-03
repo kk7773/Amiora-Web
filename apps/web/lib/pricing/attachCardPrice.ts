@@ -32,10 +32,17 @@ export function attachCardPrice<T extends CardProductSlice>(
   goldPurityRates: GoldPurityRates = {},
 ): T & { basePrice: number; discountPercentOff: number | null } {
   let minPrice = Infinity
+  let minReasonableSnapshotPrice = Infinity
   let bestPercentOff = 0
 
   for (const variant of product.product_variants ?? []) {
     if (!(variant.is_active ?? true)) continue
+    if (variant.price != null && Number.isFinite(Number(variant.price)) && Number(variant.price) >= 1000) {
+      minReasonableSnapshotPrice = Math.min(minReasonableSnapshotPrice, Number(variant.price))
+    }
+    if (variant.metal_weight_g == null || !Number.isFinite(Number(variant.metal_weight_g)) || Number(variant.metal_weight_g) <= 0) {
+      continue
+    }
 
     const purity = variant.purity_id ? purityMap[variant.purity_id] : undefined
     const breakdown = computeCatalogVariantPrice({
@@ -58,7 +65,13 @@ export function attachCardPrice<T extends CardProductSlice>(
     }
   }
 
-  const basePrice = minPrice === Infinity ? 0 : Math.round(minPrice)
+  const resolvedMinPrice =
+    minPrice !== Infinity
+      ? minPrice
+      : minReasonableSnapshotPrice !== Infinity
+        ? minReasonableSnapshotPrice
+        : 0
+  const basePrice = resolvedMinPrice > 0 ? Math.round(resolvedMinPrice) : 0
   return {
     ...product,
     basePrice,

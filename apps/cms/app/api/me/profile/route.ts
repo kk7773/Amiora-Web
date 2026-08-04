@@ -92,3 +92,42 @@ export async function GET(_req: NextRequest) {
     joined_at: joinedAt,
   })
 }
+
+export async function PATCH(req: NextRequest) {
+  const cookieStore = await cookies()
+
+  if (cookieStore.get(HARDCODED_COOKIE_NAME)?.value === HARDCODED_COOKIE_VALUE) {
+    return NextResponse.json({ error: 'Profile update is unavailable for this session.' }, { status: 400 })
+  }
+
+  const body = await req.json()
+  const name = String(body.name ?? '').trim()
+
+  if (!name) {
+    return NextResponse.json({ error: 'Name is required.' }, { status: 400 })
+  }
+
+  const supa = await createUserSupabase()
+  const { data: { user }, error: authErr } = await supa.auth.getUser()
+  if (authErr || !user) {
+    return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 })
+  }
+
+  const { error: updateErr } = await supa.auth.updateUser({
+    data: { full_name: name },
+  })
+  if (updateErr) {
+    return NextResponse.json({ error: updateErr.message }, { status: 500 })
+  }
+
+  const { error: profileErr } = await supa
+    .from('profiles')
+    .update({ full_name: name })
+    .eq('id', user.id)
+
+  if (profileErr && !profileErr.message?.includes('relation') && profileErr.code !== '42P01') {
+    return NextResponse.json({ error: profileErr.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ success: true, name })
+}

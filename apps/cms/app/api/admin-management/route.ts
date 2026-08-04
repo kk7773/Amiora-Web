@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { isCmsSuperAdminApi } from '@/lib/isCmsSuperAdmin'
 import { createUserSupabase } from '@/lib/supabase/server-user'
+import { writeAuditLog } from '@/lib/rbac'
 
 function adminClient() {
   return createClient(
@@ -63,9 +64,10 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const name  = String(body.name ?? '').trim()
-  const email = String(body.email ?? '').trim().toLowerCase()
-  const pass  = String(body.password ?? '')
+  const name     = String(body.name ?? '').trim()
+  const email    = String(body.email ?? '').trim().toLowerCase()
+  const pass     = String(body.password ?? '')
+  const cmsRole  = body.cms_role === 'super_admin' ? 'super_admin' : 'admin'
 
   if (!name || !email || !pass) {
     return NextResponse.json({ error: 'name, email and password are required' }, { status: 400 })
@@ -85,7 +87,7 @@ export async function POST(req: NextRequest) {
     user_metadata: {
       full_name: name,
       role:      'admin',
-      cms_role:  'admin',
+      cms_role:  cmsRole,
     },
   })
 
@@ -106,7 +108,7 @@ export async function POST(req: NextRequest) {
     id:          uid,
     email,
     full_name:   name,
-    role:        'admin',
+    role:        cmsRole,
     is_active:   true,
     created_by:  actor?.id ?? null,
   })
@@ -122,12 +124,21 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const action = cmsRole === 'super_admin' ? 'create_super_admin' : 'create_admin'
+  await writeAuditLog({
+    adminId:    actor?.id ?? null,
+    action,
+    resource:   'admin-management',
+    resourceId: uid,
+    meta:       { name, email, cms_role: cmsRole },
+  })
+
   return NextResponse.json({
     data: {
       id:        uid,
       email:     created.user.email,
       name,
-      cms_role:  'admin',
+      cms_role:  cmsRole,
       is_active: true,
     }
   }, { status: 201 })

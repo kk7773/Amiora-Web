@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useTransition } from 'react'
+import * as Dialog from '@radix-ui/react-dialog'
 import {
   UserPlus, Trash2, Loader2, ShieldCheck, Shield, Eye, EyeOff,
   ChevronDown, ChevronUp, Check, X, AlertCircle, KeyRound,
@@ -44,10 +45,26 @@ interface CreateForm {
   name:     string
   email:    string
   password: string
+  cms_role: 'super_admin' | 'admin'
   showPass: boolean
 }
 
-const EMPTY_FORM: CreateForm = { name: '', email: '', password: '', showPass: false }
+interface ConfirmState {
+  title: string
+  description: string
+  confirmLabel: string
+  tone?: 'danger' | 'default'
+  pending?: boolean
+  onConfirm: () => Promise<void>
+}
+
+const EMPTY_FORM: CreateForm = {
+  name: '',
+  email: '',
+  password: '',
+  cms_role: 'admin',
+  showPass: false,
+}
 
 /** Cycle: none → view → view+edit → none */
 function cyclePermission(p: TabPermission): TabPermission {
@@ -71,10 +88,12 @@ function permColor(p: TabPermission) {
 export function AdminManagementClient() {
   const [admins,      setAdmins]     = useState<Admin[]>([])
   const [loading,     setLoading]    = useState(true)
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null)
   const [showCreate,  setShowCreate] = useState(false)
   const [form,        setForm]       = useState<CreateForm>(EMPTY_FORM)
   const [saving,      setSaving]     = useState(false)
   const [error,       setError]      = useState('')
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null)
   const [expanded,      setExpanded]     = useState<string | null>(null)
   const [perms,         setPerms]        = useState<Record<string, TabPermission[]>>({})
   const [permSaving,    setPermSaving]   = useState<string | null>(null)
@@ -90,6 +109,11 @@ export function AdminManagementClient() {
       .then(r => r.json())
       .then(d => setAdmins(d.data ?? []))
       .finally(() => setLoading(false))
+
+    fetch('/api/me/profile')
+      .then(r => r.json())
+      .then(d => setCurrentUserEmail(typeof d.email === 'string' ? d.email.toLowerCase() : null))
+      .catch(() => setCurrentUserEmail(null))
   }, [])
 
   async function loadPerms(adminId: string) {
@@ -183,23 +207,32 @@ export function AdminManagementClient() {
   async function toggleActive(admin: Admin) {
     const newState = !admin.is_active
     const label    = newState ? 'enable' : 'disable'
-    if (!confirm(`${newState ? 'Enable' : 'Disable'} ${admin.name}? ${newState ? 'They will be able to log in again.' : 'They will be signed out immediately.'}`)) return
+    setConfirmState({
+      title: `${newState ? 'Enable' : 'Disable'} ${admin.name}?`,
+      description: newState
+        ? 'They will be able to log in again.'
+        : 'They will be signed out immediately.',
+      confirmLabel: newState ? 'Enable' : 'Disable',
+      tone: newState ? 'default' : 'danger',
+      onConfirm: async () => {
+        setToggling(admin.id)
+        const res = await fetch(`/api/admin-management/${admin.id}`, {
+          method:  'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ is_active: newState }),
+        })
+        setToggling(null)
 
-    setToggling(admin.id)
-    const res = await fetch(`/api/admin-management/${admin.id}`, {
-      method:  'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ is_active: newState }),
+        if (res.ok) {
+          setAdmins(prev => prev.map(a => a.id === admin.id ? { ...a, is_active: newState } : a))
+          toast.success(`Admin ${label}d successfully`)
+          setConfirmState(null)
+        } else {
+          const j = await res.json()
+          toast.error(j.error ?? `Failed to ${label} admin`)
+        }
+      },
     })
-    setToggling(null)
-
-    if (res.ok) {
-      setAdmins(prev => prev.map(a => a.id === admin.id ? { ...a, is_active: newState } : a))
-      toast.success(`Admin ${label}d successfully`)
-    } else {
-      const j = await res.json()
-      toast.error(j.error ?? `Failed to ${label} admin`)
-    }
   }
 
   async function createAdmin() {
@@ -216,7 +249,12 @@ export function AdminManagementClient() {
     const res  = await fetch('/api/admin-management', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ name: form.name, email: form.email, password: form.password }),
+      body:    JSON.stringify({
+        name: form.name,
+        email: form.email,
+        password: form.password,
+        cms_role: form.cms_role,
+      }),
     })
     const json = await res.json()
     setSaving(false)
@@ -224,22 +262,61 @@ export function AdminManagementClient() {
     startT(() => setAdmins(prev => [json.data, ...prev]))
     setShowCreate(false)
     setForm(EMPTY_FORM)
-    toast.success(`Admin "${form.name}" created!`)
+    toast.success(`${form.cms_role === 'super_admin' ? 'Super admin' : 'Admin'} "${form.name}" created!`)
   }
 
   async function deleteAdmin(admin: Admin) {
-    if (!confirm(`Remove ${admin.name} (${admin.email}) from CMS? This cannot be undone.`)) return
-    const res = await fetch(`/api/admin-management/${admin.id}`, { method: 'DELETE' })
-    if (res.ok) {
-      setAdmins(prev => prev.filter(a => a.id !== admin.id))
-      toast.success('Admin removed')
-    } else {
-      toast.error('Failed to remove admin')
-    }
+    setConfirmState({
+      title: `Remove ${admin.name}?`,
+      description: `${admin.email} will be removed from CMS. This cannot be undone.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+      onConfirm: async () => {
+        const res = await fetch(`/api/admin-management/${admin.id}`, { method: 'DELETE' })
+        if (res.ok) {
+          setAdmins(prev => prev.filter(a => a.id !== admin.id))
+          toast.success('Admin removed')
+          setConfirmState(null)
+        } else {
+          const j = await res.json().catch(() => ({}))
+          toast.error(j.error ?? 'Failed to remove admin')
+        }
+      },
+    })
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <>
+      <Dialog.Root open={confirmState !== null} onOpenChange={(open) => { if (!open) setConfirmState(null) }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[1px]" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-divider bg-white p-6 shadow-2xl focus:outline-none">
+            <Dialog.Title className="text-lg font-semibold text-gray-900">
+              {confirmState?.title}
+            </Dialog.Title>
+            <Dialog.Description className="mt-2 text-sm leading-6 text-gray-500">
+              {confirmState?.description}
+            </Dialog.Description>
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <Dialog.Close asChild>
+                <button className="rounded-lg border border-divider px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-surface">
+                  Cancel
+                </button>
+              </Dialog.Close>
+              <button
+                onClick={() => void confirmState?.onConfirm()}
+                className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 ${
+                  confirmState?.tone === 'danger' ? 'bg-red-600' : 'bg-deep-teal'
+                }`}
+              >
+                {confirmState?.confirmLabel ?? 'Confirm'}
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      <div className="space-y-6 max-w-4xl">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -277,6 +354,19 @@ export function AdminManagementClient() {
               />
             </div>
             <div>
+              <label className={lbl}>Role *</label>
+              <select
+                value={form.cms_role}
+                onChange={e => setForm(f => ({ ...f, cms_role: e.target.value as CreateForm['cms_role'] }))}
+                className={inp}
+              >
+                <option value="admin">Admin</option>
+                <option value="super_admin">Super Admin</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
               <label className={lbl}>Email *</label>
               <input
                 type="email"
@@ -285,6 +375,14 @@ export function AdminManagementClient() {
                 placeholder="admin@amiora.com"
                 className={inp}
               />
+            </div>
+            <div>
+              <label className={lbl}>Access *</label>
+              <div className="flex h-[46px] items-center rounded-lg border border-gray-200 bg-surface px-3 text-sm text-gray-600">
+                {form.cms_role === 'super_admin'
+                  ? 'Full CMS access, including Admin Management and Audit Logs'
+                  : 'Create with standard admin role; tab permissions can be granted below'}
+              </div>
             </div>
           </div>
           <div className="relative">
@@ -305,7 +403,9 @@ export function AdminManagementClient() {
             </button>
           </div>
           <p className="text-xs text-gray-400">
-            The admin will log in with these credentials. Tab access is <strong>disabled by default</strong> — grant access below after creation.
+            The user will log in with these credentials. {form.cms_role === 'super_admin'
+              ? 'Super admins receive full CMS access immediately.'
+              : <>Tab access is <strong>disabled by default</strong> — grant access below after creation.</>}
           </p>
           <div className="flex gap-2">
             <button
@@ -314,7 +414,7 @@ export function AdminManagementClient() {
               className="flex items-center gap-2 px-4 py-2 bg-deep-teal text-white text-sm rounded-lg hover:opacity-90 disabled:opacity-50"
             >
               {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              Create Admin
+              {form.cms_role === 'super_admin' ? 'Create Super Admin' : 'Create Admin'}
             </button>
             <button
               onClick={() => { setShowCreate(false); setError(''); setForm(EMPTY_FORM) }}
@@ -361,6 +461,8 @@ export function AdminManagementClient() {
             const adminPerms = perms[admin.id] ?? []
             const isSuperAdm = admin.cms_role === 'super_admin'
             const grantedCount = adminPerms.filter(p => p.can_view || p.can_edit).length
+            const isCurrentUser = currentUserEmail !== null && admin.email.toLowerCase() === currentUserEmail
+            const canDelete = !isCurrentUser
 
             return (
               <div
@@ -418,7 +520,7 @@ export function AdminManagementClient() {
                   {/* Actions */}
                   <div className="flex items-center gap-1 shrink-0">
                     {/* Enable / Disable toggle */}
-                    {!isSuperAdm && (
+                    {!isCurrentUser && (
                       <button
                         onClick={() => toggleActive(admin)}
                         disabled={toggling === admin.id}
@@ -427,7 +529,7 @@ export function AdminManagementClient() {
                             ? 'hover:bg-red-50 text-gray-400 hover:text-red-500'
                             : 'hover:bg-green-50 text-gray-400 hover:text-green-600'
                         }`}
-                        title={admin.is_active ? 'Disable admin' : 'Enable admin'}
+                        title={admin.is_active ? `Disable ${isSuperAdm ? 'super admin' : 'admin'}` : `Enable ${isSuperAdm ? 'super admin' : 'admin'}`}
                       >
                         {toggling === admin.id
                           ? <Loader2 className="h-4 w-4 animate-spin" />
@@ -439,16 +541,16 @@ export function AdminManagementClient() {
                     )}
 
                     {/* Reset password */}
-                    {!isSuperAdm && (
+                    {true && (
                       <button
                         onClick={() => {
                           setResetAdminId(resetAdminId === admin.id ? null : admin.id)
                           setNewPassword('')
                           setShowNewPass(false)
-                          if (expanded !== admin.id) toggleExpand(admin.id)
+                          if (!isSuperAdm && expanded !== admin.id) toggleExpand(admin.id)
                         }}
                         className="p-1.5 rounded hover:bg-amber-50 text-gray-400 hover:text-amber-600 transition-colors"
-                        title="Reset password"
+                        title={`Reset ${isSuperAdm ? 'super admin' : 'admin'} password`}
                       >
                         <KeyRound className="h-3.5 w-3.5" />
                       </button>
@@ -466,11 +568,11 @@ export function AdminManagementClient() {
                     )}
 
                     {/* Delete */}
-                    {!isSuperAdm && (
+                    {canDelete && (
                       <button
                         onClick={() => deleteAdmin(admin)}
                         className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"
-                        title="Remove admin"
+                        title={isSuperAdm ? 'Remove super admin' : 'Remove admin'}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -582,12 +684,56 @@ export function AdminManagementClient() {
                     </div>
                   </div>
                 )}
+
+                {/* Super-admin reset password inline form */}
+                {isSuperAdm && resetAdminId === admin.id && (
+                  <div className="border-t border-divider bg-surface/40 px-5 py-4">
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+                      <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide flex items-center gap-1.5">
+                        <KeyRound className="h-3.5 w-3.5" /> Reset Password — {admin.name}
+                      </p>
+                      <div className="flex gap-2 items-center">
+                        <div className="relative flex-1">
+                          <input
+                            type={showNewPass ? 'text' : 'password'}
+                            value={newPassword}
+                            onChange={e => setNewPassword(e.target.value)}
+                            placeholder="New password (min 8 chars)"
+                            className="w-full px-3 py-2 text-sm border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white pr-9"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowNewPass(s => !s)}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400"
+                          >
+                            {showNewPass ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                          </button>
+                        </div>
+                        <button
+                          onClick={() => resetPassword(admin.id)}
+                          disabled={resetSaving || newPassword.length < 8}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 text-white text-sm rounded-lg hover:opacity-90 disabled:opacity-50 shrink-0"
+                        >
+                          {resetSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                          Set Password
+                        </button>
+                        <button
+                          onClick={() => { setResetAdminId(null); setNewPassword('') }}
+                          className="p-2 text-gray-400 hover:text-gray-600"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )
           })}
         </div>
       )}
-    </div>
+      </div>
+    </>
   )
 }
 

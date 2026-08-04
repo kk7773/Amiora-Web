@@ -67,6 +67,10 @@ export async function PATCH(
   if (body.is_active !== undefined) {
     const isActive = Boolean(body.is_active)
 
+    if (actorId && actorId === id && !isActive) {
+      return NextResponse.json({ error: 'You cannot disable your own super admin account.' }, { status: 400 })
+    }
+
     const { error: pErr } = await admin
       .from('profiles')
       .update({ is_active: isActive })
@@ -128,13 +132,17 @@ export async function DELETE(
 
   const { id } = await params
   const ac     = adminClient()
+  const actorId = await getActorId()
+
+  if (actorId && actorId === id) {
+    return NextResponse.json({ error: 'You cannot delete your own super admin account.' }, { status: 400 })
+  }
 
   await ac.from('cms_admin_permissions').delete().eq('user_id', id)
 
   const { error } = await ac.auth.admin.deleteUser(id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const actorId = await getActorId()
   await writeAuditLog({
     adminId:    actorId,
     action:     'delete_admin',

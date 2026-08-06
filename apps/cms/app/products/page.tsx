@@ -19,8 +19,16 @@ type ProductListingRow = ProductRow & {
   collection?: { name: string } | null
   category?: { name: string } | null
   images?: { url: string; is_primary: boolean }[]
-  color_groups?: { images: string[]; display_order: number; is_active: boolean }[]
-  variants?: { id: string }[]
+  color_groups?: { color_id: string; color_label: string; images: string[]; display_order: number; is_active: boolean }[]
+  variants?: {
+    id: string
+    color_id: string | null
+    color_label: string
+    purity_id: string | null
+    purity_label: string
+    stock_qty: number
+    is_active: boolean
+  }[]
   collection_links?: { collections: { name: string } | null }[]
 }
 
@@ -34,6 +42,8 @@ export default async function ProductsPage() {
     productImagesRes,
     colorGroupsRes,
     variantsRes,
+    metalColorsRes,
+    metalPuritiesRes,
   ] = await Promise.all([
     supabase
       .from('products')
@@ -44,8 +54,10 @@ export default async function ProductsPage() {
     supabase.from('product_images').select('product_id, url, is_primary'),
     supabase
       .from('product_color_groups')
-      .select('product_id, images, display_order, is_active'),
-    supabase.from('product_variants').select('id, product_id'),
+      .select('product_id, color_id, images, display_order, is_active'),
+    supabase.from('product_variants').select('id, product_id, color_id, purity_id, stock_qty, is_active'),
+    supabase.from('metal_colors').select('id, label'),
+    supabase.from('metal_purities').select('id, label'),
   ])
 
   if (productsRes.error) {
@@ -72,6 +84,8 @@ export default async function ProductsPage() {
 
   const collectionById = new Map(collections.map((row) => [row.id, row]))
   const categoryById = new Map(categories.map((row) => [row.id, row]))
+  const colorLabelById = new Map((metalColorsRes.data ?? []).map((row) => [row.id, row.label]))
+  const purityLabelById = new Map((metalPuritiesRes.data ?? []).map((row) => [row.id, row.label]))
 
   const imagesByProduct = new Map<string, { url: string; is_primary: boolean }[]>()
   for (const row of productImagesRes.data ?? []) {
@@ -82,11 +96,13 @@ export default async function ProductsPage() {
 
   const colorGroupsByProduct = new Map<
     string,
-    { images: string[]; display_order: number; is_active: boolean }[]
+    { color_id: string; color_label: string; images: string[]; display_order: number; is_active: boolean }[]
   >()
   for (const row of colorGroupsRes.data ?? []) {
     const list = colorGroupsByProduct.get(row.product_id) ?? []
     list.push({
+      color_id: row.color_id,
+      color_label: colorLabelById.get(row.color_id) ?? 'Unknown colour',
       images: row.images ?? [],
       display_order: row.display_order,
       is_active: row.is_active,
@@ -94,10 +110,29 @@ export default async function ProductsPage() {
     colorGroupsByProduct.set(row.product_id, list)
   }
 
-  const variantsByProduct = new Map<string, { id: string }[]>()
+  const variantsByProduct = new Map<
+    string,
+    {
+      id: string
+      color_id: string | null
+      color_label: string
+      purity_id: string | null
+      purity_label: string
+      stock_qty: number
+      is_active: boolean
+    }[]
+  >()
   for (const row of variantsRes.data ?? []) {
     const list = variantsByProduct.get(row.product_id) ?? []
-    list.push({ id: row.id })
+    list.push({
+      id: row.id,
+      color_id: row.color_id ?? null,
+      color_label: row.color_id ? colorLabelById.get(row.color_id) ?? 'Unknown colour' : 'Unknown colour',
+      purity_id: row.purity_id ?? null,
+      purity_label: row.purity_id ? purityLabelById.get(row.purity_id) ?? 'Unknown purity' : 'Unknown purity',
+      stock_qty: Number(row.stock_qty ?? 0),
+      is_active: row.is_active !== false,
+    })
     variantsByProduct.set(row.product_id, list)
   }
 

@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 export default async function SettingsPage() {
   const supabase = createServerClient()
 
-  const [goldRes, silverRes] = await Promise.all([
+  const [goldRes, silverRes, settingsRes] = await Promise.all([
     supabase
       .from('live_prices')
       .select('price_per_gram, fetched_at')
@@ -21,7 +21,15 @@ export default async function SettingsPage() {
       .order('fetched_at', { ascending: false })
       .limit(1)
       .single(),
+    supabase
+      .from('site_settings')
+      .select('key, value')
+      .in('key', ['making_charge_pct', 'announcement_bar']),
   ])
+
+  const settingsMap = Object.fromEntries((settingsRes.data ?? []).map((row) => [row.key, row.value]))
+  const makingChargePct = Number(settingsMap.making_charge_pct ?? 8)
+  const announcementBar = settingsMap.announcement_bar ?? ''
 
   return (
     <div className="space-y-5 max-w-3xl">
@@ -31,6 +39,8 @@ export default async function SettingsPage() {
         currentSilver={Number(silverRes.data?.price_per_gram ?? 90)}
         goldUpdatedAt={goldRes.data?.fetched_at ?? null}
         silverUpdatedAt={silverRes.data?.fetched_at ?? null}
+        initialMakingChargePct={Number.isFinite(makingChargePct) ? makingChargePct : 8}
+        initialAnnouncement={announcementBar}
       />
     </div>
   )

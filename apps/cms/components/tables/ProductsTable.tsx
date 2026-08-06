@@ -21,8 +21,73 @@ interface Product {
   collection_links?: { collections: { name: string } | null }[] | null
   category?:   { name: string } | null
   images?:  { url: string; is_primary: boolean }[]
-  color_groups?: { images: string[]; display_order: number; is_active: boolean }[]
-  variants?: { id: string }[]
+  color_groups?: { color_id: string; color_label: string; images: string[]; display_order: number; is_active: boolean }[]
+  variants?: {
+    id: string
+    color_id: string | null
+    color_label: string
+    purity_id: string | null
+    purity_label: string
+    stock_qty: number
+    is_active: boolean
+  }[]
+}
+
+type ProductVariant = NonNullable<Product['variants']>[number]
+
+type StockTone = 'default' | 'warning' | 'error'
+
+function getVariantStockTone(stockQty: number): StockTone {
+  if (stockQty <= 0) return 'error'
+  if (stockQty <= 3) return 'warning'
+  return 'default'
+}
+
+function getVariantStockLabel(stockQty: number) {
+  if (stockQty <= 0) return 'Out of stock'
+  if (stockQty <= 3) return `Low stock (${stockQty})`
+  return `In stock (${stockQty})`
+}
+
+function getProductStockSummary(product: Product) {
+  const activeVariants = (product.variants ?? []).filter((variant) => variant.is_active)
+  const outCount = activeVariants.filter((variant) => variant.stock_qty <= 0).length
+  const lowCount = activeVariants.filter((variant) => variant.stock_qty > 0 && variant.stock_qty <= 3).length
+
+  if (outCount > 0) {
+    return {
+      tone: 'error' as const,
+      label: `${outCount} variant${outCount > 1 ? 's' : ''} out of stock`,
+    }
+  }
+  if (lowCount > 0) {
+    return {
+      tone: 'warning' as const,
+      label: `${lowCount} variant${lowCount > 1 ? 's' : ''} low stock`,
+    }
+  }
+  return {
+    tone: 'default' as const,
+    label: activeVariants.length > 0 ? 'Stock healthy' : 'No active variants',
+  }
+}
+
+function getRowToneClass(product: Product) {
+  const summary = getProductStockSummary(product)
+  if (summary.tone === 'error') return 'bg-red-50/70 hover:bg-red-50'
+  if (summary.tone === 'warning') return 'bg-amber-50/70 hover:bg-amber-50'
+  return 'hover:bg-surface/50'
+}
+
+function buildColorHierarchy(product: Product) {
+  const groups = new Map<string, { colorLabel: string; variants: ProductVariant[] }>()
+  for (const variant of product.variants ?? []) {
+    const colorKey = variant.color_id ?? variant.color_label
+    const current = groups.get(colorKey) ?? { colorLabel: variant.color_label, variants: [] }
+    current.variants.push(variant)
+    groups.set(colorKey, current)
+  }
+  return Array.from(groups.values()).sort((a, b) => a.colorLabel.localeCompare(b.colorLabel))
 }
 
 function resolveCollectionNames(product: Product): string {
@@ -150,8 +215,9 @@ export function ProductsTable({ products, collections, categories }: Props) {
           <tbody className="divide-y divide-divider">
             {filtered.map(p => {
               const thumbnailUrl = resolveThumbnail(p)
+              const stockSummary = getProductStockSummary(p)
               return (
-                <tr key={p.id} className="hover:bg-surface/50 transition-colors">
+                <tr key={p.id} className={`${getRowToneClass(p)} transition-colors`}>
                   <td className="px-5 py-3">
                     {thumbnailUrl ? (
                       <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-surface-2">
@@ -181,6 +247,45 @@ export function ProductsTable({ products, collections, categories }: Props) {
                       <p className="text-xs text-ink-muted font-mono mt-0.5">Design {p.design_number}</p>
                     )}
                     {p.is_featured && <Badge variant="info" className="mt-1">Featured</Badge>}
+                    <div className="mt-3 space-y-2 max-w-[34rem]">
+                      {buildColorHierarchy(p).map((group) => {
+                        const groupHasOut = group.variants.some((variant) => variant.is_active && variant.stock_qty <= 0)
+                        const groupHasLow = group.variants.some((variant) => variant.is_active && variant.stock_qty > 0 && variant.stock_qty <= 3)
+                        const groupVariant = groupHasOut ? 'error' : groupHasLow ? 'warning' : 'default'
+
+                        return (
+                          <div key={group.colorLabel} className="rounded-lg border border-divider bg-white/70 px-2.5 py-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant={groupVariant}>{group.colorLabel}</Badge>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {group.variants
+                                .slice()
+                                .sort((a, b) => a.purity_label.localeCompare(b.purity_label))
+                                .map((variant) => (
+                                  <Badge
+                                    key={variant.id}
+                                    variant={
+                                      !variant.is_active
+                                        ? 'default'
+                                        : getVariantStockTone(variant.stock_qty) === 'error'
+                                          ? 'error'
+                                          : getVariantStockTone(variant.stock_qty) === 'warning'
+                                            ? 'warning'
+                                            : 'success'
+                                    }
+                                    className="gap-1"
+                                  >
+                                    {variant.purity_label}
+                                    {' · '}
+                                    {variant.is_active ? getVariantStockLabel(variant.stock_qty) : 'Inactive'}
+                                  </Badge>
+                                ))}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
                   </td>
                   <td className="px-5 py-3 text-ink-muted">{resolveCollectionNames(p)}</td>
                   <td className="px-5 py-3">

@@ -196,7 +196,7 @@ export async function createCatalogProduct(
       purity_id: cell.purity_id,
       sku: generateAmioraSKU(catCode, prodInsert.product_number, String(pCode), String(cCode)),
       price: snapshotPrice,
-      stock_qty: Math.max(0, Math.floor(cell.stock_qty ?? 1)),
+      stock_qty: Math.max(0, Math.floor(cell.stock_qty ?? 3)),
       metal_weight_g: metalWeight,
       is_active: cell.is_active ?? true,
     })

@@ -44,6 +44,11 @@ const CHAIN_LENGTH_OPTIONS = ['14', '16', '18', '20', '22'] as const
 const RING_SIZE_OPTIONS = Array.from({ length: 23 }, (_, index) => String(index + 6))
 const RING_SIZE_GROUP_BASE_INDEX = 2
 const RING_SIZE_GROUP_STEP_PCT = 0.08
+const DEFAULT_STOCK_QTY = '3'
+const GOLD_WEIGHT_SYNC_STEPS = {
+  '09->14': 1.11,
+  '14->18': 1.15,
+} as const
 
 const DIAMOND_SHAPE_OPTIONS = [
   'Round',
@@ -153,6 +158,7 @@ export type ProductCatalogCreateFormProps = {
   metalColors: MetalColor[]
   metalPurities: MetalPurity[]
   initialData?: InitialData
+  defaultMakingChargePct?: number
   pricingContext: {
     currentGoldPerGram: number
     currentSilverPerGram: number
@@ -176,6 +182,56 @@ type CellState = {
 
 function buildCellKey(colorId: string, purityId: string) {
   return `${colorId}:${purityId}`
+}
+
+function normalizeGoldPurityCode(code: string | null | undefined): '09' | '14' | '18' | '22' | null {
+  if (!code) return null
+  const digits = code.replace(/\D/g, '')
+  if (digits === '9' || digits === '09') return '09'
+  if (digits === '14') return '14'
+  if (digits === '18') return '18'
+  if (digits === '22') return '22'
+  return null
+}
+
+function roundWeight(value: number): string {
+  return (Math.round(value * 1000) / 1000).toFixed(3)
+}
+
+function deriveRelatedGoldWeights(sourceCode: '09' | '14' | '18' | '22', rawWeight: string) {
+  const trimmed = rawWeight.trim()
+  if (trimmed === '') {
+    return new Map<'09' | '14' | '18' | '22', string>([[sourceCode, '']])
+  }
+
+  const input = parseFloat(trimmed)
+  if (!Number.isFinite(input) || input <= 0) {
+    return new Map<'09' | '14' | '18' | '22', string>([[sourceCode, rawWeight]])
+  }
+
+  const weights = new Map<'09' | '14' | '18' | '22', string>()
+
+  if (sourceCode === '22') {
+    weights.set('22', roundWeight(input))
+    return weights
+  }
+
+  let weight09: number
+  if (sourceCode === '09') {
+    weight09 = input
+  } else if (sourceCode === '14') {
+    weight09 = input / GOLD_WEIGHT_SYNC_STEPS['09->14']
+  } else {
+    weight09 = input / GOLD_WEIGHT_SYNC_STEPS['14->18'] / GOLD_WEIGHT_SYNC_STEPS['09->14']
+  }
+
+  const weight14 = weight09 * GOLD_WEIGHT_SYNC_STEPS['09->14']
+  const weight18 = weight14 * GOLD_WEIGHT_SYNC_STEPS['14->18']
+
+  weights.set('09', roundWeight(weight09))
+  weights.set('14', roundWeight(weight14))
+  weights.set('18', roundWeight(weight18))
+  return weights
 }
 
 type VariantColorMediaProps = {
@@ -553,7 +609,7 @@ function newSizeStockRow(params: {
     purity_id: params.purity_id,
     size_label: params.size_label,
     size_type: params.size_type,
-    stock_qty: '',
+    stock_qty: DEFAULT_STOCK_QTY,
     metal_weight_g: params.metal_weight_g ?? '',
     price_override: params.price_override ?? '',
     is_active: true,
@@ -576,7 +632,7 @@ function sizeStocksFromDb(raw: unknown): SizeStockUi[] {
           ? String(record.stock_qty)
           : typeof record.stock_qty === 'string' && record.stock_qty.trim() !== ''
             ? record.stock_qty.trim()
-            : '0'
+            : DEFAULT_STOCK_QTY
       const metalWeight =
         typeof record.metal_weight_g === 'number' && Number.isFinite(record.metal_weight_g)
           ? String(record.metal_weight_g)
@@ -611,6 +667,7 @@ export function ProductCatalogCreateForm({
   metalColors,
   metalPurities,
   initialData,
+  defaultMakingChargePct = 8,
   pricingContext,
 }: ProductCatalogCreateFormProps) {
   const router = useRouter()
@@ -688,7 +745,7 @@ export function ProductCatalogCreateForm({
   const [comingSoon, setComingSoon] = useState(initialData?.product.is_coming_soon ?? false)
   const [status, setStatus] = useState<'draft' | 'active' | 'archived'>(initialData?.product.status ?? 'draft')
   const [makingChargePct, setMakingChargePct] = useState<string>(
-    String(initialData?.product.making_charge_pct ?? 8),
+    String(initialData?.product.making_charge_pct ?? defaultMakingChargePct),
   )
 
   const [hasStone, setHasStone] = useState(() => Boolean(initialData?.product.has_stone))
@@ -1083,7 +1140,7 @@ export function ProductCatalogCreateForm({
   function setCellValue(colorId: string, purityId: string, updater: (current: CellState) => CellState) {
     const key = buildCellKey(colorId, purityId)
     setCells((prev) => {
-      const current = prev[key] ?? { gross_weight_g: '', stock_qty: '1', is_active: false }
+      const current = prev[key] ?? { gross_weight_g: '', stock_qty: DEFAULT_STOCK_QTY, is_active: false }
       return { ...prev, [key]: updater(current) }
     })
   }
@@ -1094,13 +1151,41 @@ export function ProductCatalogCreateForm({
       for (const row of colorRows) {
         for (const purity of puritiesForProduct) {
           const key = buildCellKey(row.color_id, purity.id)
-          const current = next[key] ?? { gross_weight_g: '', stock_qty: '1', is_active: false }
+          const current = next[key] ?? { gross_weight_g: '', stock_qty: DEFAULT_STOCK_QTY, is_active: false }
           next[key] = {
             ...current,
             gross_weight_g: weight,
           }
         }
       }
+      return next
+    })
+  }
+
+  function syncGoldMatrixWeightByPurity(sourcePurityId: string, weight: string) {
+    setCells((prev) => {
+      const sourcePurity = puritiesForProduct.find((entry) => entry.id === sourcePurityId)
+      const normalizedCode = normalizeGoldPurityCode(sourcePurity?.code)
+      if (!sourcePurity || !normalizedCode) return prev
+
+      const relatedWeights = deriveRelatedGoldWeights(normalizedCode, weight)
+      const next: Record<string, CellState> = { ...prev }
+
+      for (const row of colorRows) {
+        for (const purity of puritiesForProduct) {
+          const purityCode = normalizeGoldPurityCode(purity.code)
+          if (!purityCode) continue
+          if (!relatedWeights.has(purityCode)) continue
+
+          const key = buildCellKey(row.color_id, purity.id)
+          const current = next[key] ?? { gross_weight_g: '', stock_qty: DEFAULT_STOCK_QTY, is_active: false }
+          next[key] = {
+            ...current,
+            gross_weight_g: relatedWeights.get(purityCode) ?? '',
+          }
+        }
+      }
+
       return next
     })
   }
@@ -1418,7 +1503,7 @@ export function ProductCatalogCreateForm({
         making_charge_pct:
           makingChargePct.trim() !== '' && Number.isFinite(parseFloat(makingChargePct))
             ? parseFloat(makingChargePct)
-            : 8,
+            : defaultMakingChargePct,
         has_stone: hasStone,
         stone_lines: hasStone
           ? stoneRows
@@ -2113,7 +2198,7 @@ export function ProductCatalogCreateForm({
                     {puritiesForProduct.map((purity) => {
                       const cell = cells[buildCellKey(row.color_id, purity.id)] ?? {
                         gross_weight_g: '',
-                        stock_qty: '1',
+                        stock_qty: DEFAULT_STOCK_QTY,
                         is_active: false,
                         seed_price: undefined,
                       }
@@ -2137,6 +2222,8 @@ export function ProductCatalogCreateForm({
                                   gross_weight_g: nextWeight,
                                 }))
                                 syncRingWeightForVariant(row.color_id, purity.id, '12', nextWeight)
+                              } else if (isGoldProduct) {
+                                syncGoldMatrixWeightByPurity(purity.id, nextWeight)
                               } else {
                                 syncMatrixWeightAcrossAllCells(nextWeight)
                               }
@@ -2394,7 +2481,7 @@ export function ProductCatalogCreateForm({
                                       type="number"
                                       min={0}
                                       step={1}
-                                      value={current?.stock_qty ?? '0'}
+                                      value={current?.stock_qty ?? DEFAULT_STOCK_QTY}
                                       onChange={(e) =>
                                         updateSizeStock(row.color_id, purity.id, sizeLabel, (existing) => ({
                                           ...existing,

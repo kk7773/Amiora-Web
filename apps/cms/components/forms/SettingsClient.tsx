@@ -10,6 +10,8 @@ interface Props {
   currentSilver:   number
   goldUpdatedAt:   string | null
   silverUpdatedAt: string | null
+  initialMakingChargePct: number
+  initialAnnouncement: string
 }
 
 const PURITY_ROWS = [
@@ -40,7 +42,14 @@ function timeAgo(iso: string | null) {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
-export function SettingsClient({ currentGold, currentSilver, goldUpdatedAt, silverUpdatedAt }: Props) {
+export function SettingsClient({
+  currentGold,
+  currentSilver,
+  goldUpdatedAt,
+  silverUpdatedAt,
+  initialMakingChargePct,
+  initialAnnouncement,
+}: Props) {
   const router = useRouter()
 
   // ── Price state ─────────────────────────────────────────
@@ -50,12 +59,13 @@ export function SettingsClient({ currentGold, currentSilver, goldUpdatedAt, silv
   const [refreshing, setRefreshing] = useState(false)
 
   // ── Other settings state ─────────────────────────────────
-  const [makingCharge,  setMakingCharge]  = useState('8')
-  const [announcement,  setAnnouncement]  = useState('')
+  const [makingCharge,  setMakingCharge]  = useState(String(initialMakingChargePct))
+  const [announcement,  setAnnouncement]  = useState(initialAnnouncement)
   const [savingOther,   setSavingOther]   = useState(false)
 
   const goldNum   = parseFloat(gold)   || 0
   const silverNum = parseFloat(silver) || 0
+  const makingChargeNum = parseFloat(makingCharge)
   const changedGold   = goldNum   !== currentGold
   const changedSilver = silverNum !== currentSilver
 
@@ -98,16 +108,24 @@ export function SettingsClient({ currentGold, currentSilver, goldUpdatedAt, silv
   }
 
   async function saveSettings() {
+    if (!Number.isFinite(makingChargeNum) || makingChargeNum < 0 || makingChargeNum > 100) {
+      toast.error('Enter a valid making charge between 0 and 100')
+      return
+    }
+
     setSavingOther(true)
     try {
-      await fetch('/api/settings', {
+      const res = await fetch('/api/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ making_charge_pct: +makingCharge, announcement }),
+        body: JSON.stringify({ making_charge_pct: makingChargeNum, announcement }),
       })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? 'Save failed')
       toast.success('Settings saved')
-    } catch {
-      toast.error('Save failed')
+      router.refresh()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Save failed')
     } finally {
       setSavingOther(false)
     }
@@ -243,7 +261,7 @@ export function SettingsClient({ currentGold, currentSilver, goldUpdatedAt, silv
           {/* Price Preview */}
           <div className="rounded-lg border border-divider overflow-hidden">
             <p className="text-xs uppercase tracking-widest text-ink-muted bg-surface px-4 py-2 border-b border-divider">
-              Price Preview — 5g sample · 8% making charge
+              Price Preview — 5g sample · {Number.isFinite(makingChargeNum) ? makingChargeNum : 0}% making charge
             </p>
             <table className="w-full text-sm">
               <thead>
@@ -258,8 +276,8 @@ export function SettingsClient({ currentGold, currentSilver, goldUpdatedAt, silv
                 {PURITY_ROWS.map(({ label, purity, metal }) => {
                   const liveRate = metal === 'gold' ? currentGold : currentSilver
                   const newRate  = metal === 'gold' ? goldNum      : silverNum
-                  const curr     = calcPrice(liveRate, purity)
-                  const next     = newRate > 0 ? calcPrice(newRate, purity) : curr
+                  const curr     = calcPrice(liveRate, purity, 5, Number.isFinite(makingChargeNum) ? makingChargeNum : 0)
+                  const next     = newRate > 0 ? calcPrice(newRate, purity, 5, Number.isFinite(makingChargeNum) ? makingChargeNum : 0) : curr
                   const diff     = next - curr
                   return (
                     <tr key={label} className="border-b border-divider last:border-0 hover:bg-surface/60 transition-colors">
@@ -342,7 +360,7 @@ export function SettingsClient({ currentGold, currentSilver, goldUpdatedAt, silv
         </div>
         <div className="flex items-center gap-2 text-xs text-ink-faint bg-surface rounded-lg p-3">
           <CheckCircle className="w-3.5 h-3.5 text-teal shrink-0" />
-          Realtime powered by Supabase Channels. No additional setup required.
+          Realtime powered by Atraski Tech (At-Tech). No additional setup required.
         </div>
       </div>
 

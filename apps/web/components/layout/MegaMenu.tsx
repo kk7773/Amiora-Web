@@ -3,7 +3,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { useEffect, useState } from 'react'
-import { ChevronRight } from 'lucide-react'
 import { resolveCollectionImageUrl } from '@/lib/shop/collectionFallbackImages'
 
 interface MenuCollection {
@@ -11,7 +10,7 @@ interface MenuCollection {
   name: string
   slug: string
   thumb_url: string | null
-  products: { name: string; slug: string }[]
+  products: { id: string; name: string; slug: string; image_url: string | null }[]
 }
 
 interface MegaMenuProps {
@@ -49,8 +48,13 @@ export function MegaMenu({ onClose }: MegaMenuProps) {
             ? Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="flex min-w-0 flex-col space-y-3">
                   <div className="skeleton h-5 w-28 rounded" />
-                  {Array.from({ length: 3 }).map((_, j) => (
-                    <div key={j} className="skeleton h-4 w-full max-w-[11rem] rounded" />
+                  <div className="grid grid-cols-2 gap-3">
+                    {Array.from({ length: 4 }).map((_, j) => (
+                      <div key={j} className="skeleton aspect-square w-full rounded-xl" />
+                    ))}
+                  </div>
+                  {Array.from({ length: 2 }).map((_, j) => (
+                    <div key={`line-${j}`} className="skeleton h-3 w-full max-w-[11rem] rounded" />
                   ))}
                 </div>
               ))
@@ -67,24 +71,37 @@ export function MegaMenu({ onClose }: MegaMenuProps) {
                   >
                     {col.name}
                   </Link>
-                  <ul className="m-0 list-none p-0 flex flex-col gap-0.5">
+                  <div className="grid grid-cols-2 gap-3">
                     {col.products.slice(0, 5).map((p) => (
-                      <li key={p.slug} className="min-w-0">
-                        <Link
-                          href={`/shop/${col.slug}/${p.slug}`}
-                          onClick={onClose}
-                          className="group flex items-start gap-2 py-2 text-base leading-snug text-ink-muted hover:text-teal transition-colors"
-                        >
-                          {/* Name first so left edge aligns with collection title above */}
-                          <span className="min-w-0 flex-1">{p.name}</span>
-                          <ChevronRight
-                            aria-hidden
-                            className="h-3.5 w-3.5 shrink-0 pt-0.5 opacity-0 transition-opacity group-hover:opacity-100"
-                          />
-                        </Link>
-                      </li>
+                      <Link
+                        key={p.slug}
+                        href={`/shop/${col.slug}/${p.slug}`}
+                        onClick={onClose}
+                        onMouseEnter={() => setActiveImage(p.image_url || collectionPreviewUrl(col))}
+                        className="group block"
+                        aria-label={p.name}
+                      >
+                        <div className="relative aspect-square overflow-hidden rounded-xl bg-surface ring-1 ring-transparent transition-all duration-200 group-hover:ring-teal/40 group-hover:shadow-md">
+                          {p.image_url ? (
+                            <Image
+                              src={p.image_url}
+                              alt={p.name}
+                              fill
+                              className="object-cover transition-transform duration-300 group-hover:scale-105"
+                              sizes="(min-width: 1024px) 140px, 120px"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-light-teal/25 to-cream text-center">
+                              <span className="px-3 text-xs uppercase tracking-[0.24em] text-deep-teal/70">
+                                {col.name}
+                              </span>
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-gradient-to-t from-deep-teal/20 to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+                        </div>
+                      </Link>
                     ))}
-                  </ul>
+                  </div>
                 </div>
               ))}
         </div>

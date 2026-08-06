@@ -8,7 +8,7 @@ export default async function NewProductPage() {
   await ensureGoldMetalPurities(supabase)
   const pricingContext = await fetchCmsPricingContext(supabase)
 
-  const [{ data: collections }, { data: categories }, { data: tags }, { data: metalColors }, { data: metalPurities }] =
+  const [{ data: collections }, { data: categories }, { data: tags }, { data: metalColors }, { data: metalPurities }, { data: settingsRows }] =
     await Promise.all([
       supabase.from('collections').select('id, name').eq('is_active', true).order('sort_order'),
       supabase
@@ -27,7 +27,14 @@ export default async function NewProductPage() {
         .select('id, label, code, display_order, metal')
         .eq('is_active', true)
         .order('display_order'),
+      supabase
+        .from('site_settings')
+        .select('key, value')
+        .eq('key', 'making_charge_pct')
     ])
+
+  const makingChargeSetting = settingsRows?.[0]?.value
+  const defaultMakingChargePct = Number(makingChargeSetting ?? 8)
 
   return (
     <div className="space-y-5">
@@ -41,6 +48,7 @@ export default async function NewProductPage() {
       categories={(categories ?? []) as Parameters<typeof ProductCatalogCreateForm>[0]['categories']}
       metalColors={(metalColors ?? []) as Parameters<typeof ProductCatalogCreateForm>[0]['metalColors']}
       metalPurities={(metalPurities ?? []) as Parameters<typeof ProductCatalogCreateForm>[0]['metalPurities']}
+      defaultMakingChargePct={Number.isFinite(defaultMakingChargePct) ? defaultMakingChargePct : 8}
       pricingContext={pricingContext}
     />
   </div>

@@ -343,7 +343,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         purity_id: cell.purity_id,
         sku: generateAmioraSKU(String(catRow.code), productNumber, String(purity), String(color)),
         price: snapshotPrice,
-        stock_qty: Math.max(0, Math.floor(cell.stock_qty ?? 0)),
+        stock_qty: Math.max(0, Math.floor(cell.stock_qty ?? 3)),
         metal_weight_g: metalWeight,
         is_active: cell.is_active ?? true,
       }

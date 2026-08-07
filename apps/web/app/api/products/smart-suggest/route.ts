@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
         .from('products')
         .select(PRODUCT_CARD_SELECT)
         .in('id', ids.slice(0, 4))
-        .eq('status', 'active')
+        .in('status', ['active', 'make_to_order'])
       products = (data ?? []) as ProductCardRaw[]
     }
 
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
       const { data: featured } = await supabase
         .from('products')
         .select(PRODUCT_CARD_SELECT)
-        .eq('status', 'active')
+        .in('status', ['active', 'make_to_order'])
         .eq('is_featured', true)
         .not('id', 'in', `(${product_ids.join(',')})`)
         .limit(4 - products.length)

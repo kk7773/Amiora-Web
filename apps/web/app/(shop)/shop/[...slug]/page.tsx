@@ -88,7 +88,7 @@ export default async function ShopCatchAllPage({ params, searchParams }: Props) 
       .from('products')
       .select(`slug, collection:${PRODUCT_COLLECTION_EMBED}(slug), category:${PRODUCT_CATEGORY_EMBED}(slug)`)
       .eq('slug', productSlug)
-      .eq('status', 'active')
+      .in('status', ['active', 'make_to_order'])
       .single()
 
     if (!product) notFound()

@@ -132,7 +132,7 @@ type InitialData = {
     metal_weight_g?: number | null
     meta_title: string | null
     meta_description: string | null
-    status: 'draft' | 'active' | 'archived'
+    status: 'draft' | 'active' | 'archived' | 'make_to_order'
     is_featured: boolean
     is_new_arrival: boolean
     is_best_seller: boolean
@@ -212,7 +212,7 @@ function deriveRelatedGoldWeights(sourceCode: '09' | '14' | '18' | '22', rawWeig
   const weights = new Map<'09' | '14' | '18' | '22', string>()
 
   if (sourceCode === '22') {
-    weights.set('22', roundWeight(input))
+    weights.set('22', rawWeight)
     return weights
   }
 
@@ -228,9 +228,9 @@ function deriveRelatedGoldWeights(sourceCode: '09' | '14' | '18' | '22', rawWeig
   const weight14 = weight09 * GOLD_WEIGHT_SYNC_STEPS['09->14']
   const weight18 = weight14 * GOLD_WEIGHT_SYNC_STEPS['14->18']
 
-  weights.set('09', roundWeight(weight09))
-  weights.set('14', roundWeight(weight14))
-  weights.set('18', roundWeight(weight18))
+  weights.set('09', sourceCode === '09' ? rawWeight : roundWeight(weight09))
+  weights.set('14', sourceCode === '14' ? rawWeight : roundWeight(weight14))
+  weights.set('18', sourceCode === '18' ? rawWeight : roundWeight(weight18))
   return weights
 }
 
@@ -743,7 +743,7 @@ export function ProductCatalogCreateForm({
   const [newArrival, setNewArrival] = useState(initialData?.product.is_new_arrival ?? false)
   const [bestSeller, setBestSeller] = useState(initialData?.product.is_best_seller ?? false)
   const [comingSoon, setComingSoon] = useState(initialData?.product.is_coming_soon ?? false)
-  const [status, setStatus] = useState<'draft' | 'active' | 'archived'>(initialData?.product.status ?? 'draft')
+  const [status, setStatus] = useState<'draft' | 'active' | 'archived' | 'make_to_order'>(initialData?.product.status ?? 'draft')
   const [makingChargePct, setMakingChargePct] = useState<string>(
     String(initialData?.product.making_charge_pct ?? defaultMakingChargePct),
   )
@@ -754,12 +754,11 @@ export function ProductCatalogCreateForm({
     return rows.length > 0 ? rows : []
   })
   const selectedCategory = categories.find((category) => category.id === categoryId)
-  const isRingProduct = /ring/i.test(
-    `${selectedCategory?.name ?? ''} ${selectedCategory?.code ?? ''}`,
-  )
-  const isChainProduct = /necklace|chain/i.test(
-    `${selectedCategory?.name ?? ''} ${selectedCategory?.code ?? ''}`,
-  )
+  const selectedCategoryText = `${selectedCategory?.name ?? ''} ${selectedCategory?.code ?? ''}`
+  const normalizedCategoryText = selectedCategoryText.toLowerCase()
+  const isRingProduct = /\bring\b/.test(normalizedCategoryText)
+  // Chain-length options apply to necklaces and pendants, but not unrelated categories.
+  const isChainProduct = /\b(necklace|pendant|pendent)\b/.test(normalizedCategoryText)
 
   useEffect(() => {
     if (!hasStone) return
@@ -1331,7 +1330,7 @@ export function ProductCatalogCreateForm({
     })
   }
 
-  async function submit(nextStatus: 'draft' | 'active' | 'archived') {
+  async function submit(nextStatus: 'draft' | 'active' | 'archived' | 'make_to_order') {
     if (!name.trim()) {
       toast.error('Product name required')
       return
@@ -1395,7 +1394,7 @@ export function ProductCatalogCreateForm({
           color_id: row.color_id,
           purity_id: purity.id,
           price: Math.round(computed.price * 100) / 100,
-          stock_qty: Math.max(0, Math.floor(Number(current.stock_qty) || 0)),
+          stock_qty: nextStatus === 'make_to_order' ? 0 : Math.max(0, Math.floor(Number(current.stock_qty) || 0)),
           is_active: current.is_active,
           metal_weight_g: computed.pureWeight,
         })
@@ -1443,7 +1442,7 @@ export function ProductCatalogCreateForm({
                 purity_id: row.purity_id,
                 size_label: row.size_label.trim(),
                 size_type: row.size_type,
-                stock_qty: Math.max(0, Math.floor(Number(row.stock_qty) || 0)),
+                stock_qty: nextStatus === 'make_to_order' ? 0 : Math.max(0, Math.floor(Number(row.stock_qty) || 0)),
                 metal_weight_g:
                   (row.size_type === 'ring_us' || row.size_type === 'chain_inch') && parsedSizeWeight != null
                     ? parsedSizeWeight
@@ -1781,6 +1780,7 @@ export function ProductCatalogCreateForm({
             <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)} className="w-full border rounded-lg px-3 py-2 text-sm">
               <option value="draft">Draft</option>
               <option value="active">Active</option>
+              <option value="make_to_order">Make to order</option>
               <option value="archived">Archived</option>
             </select>
           </label>

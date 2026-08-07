@@ -199,7 +199,7 @@ async function fetchShopListingImpl(
     const { data } = await supabase
       .from('products')
       .select('id')
-      .eq('status', 'active')
+      .in('status', ['active', 'make_to_order'])
       .or('diamond_count.gt.0,total_diamond_wt.gt.0')
     idSets.push((data ?? []).map((r: { id: string }) => r.id))
   }
@@ -208,7 +208,7 @@ async function fetchShopListingImpl(
     const { data } = await supabase
       .from('products')
       .select('id, diamond_shape')
-      .eq('status', 'active')
+      .in('status', ['active', 'make_to_order'])
       .not('diamond_shape', 'is', null)
 
     const matchedIds = (data ?? [])

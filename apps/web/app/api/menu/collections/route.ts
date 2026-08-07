@@ -19,7 +19,7 @@ async function productsForCollection(
       .from('products')
       .select('id, name, slug')
       .in('id', ids)
-      .eq('status', 'active')
+      .in('status', ['active', 'make_to_order'])
 
     const prodById = Object.fromEntries((orderedProds ?? []).map((p) => [p.id, p]))
     return ids
@@ -32,7 +32,7 @@ async function productsForCollection(
     .from('products')
     .select('id, name, slug')
     .eq('collection_id', colId)
-    .eq('status', 'active')
+    .in('status', ['active', 'make_to_order'])
     .order('created_at', { ascending: false })
     .limit(limit)
 

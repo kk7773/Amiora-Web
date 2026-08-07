@@ -8,6 +8,8 @@ import {
   type ProductCardRaw,
 } from '@/lib/shop/mapProductForCard'
 
+const LIVE_PRODUCT_STATUSES = ['active', 'make_to_order'] as const
+
 /** Colour-group embed — required for catalog-era product thumbnails. */
 const PCG_EMBED =
   'product_color_groups(id,color_id,images,display_order,is_active)'
@@ -52,7 +54,7 @@ export async function runProductQuery<T>(
   midSelect?: string,
 ): Promise<{ data: T[]; error: string | null }> {
   const fullResult = await apply(
-    supabase.from('products').select(fullSelect).eq('status', 'active'),
+    supabase.from('products').select(fullSelect).in('status', [...LIVE_PRODUCT_STATUSES]),
   )
 
   if (!fullResult.error && fullResult.data) {
@@ -65,7 +67,7 @@ export async function runProductQuery<T>(
 
   if (midSelect) {
     const midResult = await apply(
-      supabase.from('products').select(midSelect).eq('status', 'active'),
+      supabase.from('products').select(midSelect).in('status', [...LIVE_PRODUCT_STATUSES]),
     )
     if (!midResult.error && midResult.data) {
       return { data: midResult.data as T[], error: null }
@@ -76,7 +78,7 @@ export async function runProductQuery<T>(
   }
 
   const liteResult = await apply(
-    supabase.from('products').select(liteSelect).eq('status', 'active'),
+    supabase.from('products').select(liteSelect).in('status', [...LIVE_PRODUCT_STATUSES]),
   )
 
   if (liteResult.error) {
@@ -192,7 +194,7 @@ export async function resolveCollectionProductIds(
     .from('products')
     .select('id')
     .eq('collection_id', collectionId)
-    .eq('status', 'active')
+    .in('status', [...LIVE_PRODUCT_STATUSES])
 
   const junctionIds = linkRows.map((r: { product_id: string }) => r.product_id)
   const legacyIds = (legacyRows ?? []).map((r: { id: string }) => r.id)

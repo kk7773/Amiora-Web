@@ -133,7 +133,7 @@ export async function priceCartLines(
         .from('products')
         .select('id, name, making_charge_pct, making_charge_discount_pct, gem_price_discount_pct, stone_lines')
         .in('id', resolvedProductIds)
-        .eq('status', 'active')
+        .in('status', ['active', 'make_to_order'])
     : { data: [] as ProductRow[] }
 
   const purityIds = [

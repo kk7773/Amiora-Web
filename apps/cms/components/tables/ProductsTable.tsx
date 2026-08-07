@@ -15,7 +15,7 @@ interface Product {
   design_number?: string | null
   product_code?: string | null
   is_featured: boolean
-  status: 'draft' | 'active' | 'archived'
+  status: 'draft' | 'active' | 'archived' | 'make_to_order'
   created_at: string
   collection?: { name: string } | null
   collection_links?: { collections: { name: string } | null }[] | null
@@ -72,7 +72,15 @@ function getProductStockSummary(product: Product) {
   }
 }
 
+function isMakeToOrderZeroStock(product: Product) {
+  if (product.status !== 'make_to_order') return false
+  const activeVariants = (product.variants ?? []).filter((variant) => variant.is_active)
+  if (activeVariants.length === 0) return true
+  return activeVariants.every((variant) => variant.stock_qty <= 0)
+}
+
 function getRowToneClass(product: Product) {
+  if (isMakeToOrderZeroStock(product)) return 'bg-blue-50/70 hover:bg-blue-50'
   const summary = getProductStockSummary(product)
   if (summary.tone === 'error') return 'bg-red-50/70 hover:bg-red-50'
   if (summary.tone === 'warning') return 'bg-amber-50/70 hover:bg-amber-50'
@@ -152,8 +160,8 @@ export function ProductsTable({ products, collections, categories }: Props) {
       return false
     }
     if (filterCollection && !productInCollection(p, filterCollection)) return false
-    if (filterStatus === 'active' && p.status !== 'active') return false
-    if (filterStatus === 'inactive' && p.status === 'active') return false
+    if (filterStatus === 'active' && !['active', 'make_to_order'].includes(p.status)) return false
+    if (filterStatus === 'inactive' && ['active', 'make_to_order'].includes(p.status)) return false
     return true
   })
 
@@ -192,7 +200,7 @@ export function ProductsTable({ products, collections, categories }: Props) {
           </select>
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="bg-surface border border-divider rounded-lg px-3 py-2 text-sm outline-none text-ink-muted">
             <option value="">All Status</option>
-            <option value="active">Active</option>
+            <option value="active">Active / Make to order</option>
             <option value="inactive">Draft / archived</option>
           </select>
         </div>
@@ -215,7 +223,6 @@ export function ProductsTable({ products, collections, categories }: Props) {
           <tbody className="divide-y divide-divider">
             {filtered.map(p => {
               const thumbnailUrl = resolveThumbnail(p)
-              const stockSummary = getProductStockSummary(p)
               return (
                 <tr key={p.id} className={`${getRowToneClass(p)} transition-colors`}>
                   <td className="px-5 py-3">
@@ -247,45 +254,6 @@ export function ProductsTable({ products, collections, categories }: Props) {
                       <p className="text-xs text-ink-muted font-mono mt-0.5">Design {p.design_number}</p>
                     )}
                     {p.is_featured && <Badge variant="info" className="mt-1">Featured</Badge>}
-                    <div className="mt-3 space-y-2 max-w-[34rem]">
-                      {buildColorHierarchy(p).map((group) => {
-                        const groupHasOut = group.variants.some((variant) => variant.is_active && variant.stock_qty <= 0)
-                        const groupHasLow = group.variants.some((variant) => variant.is_active && variant.stock_qty > 0 && variant.stock_qty <= 3)
-                        const groupVariant = groupHasOut ? 'error' : groupHasLow ? 'warning' : 'default'
-
-                        return (
-                          <div key={group.colorLabel} className="rounded-lg border border-divider bg-white/70 px-2.5 py-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Badge variant={groupVariant}>{group.colorLabel}</Badge>
-                            </div>
-                            <div className="mt-2 flex flex-wrap gap-1.5">
-                              {group.variants
-                                .slice()
-                                .sort((a, b) => a.purity_label.localeCompare(b.purity_label))
-                                .map((variant) => (
-                                  <Badge
-                                    key={variant.id}
-                                    variant={
-                                      !variant.is_active
-                                        ? 'default'
-                                        : getVariantStockTone(variant.stock_qty) === 'error'
-                                          ? 'error'
-                                          : getVariantStockTone(variant.stock_qty) === 'warning'
-                                            ? 'warning'
-                                            : 'success'
-                                    }
-                                    className="gap-1"
-                                  >
-                                    {variant.purity_label}
-                                    {' · '}
-                                    {variant.is_active ? getVariantStockLabel(variant.stock_qty) : 'Inactive'}
-                                  </Badge>
-                                ))}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
                   </td>
                   <td className="px-5 py-3 text-ink-muted">{resolveCollectionNames(p)}</td>
                   <td className="px-5 py-3">
@@ -294,8 +262,8 @@ export function ProductsTable({ products, collections, categories }: Props) {
                     </span>
                   </td>
                   <td className="px-5 py-3">
-                    <Badge variant={p.status === 'active' ? 'success' : 'default'}>
-                      {p.status === 'active' ? 'Active' : p.status === 'draft' ? 'Draft' : 'Archived'}
+                    <Badge variant={p.status === 'active' ? 'success' : p.status === 'make_to_order' ? 'purple' : 'default'}>
+                      {p.status === 'active' ? 'Active' : p.status === 'make_to_order' ? 'Make to order' : p.status === 'draft' ? 'Draft' : 'Archived'}
                     </Badge>
                   </td>
                   <td className="px-5 py-3 text-ink-muted text-xs">{new Date(p.created_at).toLocaleDateString('en-IN')}</td>

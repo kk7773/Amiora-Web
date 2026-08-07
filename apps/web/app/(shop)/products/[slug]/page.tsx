@@ -262,7 +262,7 @@ async function fetchPdpProductImpl(
     .from('products')
     .select(PDP_PRODUCT_MODERN_SELECT)
     .eq('slug', slug)
-    .eq('status', 'active')
+    .in('status', ['active', 'make_to_order'])
     .single()
 
   if (!modern.error && modern.data) {
@@ -273,7 +273,7 @@ async function fetchPdpProductImpl(
     .from('products')
     .select(PDP_PRODUCT_LEGACY_SELECT)
     .eq('slug', slug)
-    .eq('status', 'active')
+    .in('status', ['active', 'make_to_order'])
     .single()
 
   if (leg.error || !leg.data) {
@@ -282,7 +282,7 @@ async function fetchPdpProductImpl(
         .from('products')
         .select(PDP_PRODUCT_LEGACY_SELECT_NO_SHORT_DESC)
         .eq('slug', slug)
-        .eq('status', 'active')
+        .in('status', ['active', 'make_to_order'])
         .single()
 
       if (!legFallback.error && legFallback.data) {
@@ -600,20 +600,20 @@ export default async function ProductPage({ params }: Props) {
           .from('products')
           .select(PRODUCT_CARD_SELECT)
           .in('id', suggestedProductIds)
-          .eq('status', 'active')
+          .in('status', ['active', 'make_to_order'])
       : currentCollectionId
         ? supabase
             .from('products')
             .select(PRODUCT_CARD_SELECT)
             .neq('collection_id', currentCollectionId)
             .neq('id', product.id)
-            .eq('status', 'active')
+            .in('status', ['active', 'make_to_order'])
             .limit(8)
         : supabase
             .from('products')
             .select(PRODUCT_CARD_SELECT)
             .neq('id', product.id)
-            .eq('status', 'active')
+            .in('status', ['active', 'make_to_order'])
             .limit(8)
 
   const [reviewsRes, smartPairsRes, suggestedRes] = await Promise.all([
@@ -646,7 +646,7 @@ export default async function ProductPage({ params }: Props) {
         .from('products')
         .select(PRODUCT_CARD_SELECT)
         .in('id', smartPairProductIds)
-        .eq('status', 'active'),
+        .in('status', ['active', 'make_to_order']),
     ).then((r) => (r.data ?? []) as SuggestedProduct[]).catch(() => [])
   }
 

@@ -8,7 +8,7 @@ type ProductRow = {
   name: string
   slug: string
   is_featured: boolean
-  status: 'draft' | 'active' | 'archived'
+  status: 'draft' | 'active' | 'archived' | 'make_to_order'
   design_number: string | null
   created_at: string
   collection_id: string | null

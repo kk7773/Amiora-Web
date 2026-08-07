@@ -51,7 +51,7 @@ export type CatalogProductPayload = {
     metal_weight_g?: number | null
     meta_title?: string | null
     meta_description?: string | null
-    status?: 'draft' | 'active' | 'archived'
+    status?: 'draft' | 'active' | 'archived' | 'make_to_order'
     is_featured?: boolean
     is_new_arrival?: boolean
     is_best_seller?: boolean

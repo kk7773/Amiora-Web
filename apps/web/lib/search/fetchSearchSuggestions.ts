@@ -62,7 +62,7 @@ export async function fetchSearchSuggestions(
   const textPromise = supabase
     .from('products')
     .select(select)
-    .eq('status', 'active')
+    .in('status', ['active', 'make_to_order'])
     .or(`name.ilike.${pattern},slug.ilike.${pattern},design_number.ilike.${pattern}`)
     .order('name', { ascending: true })
     .limit(limit)
@@ -72,7 +72,7 @@ export async function fetchSearchSuggestions(
       ? supabase
           .from('products')
           .select(select)
-          .eq('status', 'active')
+          .in('status', ['active', 'make_to_order'])
           .eq('product_number', numMatch)
           .limit(limit)
       : Promise.resolve({ data: [] as ProductRow[], error: null })

@@ -1,5 +1,6 @@
 import { createServerClient } from '@amiora/database'
 import { SettingsClient } from '@/components/forms/SettingsClient'
+import { isSiteSettingsTableMissing } from '@/lib/siteSettingsTable'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,9 +28,10 @@ export default async function SettingsPage() {
       .in('key', ['making_charge_pct', 'announcement_bar']),
   ])
 
-  const settingsMap = Object.fromEntries((settingsRes.data ?? []).map((row) => [row.key, row.value]))
+  const settingsMap = Object.fromEntries((settingsRes.error ? [] : (settingsRes.data ?? [])).map((row) => [row.key, row.value]))
   const makingChargePct = Number(settingsMap.making_charge_pct ?? 8)
   const announcementBar = settingsMap.announcement_bar ?? ''
+  const siteSettingsMissing = isSiteSettingsTableMissing(settingsRes.error)
 
   return (
     <div className="space-y-5 max-w-3xl">
@@ -41,6 +43,7 @@ export default async function SettingsPage() {
         silverUpdatedAt={silverRes.data?.fetched_at ?? null}
         initialMakingChargePct={Number.isFinite(makingChargePct) ? makingChargePct : 8}
         initialAnnouncement={announcementBar}
+        siteSettingsMissing={siteSettingsMissing}
       />
     </div>
   )

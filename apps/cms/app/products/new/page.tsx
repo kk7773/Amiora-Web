@@ -3,6 +3,8 @@ import { ProductCatalogCreateForm } from '@/components/forms/ProductCatalogCreat
 import { ensureGoldMetalPurities } from '@/lib/ensureMetalPurities'
 import { fetchCmsPricingContext } from '@/lib/fetchCmsPricingContext'
 
+export const dynamic = 'force-dynamic'
+
 export default async function NewProductPage() {
   const supabase = createServerClient()
   await ensureGoldMetalPurities(supabase)

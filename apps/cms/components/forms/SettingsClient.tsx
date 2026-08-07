@@ -12,6 +12,7 @@ interface Props {
   silverUpdatedAt: string | null
   initialMakingChargePct: number
   initialAnnouncement: string
+  siteSettingsMissing?: boolean
 }
 
 const PURITY_ROWS = [
@@ -49,6 +50,7 @@ export function SettingsClient({
   silverUpdatedAt,
   initialMakingChargePct,
   initialAnnouncement,
+  siteSettingsMissing = false,
 }: Props) {
   const router = useRouter()
 
@@ -301,6 +303,12 @@ export function SettingsClient({
       {/* ── Global Settings ──────────────────────────────── */}
       <div className="bg-white rounded-xl border border-divider p-5 space-y-4">
         <h3 className="font-display text-base text-deep-teal border-b border-divider pb-2">Global Settings</h3>
+
+        {siteSettingsMissing && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Settings storage table missing. Run `supabase/migrations/032_site_settings.sql` in Supabase SQL Editor, then refresh this page.
+          </div>
+        )}
 
         <div className="space-y-1">
           <label className="text-xs text-ink-muted uppercase tracking-wider">Default Making Charge (%)</label>

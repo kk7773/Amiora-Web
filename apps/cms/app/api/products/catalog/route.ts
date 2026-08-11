@@ -3,6 +3,7 @@ import { createServerClient } from '@amiora/database'
 import { requireCmsAccess, writeAuditLog } from '@/lib/rbac'
 import { createCatalogProduct } from '@/lib/createCatalogProduct'
 import type { CatalogProductPayload } from '@/lib/catalogProductTypes'
+import { formatCatalogSchemaError } from '@/lib/catalogSchemaErrors'
 
 export async function POST(req: NextRequest) {
   const perm = await requireCmsAccess('products', 'edit')
@@ -25,6 +26,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ id: result.productId }, { status: 201 })
   } catch (e: unknown) {
     console.error('[catalog]', e)
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'Server error' }, { status: 500 })
+    const message = e instanceof Error ? e.message : 'Server error'
+    return NextResponse.json({ error: formatCatalogSchemaError(message) ?? message }, { status: 500 })
   }
 }

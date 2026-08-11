@@ -2,6 +2,7 @@ import { createServerClient } from '@amiora/database'
 import { ProductsTable } from '@/components/tables/ProductsTable'
 import { ProductsPageActions } from '@/components/products/ProductsPageActions'
 import { isCollectionProductsTableMissing } from '@/lib/collectionProductsTable'
+import { formatCatalogSchemaError } from '@/lib/catalogSchemaErrors'
 
 type ProductRow = {
   id: string
@@ -72,6 +73,13 @@ export default async function ProductsPage() {
   if (variantsRes.error) {
     console.error('[CMS ProductsPage] product_variants:', variantsRes.error.message)
   }
+
+  const schemaWarnings = [
+    formatCatalogSchemaError(productsRes.error?.message),
+    formatCatalogSchemaError(productImagesRes.error?.message),
+    formatCatalogSchemaError(colorGroupsRes.error?.message),
+    formatCatalogSchemaError(variantsRes.error?.message),
+  ].filter((msg): msg is string => !!msg)
 
   const products = (productsRes.data ?? []) as ProductRow[]
   const collections = collectionsRes.data ?? []
@@ -148,6 +156,8 @@ export default async function ProductsPage() {
   const linksProbe = await supabase.from('collection_products').select('product_id').limit(1)
   if (linksProbe.error && !isCollectionProductsTableMissing(linksProbe.error)) {
     console.error('[CMS ProductsPage] collection_products probe:', linksProbe.error.message)
+    const schemaMessage = formatCatalogSchemaError(linksProbe.error.message)
+    if (schemaMessage) schemaWarnings.push(schemaMessage)
   }
 
   if (!linksProbe.error) {
@@ -176,6 +186,14 @@ export default async function ProductsPage() {
 
   return (
     <div className="space-y-5">
+      {schemaWarnings.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="font-medium">Catalog schema mismatch detected</p>
+          <p className="mt-1">
+            {schemaWarnings[0]}
+          </p>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-6">
         <div>
           <h2 className="font-display text-2xl text-deep-teal">Products</h2>

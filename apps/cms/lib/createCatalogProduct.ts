@@ -7,6 +7,7 @@ import { normalizeChainLengths } from '@/lib/normalizeChainLengths'
 import { syncProductVariantSizes } from '@/lib/syncProductVariantSizes'
 import type { CatalogProductPayload } from '@/lib/catalogProductTypes'
 import { fetchNextProductNumber } from '@/lib/productIdentity'
+import { formatCatalogSchemaError } from '@/lib/catalogSchemaErrors'
 
 export type CreateCatalogProductResult =
   | { ok: true; productId: string }
@@ -142,7 +143,7 @@ export async function createCatalogProduct(
 
   if (pErr || !prod) {
     console.error('[createCatalogProduct] product insert', pErr)
-    return { ok: false, error: pErr?.message ?? 'Insert failed' }
+    return { ok: false, error: formatCatalogSchemaError(pErr?.message) ?? pErr?.message ?? 'Insert failed' }
   }
 
   const productId = prod.id
@@ -161,7 +162,10 @@ export async function createCatalogProduct(
     if (gErr || !grp) {
       console.error('[createCatalogProduct] color group', gErr)
       await supabase.from('products').delete().eq('id', productId)
-      return { ok: false, error: gErr?.message ?? 'Color group insert failed' }
+      return {
+        ok: false,
+        error: formatCatalogSchemaError(gErr?.message) ?? gErr?.message ?? 'Color group insert failed',
+      }
     }
     groupByColor.set(grp.color_id, grp.id)
   }
@@ -214,7 +218,7 @@ export async function createCatalogProduct(
   if (vErr) {
     console.error('[createCatalogProduct] variants', vErr)
     await supabase.from('products').delete().eq('id', productId)
-    return { ok: false, error: vErr.message }
+    return { ok: false, error: formatCatalogSchemaError(vErr.message) ?? vErr.message }
   }
 
   const variantMap = new Map<string, string>()
@@ -227,7 +231,10 @@ export async function createCatalogProduct(
     if (sizeSync.error) {
       console.error('[createCatalogProduct] size stocks', sizeSync.error)
       await supabase.from('products').delete().eq('id', productId)
-      return { ok: false, error: sizeSync.error.message }
+      return {
+        ok: false,
+        error: formatCatalogSchemaError(sizeSync.error.message) ?? sizeSync.error.message,
+      }
     }
   }
 

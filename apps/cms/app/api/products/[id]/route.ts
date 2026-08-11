@@ -7,6 +7,7 @@ import { normalizeChainLengths } from '@/lib/normalizeChainLengths'
 import { syncProductVariantSizes } from '@/lib/syncProductVariantSizes'
 import { requireCmsAccess, writeAuditLog } from '@/lib/rbac'
 import { insertProductColorGroup, updateProductColorGroup } from '@/lib/productColorGroupsDb'
+import { formatCatalogSchemaError } from '@/lib/catalogSchemaErrors'
 
 function parseOptionalGrams(v: unknown): number | null {
   if (v === null || v === undefined || v === '') return null
@@ -230,11 +231,17 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         .eq('id', id)
       if (retry.error) {
         console.error('[PATCH /api/products/:id] product update', retry.error)
-        return NextResponse.json({ error: retry.error.message }, { status: 500 })
+        return NextResponse.json(
+          { error: formatCatalogSchemaError(retry.error.message) ?? retry.error.message },
+          { status: 500 },
+        )
       }
     } else if (productError) {
       console.error('[PATCH /api/products/:id] product update', productError)
-      return NextResponse.json({ error: productError.message }, { status: 500 })
+      return NextResponse.json(
+        { error: formatCatalogSchemaError(productError.message) ?? productError.message },
+        { status: 500 },
+      )
     }
 
     const keepGroupIds = new Set(body.color_variants.map((row) => row.id).filter((value): value is string => !!value))
@@ -249,7 +256,10 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         .in('color_group_id', groupIds)
       if (deleteVariantsError) {
         console.error('[PATCH /api/products/:id] delete variants for removed groups', deleteVariantsError)
-        return NextResponse.json({ error: deleteVariantsError.message }, { status: 500 })
+        return NextResponse.json(
+          { error: formatCatalogSchemaError(deleteVariantsError.message) ?? deleteVariantsError.message },
+          { status: 500 },
+        )
       }
 
       const { error: deleteGroupsError } = await supabase
@@ -259,7 +269,10 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         .in('id', groupIds)
       if (deleteGroupsError) {
         console.error('[PATCH /api/products/:id] delete groups', deleteGroupsError)
-        return NextResponse.json({ error: deleteGroupsError.message }, { status: 500 })
+        return NextResponse.json(
+          { error: formatCatalogSchemaError(deleteGroupsError.message) ?? deleteGroupsError.message },
+          { status: 500 },
+        )
       }
     }
 
@@ -278,7 +291,10 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         })
         if (error) {
           console.error('[PATCH /api/products/:id] update group', error)
-          return NextResponse.json({ error: error.message }, { status: 500 })
+          return NextResponse.json(
+            { error: formatCatalogSchemaError(error.message) ?? error.message },
+            { status: 500 },
+          )
         }
         groupByColorId.set(colorVariant.color_id, colorVariant.id)
         continue
@@ -295,7 +311,15 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 
       if (error || !data) {
         console.error('[PATCH /api/products/:id] insert group', error)
-        return NextResponse.json({ error: error?.message ?? 'Color group insert failed' }, { status: 500 })
+        return NextResponse.json(
+          {
+            error:
+              formatCatalogSchemaError(error?.message) ??
+              error?.message ??
+              'Color group insert failed',
+          },
+          { status: 500 },
+        )
       }
       groupByColorId.set(colorVariant.color_id, data.id)
     }
@@ -310,7 +334,10 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         .in('id', variantsToDelete.map((row) => row.id))
       if (error) {
         console.error('[PATCH /api/products/:id] delete variants', error)
-        return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json(
+          { error: formatCatalogSchemaError(error.message) ?? error.message },
+          { status: 500 },
+        )
       }
     }
 
@@ -356,7 +383,10 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
           .eq('product_id', id)
         if (error) {
           console.error('[PATCH /api/products/:id] update variant', error)
-          return NextResponse.json({ error: error.message }, { status: 500 })
+          return NextResponse.json(
+            { error: formatCatalogSchemaError(error.message) ?? error.message },
+            { status: 500 },
+          )
         }
       } else {
         const { error } = await supabase
@@ -367,7 +397,10 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
           })
         if (error) {
           console.error('[PATCH /api/products/:id] insert variant', error)
-          return NextResponse.json({ error: error.message }, { status: 500 })
+          return NextResponse.json(
+            { error: formatCatalogSchemaError(error.message) ?? error.message },
+            { status: 500 },
+          )
         }
       }
     }
@@ -379,7 +412,10 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 
     if (currentVariantsError) {
       console.error('[PATCH /api/products/:id] read variants for size sync', currentVariantsError)
-      return NextResponse.json({ error: currentVariantsError.message }, { status: 500 })
+      return NextResponse.json(
+        { error: formatCatalogSchemaError(currentVariantsError.message) ?? currentVariantsError.message },
+        { status: 500 },
+      )
     }
 
     const variantMap = new Map<string, string>()
@@ -390,7 +426,10 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     const sizeSync = await syncProductVariantSizes(supabase, id, body.size_stocks, variantMap)
     if (sizeSync.error) {
       console.error('[PATCH /api/products/:id] sync size stocks', sizeSync.error)
-      return NextResponse.json({ error: sizeSync.error.message }, { status: 500 })
+      return NextResponse.json(
+        { error: formatCatalogSchemaError(sizeSync.error.message) ?? sizeSync.error.message },
+        { status: 500 },
+      )
     }
 
     const { syncCollectionProducts } = await import('@/lib/syncCollectionProducts')
@@ -417,8 +456,9 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     return NextResponse.json({ id })
   } catch (err: unknown) {
     console.error('[PATCH /api/products/:id]', err)
+    const message = err instanceof Error ? err.message : 'Server error'
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Server error' },
+      { error: formatCatalogSchemaError(message) ?? message },
       { status: 500 },
     )
   }

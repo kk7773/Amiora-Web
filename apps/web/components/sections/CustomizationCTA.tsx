@@ -50,7 +50,7 @@ export function CustomizationCTA() {
           className="relative aspect-[4/3] rounded-2xl overflow-hidden"
         >
           <Image
-            src="https://res.cloudinary.com/dqayol6fn/image/upload/v1782817179/ChatGPT_Image_Jun_29_2026_06_47_59_PM_yv4fhz.png"
+            src="Dresign_you_dream_peice.avif"
             alt="Custom jewellery crafting"
             fill
             className="object-cover"

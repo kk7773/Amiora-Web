@@ -4,9 +4,9 @@ import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 
 const DESKTOP_BANNER =
-  'https://res.cloudinary.com/dqayol6fn/image/upload/f_auto,q_auto,w_1920/v1780649163/Amiora_banner_1.jpg_bgjjsz.jpg'
+  '/Amiora_banner_1.avif'
 const MOBILE_BANNER =
-  'https://res.cloudinary.com/dqayol6fn/image/upload/f_auto,q_auto,w_828/v1780649207/Amiora_mobile_banner_1.jpg_vidlv1.jpg'
+  '/Amiora_mobile_banner_1.avif'
 
 function useIsDesktop() {
   const [isDesktop, setIsDesktop] = useState<boolean | null>(null)

@@ -5,7 +5,7 @@ type JsonLdProps = {
 }
 
 /** Renders one or more JSON-LD structured data blocks. */
-export function JsonLd({ data }: JsonLdProps) {
+export function  JsonLd({ data }: JsonLdProps) {
   const graphs = Array.isArray(data) ? data : [data]
   return (
     <>

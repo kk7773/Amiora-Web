@@ -142,7 +142,7 @@ export function Header() {
             className="flex flex-1 justify-center"
           >
             <Image
-              src="https://res.cloudinary.com/dqayol6fn/image/upload/v1778259827/Amiora-final-logo-01_mu4i6k.png"
+              src="/Amiora-final-logo-01.png"
               alt="Amiora"
               width={160}
               height={48}
@@ -172,7 +172,7 @@ export function Header() {
             {/* Logo */}
             <Link href="/" className="shrink-0" aria-label="Amiora Diamonds home">
               <Image
-                src="https://res.cloudinary.com/dqayol6fn/image/upload/v1778259827/Amiora-final-logo-01_mu4i6k.png"
+                src="/Amiora-final-logo-01.png"
                 alt="Amiora"
                 width={150}
                 height={35}
